@@ -1,0 +1,255 @@
+/* ================================================================
+   kitchen.css — شاشة المطبخ KDS — alfaprosys
+   ================================================================ */
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: 'Cairo', 'Tajawal', sans-serif;
+  background: #0f172a;
+  color: #e2e8f0;
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+/* ── الشريط العلوي ── */
+.kds-topbar {
+  position: sticky; top: 0; z-index: 100;
+  display: flex; align-items: center; gap: 12px;
+  padding: 10px 16px;
+  background: #1e293b;
+  border-bottom: 2px solid #334155;
+}
+.kds-brand {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 18px; font-weight: 900; color: #f8fafc;
+}
+.kds-brand span { font-size: 24px; }
+.kds-stats {
+  display: flex; gap: 8px; flex: 1; justify-content: center;
+}
+.kds-stat {
+  display: flex; align-items: center; gap: 6px;
+  padding: 6px 14px; border-radius: 10px;
+  font-size: 13px; font-weight: 800;
+}
+.kds-stat.new-stat     { background: #1e3a5f; color: #60a5fa; }
+.kds-stat.cooking-stat { background: #422006; color: #fbbf24; }
+.kds-stat.ready-stat   { background: #052e16; color: #4ade80; }
+.kds-stat .num {
+  font-size: 20px; font-weight: 900;
+  min-width: 28px; text-align: center;
+}
+.kds-clock {
+  font-size: 14px; font-weight: 700; color: #94a3b8;
+  font-family: 'Changa', monospace; direction: ltr;
+}
+.kds-topbar-actions {
+  display: flex; gap: 6px;
+}
+.kds-topbar-btn {
+  padding: 8px 14px; border-radius: 10px;
+  border: 1px solid #475569; background: #1e293b;
+  color: #e2e8f0; font-family: inherit;
+  font-size: 13px; font-weight: 700; cursor: pointer;
+  transition: all .15s;
+}
+.kds-topbar-btn:hover { background: #334155; }
+.kds-topbar-btn.active { background: #3b82f6; border-color: #3b82f6; color: #fff; }
+
+/* ── الشبكة ── */
+.kds-body {
+  padding: 14px;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 12px;
+  align-content: start;
+}
+
+/* ── بطاقة الطلب ── */
+.kds-card {
+  background: #1e293b;
+  border: 1.5px solid #334155;
+  border-radius: 14px;
+  display: flex; flex-direction: column;
+  overflow: hidden;
+  transition: all .2s;
+}
+.kds-card:hover { border-color: #475569; }
+.kds-card.status-new     { border-top: 4px solid #3b82f6; }
+.kds-card.status-cooking { border-top: 4px solid #f59e0b; }
+.kds-card.status-ready   { border-top: 4px solid #22c55e; }
+.kds-card.modified       { box-shadow: 0 0 0 2px #f59e0b; }
+.kds-card.cancelled-flash {
+  animation: cancelFlash 1s ease 3;
+  border-color: #ef4444 !important;
+}
+@keyframes cancelFlash {
+  0%, 100% { background: #1e293b; }
+  50% { background: #450a0a; }
+}
+.kds-card.new-flash {
+  animation: newFlash .6s ease;
+}
+@keyframes newFlash {
+  0% { transform: scale(1.03); box-shadow: 0 0 20px rgba(59,130,246,0.4); }
+  100% { transform: scale(1); box-shadow: none; }
+}
+
+/* رأس البطاقة */
+.kds-card-head {
+  display: flex; align-items: center; gap: 8px;
+  padding: 10px 12px;
+  background: rgba(0,0,0,0.2);
+}
+.kds-card-id {
+  font-size: 15px; font-weight: 900; color: #f8fafc;
+}
+.kds-card-type {
+  padding: 3px 8px; border-radius: 8px;
+  font-size: 11px; font-weight: 700;
+}
+.kds-card-type.table    { background: #1e3a5f; color: #60a5fa; }
+.kds-card-type.takeaway { background: #1c1917; color: #fbbf24; }
+.kds-card-type.delivery { background: #052e16; color: #4ade80; }
+.kds-card-type.contract { background: #312e81; color: #a78bfa; }
+.kds-card-badges {
+  display: flex; gap: 4px; flex: 1; justify-content: flex-end;
+}
+.kds-badge {
+  padding: 3px 8px; border-radius: 8px;
+  font-size: 10px; font-weight: 800;
+}
+.kds-badge.modified-badge { background: #422006; color: #fbbf24; }
+.kds-badge.queue-badge    { background: #1e293b; color: #94a3b8; border: 1px solid #475569; }
+.kds-timer {
+  font-size: 14px; font-weight: 900;
+  font-family: 'Changa', monospace; direction: ltr;
+  padding: 4px 10px; border-radius: 8px;
+}
+.kds-timer.green  { color: #4ade80; background: rgba(34,197,94,0.1); }
+.kds-timer.yellow { color: #fbbf24; background: rgba(245,158,11,0.1); }
+.kds-timer.red    { color: #ef4444; background: rgba(239,68,68,0.15); animation: timerPulse 1s infinite; }
+@keyframes timerPulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+
+/* معلومات إضافية */
+.kds-card-info {
+  padding: 6px 12px;
+  font-size: 12px; color: #94a3b8;
+  border-bottom: 1px solid #334155;
+}
+
+/* قائمة الأصناف */
+.kds-card-items {
+  padding: 8px 12px;
+  flex: 1;
+}
+.kds-item {
+  display: flex; align-items: flex-start; gap: 6px;
+  padding: 5px 0;
+  border-bottom: 1px solid rgba(51,65,85,0.5);
+  font-size: 13px; line-height: 1.5;
+}
+.kds-item:last-child { border-bottom: none; }
+.kds-item-qty {
+  background: #334155; color: #f8fafc;
+  padding: 2px 8px; border-radius: 6px;
+  font-size: 13px; font-weight: 900;
+  font-family: 'Changa', monospace;
+  min-width: 32px; text-align: center;
+  flex-shrink: 0;
+}
+.kds-item-name {
+  flex: 1; color: #e2e8f0; font-weight: 600;
+}
+.kds-item-note {
+  display: block; font-size: 11px;
+  color: #fbbf24; margin-top: 2px;
+  padding: 2px 6px;
+  background: rgba(245,158,11,0.1);
+  border-radius: 4px;
+}
+
+/* قسم التعديلات */
+.kds-modifications {
+  padding: 6px 12px;
+  background: rgba(245,158,11,0.05);
+  border-top: 1px dashed #f59e0b;
+}
+.kds-mod-title {
+  font-size: 11px; font-weight: 800;
+  color: #fbbf24; margin-bottom: 4px;
+}
+.kds-mod-item {
+  font-size: 11px; color: #fcd34d;
+  padding: 2px 0;
+}
+
+/* أزرار الإجراءات */
+.kds-card-actions {
+  padding: 10px 12px;
+  border-top: 1px solid #334155;
+}
+.kds-btn {
+  width: 100%; padding: 12px;
+  border: none; border-radius: 10px;
+  font-family: inherit;
+  font-size: 15px; font-weight: 900;
+  cursor: pointer; transition: all .15s;
+}
+.kds-btn:hover { filter: brightness(1.1); }
+.kds-btn:active { transform: scale(0.97); }
+.kds-btn.btn-start { background: #f59e0b; color: #1e293b; }
+.kds-btn.btn-ready { background: #22c55e; color: #052e16; }
+.kds-btn.btn-done  { background: #334155; color: #e2e8f0; }
+
+/* فارغ */
+.kds-empty {
+  grid-column: 1 / -1;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  padding: 60px 20px;
+  color: #64748b;
+}
+.kds-empty-icon { font-size: 48px; margin-bottom: 12px; opacity: 0.5; }
+.kds-empty-text { font-size: 16px; font-weight: 700; }
+.kds-empty-sub  { font-size: 13px; margin-top: 6px; color: #475569; }
+
+/* تنبيه الإلغاء */
+.kds-cancel-banner {
+  position: fixed; top: 70px; left: 50%; transform: translateX(-50%);
+  background: #ef4444; color: #fff;
+  padding: 12px 24px; border-radius: 12px;
+  font-size: 15px; font-weight: 800;
+  z-index: 200; display: flex; align-items: center; gap: 10px;
+  box-shadow: 0 8px 30px rgba(239,68,68,0.4);
+  animation: slideDown .3s ease;
+}
+@keyframes slideDown {
+  from { transform: translateX(-50%) translateY(-30px); opacity: 0; }
+  to   { transform: translateX(-50%) translateY(0); opacity: 1; }
+}
+
+/* ملء الشاشة */
+.kds-fullscreen .kds-topbar { padding: 8px 20px; }
+.kds-fullscreen .kds-body { padding: 16px 20px; }
+
+/* Responsive */
+@media (max-width: 640px) {
+  .kds-body {
+    grid-template-columns: 1fr;
+    padding: 10px;
+  }
+  .kds-stats { display: none; }
+  .kds-topbar { flex-wrap: wrap; }
+  .kds-card-id { font-size: 14px; }
+}
+
+/* طباعة */
+@media print {
+  .kds-topbar, .kds-card-actions { display: none; }
+  .kds-card { break-inside: avoid; }
+}

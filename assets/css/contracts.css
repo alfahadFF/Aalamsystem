@@ -1,0 +1,328 @@
+/* ================================================================
+   contracts.css — العقود — alfaprosys
+   ================================================================ */
+
+/* ── صفوف العقود ── */
+.con-row { border-bottom: 1px solid var(--line); }
+.con-row:last-child { border-bottom: none; }
+.con-row.open { background: rgba(217,119,6,.03); }
+
+.con-row-main {
+  display: flex; align-items: center; gap: 10px;
+  padding: 12px 13px; cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.con-row-main:active { background: var(--card-subtle); }
+
+.con-avatar {
+  flex-shrink: 0; width: 40px; height: 40px; border-radius: 12px;
+  background: rgba(217,119,6,.1); display: grid; place-items: center; font-size: 20px;
+}
+.con-row-info { flex: 1; min-width: 0; }
+.con-row-name {
+  font-size: 12.5px; font-weight: 800; color: var(--text-main);
+  display: flex; flex-wrap: wrap; align-items: center; gap: 5px; margin-bottom: 3px;
+}
+.con-row-sub {
+  font-size: 10.5px; color: var(--text-muted); font-weight: 700;
+  display: flex; align-items: center; gap: 7px;
+}
+.con-type-chip {
+  background: rgba(217,119,6,.1); color: var(--fahad-gold);
+  border-radius: 5px; padding: 1px 7px; font-size: 10px; font-weight: 800;
+}
+.con-row-val { text-align: left; flex-shrink: 0; }
+.con-val-main { font-family: 'Changa', sans-serif; font-size: 13px; font-weight: 800; color: var(--fahad-navy); }
+.con-val-sub  { font-size: 9.5px; color: var(--text-muted); font-weight: 700; }
+
+/* ── الوجبات ── */
+.con-items-list { display: grid; gap: 6px; }
+.con-item-row {
+  display: grid; grid-template-columns: 1fr auto auto auto;
+  align-items: center; gap: 8px;
+  padding: 8px 10px; background: var(--card-subtle);
+  border-radius: 9px; border: 1px solid var(--line);
+}
+.con-item-name { font-size: 11.5px; font-weight: 800; color: var(--text-main); }
+.con-item-qty  { font-size: 11px; color: var(--text-muted); font-weight: 700; white-space: nowrap; }
+.con-item-price{ font-size: 10.5px; color: var(--text-muted); white-space: nowrap; }
+.con-item-total{ font-family: 'Changa',sans-serif; font-size: 12px; font-weight: 800; color: var(--fahad-navy); white-space: nowrap; }
+.con-items-total {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 8px 10px; margin-top: 4px;
+  background: var(--fahad-navy); border-radius: 9px;
+  font-size: 11.5px; color: rgba(255,255,255,.8); font-weight: 700;
+}
+.con-items-total strong { font-family: 'Changa',sans-serif; font-size: 14px; color: var(--surface); font-weight: 800; }
+
+/* ── الدفعات ── */
+.con-pay-summary {
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: 7px; margin-bottom: 12px;
+}
+.con-inst-list { display: grid; gap: 6px; }
+.con-inst-row {
+  display: flex; align-items: center; gap: 8px;
+  padding: 9px 11px; border-radius: 10px;
+  background: var(--surface); border: 1px solid var(--line);
+}
+.con-inst-row.paid    { background: var(--sage-bg); border-color: rgba(22,163,74,.2); }
+.con-inst-row.overdue { background: var(--clay-bg); border-color: rgba(220,38,38,.2); }
+.con-inst-status { font-size: 16px; flex-shrink: 0; }
+.con-inst-info { flex: 1; min-width: 0; }
+.con-inst-date { font-size: 11px; font-weight: 800; color: var(--text-main); }
+.con-inst-paid-date { font-size: 10px; color: var(--sage); font-weight: 700; margin-top: 1px; }
+.con-inst-amount { font-family: 'Changa',sans-serif; font-size: 12px; font-weight: 800; color: var(--fahad-navy); white-space: nowrap; }
+.con-pay-btn {
+  height: 28px; padding: 0 10px; border-radius: 7px;
+  background: var(--sage); color: var(--surface); border: none;
+  font-size: 10.5px; font-weight: 800; cursor: pointer; font-family: inherit;
+  flex-shrink: 0;
+}
+.con-pay-btn:active { transform: scale(.93); }
+
+/* ── زر الحالة ── */
+.con-status-btn {
+  height: 33px; padding: 0 12px; border-radius: 9px;
+  background: rgba(217,119,6,.1); color: var(--fahad-gold);
+  border: 1px solid rgba(217,119,6,.2);
+  font-size: 11px; font-weight: 800; cursor: pointer; font-family: inherit; transition: .12s;
+}
+
+/* ================================================================
+   نموذج العقد
+   ================================================================ */
+.con-form-section {
+  font-size: 11px; font-weight: 800; color: var(--fahad-blue);
+  padding-bottom: 6px; margin: 12px 0 8px;
+  border-bottom: 1px dashed rgba(2,132,199,.25);
+}
+.con-form-section:first-child { margin-top: 0; }
+
+.con-form-item {
+  background: var(--card-subtle); border: 1px solid var(--line);
+  border-radius: 10px; padding: 10px; margin-bottom: 8px;
+}
+.con-add-item-btn {
+  width: 100%; height: 36px; border-radius: 9px;
+  background: var(--fahad-blue-bg); color: var(--fahad-blue);
+  border: 1px dashed rgba(2,132,199,.35);
+  font-size: 12px; font-weight: 800; cursor: pointer; font-family: inherit;
+  margin-bottom: 4px;
+}
+.con-del-item-btn {
+  height: 38px; width: 38px; border-radius: 9px;
+  background: var(--clay-bg); color: var(--clay); border: none;
+  font-size: 13px; font-weight: 800; cursor: pointer;
+}
+
+/* ================================================================
+   مودال العقد
+   ================================================================ */
+.con-modal-scrim {
+  position: fixed; inset: 0; z-index: 70;
+  background: rgba(15,23,42,.42);
+  backdrop-filter: blur(3px); -webkit-backdrop-filter: blur(3px);
+  opacity: 0; pointer-events: none; transition: opacity .18s;
+}
+.con-modal-scrim.show { opacity: 1; pointer-events: auto; }
+.con-modal {
+  position: fixed; bottom: 0; left: 0; right: 0; z-index: 71;
+  background: var(--surface); border-radius: 20px 20px 0 0;
+  border-top: 1px solid var(--line); box-shadow: 0 -6px 30px rgba(15,23,42,.15);
+  max-height: 94svh; overflow-y: auto;
+  transform: translateY(100%); transition: transform .22s ease;
+}
+.con-modal.show { transform: translateY(0); }
+@media (min-width: 640px) {
+  .con-modal {
+    top: 50%; left: 50%; right: auto; bottom: auto;
+    transform: translate(-50%, -46%) scale(.96);
+    width: min(96vw, 560px); border-radius: 18px; opacity: 0;
+  }
+  .con-modal.show { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+}
+.con-modal-head {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 14px 16px; border-bottom: 1px solid var(--line);
+  position: sticky; top: 0; background: var(--surface); z-index: 2;
+  font-family: 'Changa', sans-serif; font-size: 14px; font-weight: 800; color: var(--fahad-navy);
+}
+.con-modal-head button {
+  width: 30px; height: 30px; border-radius: 8px;
+  background: var(--card-subtle); border: none; cursor: pointer;
+  color: var(--text-muted); font-size: 14px; font-weight: 800;
+}
+.con-modal-body { padding: 14px 16px 24px; display: grid; gap: 10px; }
+
+/* ── كلاسات مشتركة مع inventory.css ── */
+.inv-cat-strip {
+  display: flex; gap: 6px; overflow-x: auto;
+  overscroll-behavior-x: contain; padding-bottom: 6px;
+  margin-bottom: 12px; scrollbar-width: none;
+}
+.inv-cat-strip::-webkit-scrollbar { display: none; }
+.inv-cat-chip {
+  flex-shrink: 0; display: inline-flex; align-items: center; gap: 5px;
+  padding: 6px 12px; border-radius: 10px;
+  background: var(--surface); border: 1.5px solid var(--line);
+  font-size: 11px; font-weight: 800; color: var(--text-muted);
+  white-space: nowrap; cursor: pointer; font-family: inherit; transition: .12s;
+}
+.inv-cat-chip span { background: var(--card-subtle); color: var(--text-muted); border-radius: 5px; padding: 1px 5px; font-size: 9px; }
+.inv-cat-chip.active { background: var(--fahad-navy); border-color: var(--fahad-navy); color: var(--surface); }
+.inv-cat-chip.active span { background: rgba(255,255,255,.2); color: var(--surface); }
+.inv-empty { text-align: center; padding: 40px 20px; font-size: 12px; color: var(--text-muted); font-weight: 700; }
+.inv-row-chevron { color: var(--text-muted); font-size: 18px; font-weight: 900; transition: transform .2s; flex-shrink: 0; }
+.inv-row-chevron.open { transform: rotate(90deg); }
+.inv-row-detail { max-height: 0; overflow: hidden; transition: max-height .35s ease; }
+.inv-row-detail.open { max-height: 900px; }
+.inv-detail-inner { padding: 0 13px 14px; border-top: 1px solid var(--line); padding-top: 10px; }
+.inv-modal-label { display: flex; flex-direction: column; gap: 5px; font-size: 10.5px; font-weight: 800; color: var(--text-muted); }
+.inv-modal-input {
+  height: 40px; border-radius: 9px; border: 1.5px solid var(--line);
+  padding: 0 10px; font-size: 13px; font-weight: 800; font-family: inherit;
+  color: var(--text-main); background: var(--surface); outline: none;
+  transition: border-color .15s; width: 100%; box-sizing: border-box;
+}
+.inv-modal-input:focus { border-color: var(--fahad-blue); }
+.inv-modal-confirm {
+  height: 46px; border-radius: 12px; border: none;
+  font-size: 13px; font-weight: 800; font-family: 'Changa', sans-serif;
+  cursor: pointer; width: 100%;
+}
+.inv-modal-confirm.green { background: var(--sage); color: var(--surface); }
+.inv-modal-confirm.red   { background: var(--clay); color: var(--surface); }
+.inv-modal-confirm:active { transform: scale(.97); }
+
+/* ================================================================
+   Item Picker — مودال الأصناف (نفس أسلوب qty-modal في POS)
+   ================================================================ */
+#conItemPicker {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+}
+.con-picker-scrim {
+  position: absolute; inset: 0;
+  background: rgba(15,23,42,.45);
+  backdrop-filter: blur(3px); -webkit-backdrop-filter: blur(3px);
+}
+.con-picker-sheet {
+  position: absolute;
+  bottom: 0; left: 0; right: 0;
+  background: var(--surface);
+  border-radius: 20px 20px 0 0;
+  border-top: 1px solid var(--line);
+  box-shadow: 0 -8px 32px rgba(15,23,42,.2);
+  max-height: 75svh;
+  display: flex; flex-direction: column;
+}
+@media (min-width: 580px) {
+  .con-picker-sheet {
+    top: 50%; left: 50%; right: auto; bottom: auto;
+    transform: translate(-50%, -50%);
+    width: min(94vw, 480px);
+    border-radius: 18px;
+    max-height: 80svh;
+  }
+}
+.con-picker-head {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 14px 16px; border-bottom: 1px solid var(--line);
+  font-family: 'Changa', sans-serif; font-size: 14px;
+  font-weight: 800; color: var(--fahad-navy); flex-shrink: 0;
+}
+.con-picker-head button {
+  width: 30px; height: 30px; border-radius: 8px;
+  background: var(--card-subtle); border: none; cursor: pointer;
+  color: var(--text-muted); font-size: 14px; font-weight: 800;
+}
+.con-picker-search {
+  display: flex; align-items: center; gap: 8px;
+  padding: 10px 14px; border-bottom: 1px solid var(--line); flex-shrink: 0;
+}
+.con-picker-search input {
+  flex: 1; border: none; background: transparent; outline: none;
+  font-size: 13px; font-family: inherit; font-weight: 700; color: var(--text-main);
+  padding: 4px 0;
+}
+.con-picker-list { overflow-y: auto; flex: 1; padding: 8px; }
+.con-picker-item {
+  display: block; width: 100%; text-align: right;
+  padding: 10px 12px; border-radius: 10px; border: none;
+  background: transparent; cursor: pointer; font-family: inherit;
+  border-bottom: 1px solid var(--line); transition: background .1s;
+}
+.con-picker-item:last-child { border-bottom: none; }
+.con-picker-item:hover, .con-picker-item:active { background: var(--card-subtle); }
+.con-picker-item.selected { background: var(--fahad-blue-bg); }
+.con-picker-item-name {
+  font-size: 12.5px; font-weight: 800; color: var(--text-main); margin-bottom: 3px;
+}
+.con-picker-item-meta {
+  font-size: 10.5px; color: var(--text-muted); font-weight: 700;
+  display: flex; justify-content: space-between;
+}
+.con-picker-item-meta span { color: var(--fahad-blue); font-weight: 800; }
+.con-picker-empty {
+  text-align: center; padding: 30px; font-size: 12px;
+  color: var(--text-muted); font-weight: 700;
+}
+
+/* ── أصناف العقد المختارة ── */
+.con-no-items {
+  text-align: center; padding: 16px; font-size: 11.5px;
+  color: var(--text-muted); font-weight: 700;
+  background: var(--card-subtle); border-radius: 10px;
+  border: 1.5px dashed var(--line); margin-bottom: 8px;
+}
+.con-form-item-name {
+  font-size: 12px; font-weight: 800; color: var(--fahad-navy);
+  margin-bottom: 7px;
+}
+.con-form-item-row {
+  display: flex; gap: 7px; align-items: center;
+}
+.con-form-item-label {
+  display: flex; flex-direction: column; gap: 4px;
+  font-size: 9.5px; font-weight: 800; color: var(--text-muted); flex: 1;
+}
+.con-form-item-input { font-size: 12px !important; }
+
+/* ── بناء جدول الدفعات ── */
+.con-inst-builder {
+  background: var(--card-subtle); border-radius: 10px;
+  padding: 12px; margin-top: 8px; display: grid; gap: 7px;
+}
+.con-inst-builder-title {
+  font-size: 11px; font-weight: 800; color: var(--fahad-blue); margin-bottom: 4px;
+}
+.con-inst-builder-row {
+  display: flex; gap: 7px; align-items: center;
+}
+.con-add-inst-btn {
+  height: 36px; border-radius: 9px;
+  background: var(--fahad-blue-bg); color: var(--fahad-blue);
+  border: 1px dashed rgba(2,132,199,.35);
+  font-size: 11.5px; font-weight: 800; cursor: pointer; font-family: inherit;
+  margin-top: 2px;
+}
+
+/* ── كلاسات emp-* المشتركة ── */
+.emp-tabs{display:flex;gap:5px;padding:10px 0 0;border-bottom:1px solid var(--line);margin-bottom:12px;}
+.emp-tab{padding:6px 13px;border-radius:9px 9px 0 0;border:1px solid transparent;border-bottom:none;font-size:11px;font-weight:800;color:var(--text-muted);background:transparent;cursor:pointer;font-family:inherit;margin-bottom:-1px;transition:.12s;}
+.emp-tab.active{background:var(--surface);border-color:var(--line);border-bottom-color:var(--surface);color:var(--fahad-navy);}
+.emp-fields-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px 14px;margin-bottom:12px;}
+@media(max-width:440px){.emp-fields-grid{grid-template-columns:1fr;}}
+.emp-field{display:flex;flex-direction:column;gap:2px;}
+.emp-field.full{grid-column:1/-1;}
+.emp-field span{font-size:9.5px;color:var(--text-muted);font-weight:800;}
+.emp-field strong{font-size:12px;color:var(--text-main);font-weight:800;}
+.emp-detail-actions{display:flex;gap:8px;}
+.emp-action-btn{height:33px;padding:0 14px;border-radius:9px;font-size:11px;font-weight:800;border:none;cursor:pointer;font-family:inherit;transition:.12s;}
+.emp-action-btn.primary{background:var(--fahad-navy);color:var(--surface);}
+.emp-action-btn.danger{background:var(--clay-bg);color:var(--clay);border:1px solid rgba(220,38,38,.2);}
+.emp-pick-grid{display:flex;flex-wrap:wrap;gap:7px;}
+.emp-pick-btn{padding:7px 14px;border-radius:9px;border:1.5px solid var(--line);background:var(--surface);color:var(--text-muted);font-size:12px;font-weight:800;font-family:inherit;cursor:pointer;transition:.1s;-webkit-tap-highlight-color:transparent;}
+.emp-pick-btn.active{background:var(--fahad-navy);border-color:var(--fahad-navy);color:var(--surface);}
+.emp-pick-btn:active{transform:scale(.94);}

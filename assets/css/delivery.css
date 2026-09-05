@@ -1,0 +1,873 @@
+/* ================================================================
+   delivery.css — شاشة التوصيل + صفحة التتبع — alfaprosys
+   ================================================================ */
+
+/* ── التبويبات الرئيسية ── */
+.dlv-tabs {
+  display: flex;
+  gap: 6px;
+  padding: 0 16px 0;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+}
+.dlv-tab {
+  position: relative;
+  padding: 9px 18px;
+  border-radius: 24px;
+  border: 2px solid var(--line);
+  background: var(--surface);
+  color: var(--text-muted);
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all .18s;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.dlv-tab:hover { border-color: var(--fahad-blue); color: var(--fahad-blue); }
+.dlv-tab.active {
+  background: var(--fahad-navy);
+  border-color: var(--fahad-navy);
+  color: #fff;
+}
+.dlv-tab-badge {
+  background: var(--clay);
+  color: #fff;
+  border-radius: 50%;
+  font-size: 11px;
+  font-weight: 800;
+  min-width: 20px;
+  height: 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 4px;
+}
+
+/* ── رأس الصفحة ── */
+.dlv-header-stats {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+.dlv-badge-stat {
+  padding: 5px 12px;
+  border-radius: 20px;
+  font-size: 13px;
+  font-weight: 700;
+}
+.dlv-badge-stat.pending { background: var(--tint-gold); color: var(--fahad-gold-deep); }
+.dlv-badge-stat.total   { background: var(--tint-blue); color: var(--fahad-blue-deep); }
+
+/* ── بطاقات الطلبات ── */
+.dlv-section-title {
+  font-family: 'Changa', sans-serif;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-muted);
+  margin: 0 16px 12px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.dlv-cards-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 14px;
+  padding: 0 16px;
+}
+.dlv-card {
+  background: var(--surface);
+  border: 2px solid var(--line);
+  border-radius: var(--radius);
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  transition: box-shadow .18s;
+}
+.dlv-card:hover { box-shadow: 0 4px 16px rgba(0,0,0,.08); }
+.dlv-card-done  { border-color: var(--sage); background: var(--tint-sage); }
+
+.dlv-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.dlv-card-id {
+  font-family: 'Changa', sans-serif;
+  font-weight: 700;
+  font-size: 15px;
+  color: var(--fahad-navy);
+}
+
+/* حالة التوصيل */
+.dlv-status-badge {
+  padding: 4px 10px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.dlv-st-pending   { background: var(--tint-gold);  color: var(--fahad-gold-deep); }
+.dlv-st-assigned  { background: var(--tint-blue);  color: var(--fahad-blue-deep); }
+.dlv-st-otw       { background: #EDE9FE;           color: #6D28D9; }
+.dlv-st-done      { background: var(--tint-sage);  color: var(--sage-deep); }
+
+/* معلومات البطاقة */
+.dlv-card-info { display: flex; flex-direction: column; gap: 6px; }
+.dlv-info-row  { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+.dlv-info-lbl  { color: var(--text-muted); min-width: 72px; }
+.dlv-info-val  { color: var(--text-main); }
+.dlv-amount    { color: var(--sage-deep); font-weight: 800; font-size: 15px; }
+.dlv-fee       { color: var(--fahad-gold-deep); font-weight: 700; }
+
+/* ملاحظة العميل */
+.dlv-feedback-box {
+  background: var(--card-subtle);
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-size: 13px;
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+/* أزرار البطاقة */
+.dlv-card-actions {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.dlv-btn {
+  padding: 8px 14px;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 700;
+  border: 2px solid transparent;
+  cursor: pointer;
+  transition: all .15s;
+  flex: 1;
+  min-width: 100px;
+  text-align: center;
+}
+.dlv-btn-assign   { background: var(--fahad-navy); color: #fff; }
+.dlv-btn-assign:hover { background: #1a3a5c; }
+.dlv-btn-otw      { background: #7C3AED; color: #fff; }
+.dlv-btn-otw:hover { background: #6D28D9; }
+.dlv-btn-done     { background: var(--sage); color: #fff; }
+.dlv-btn-done:hover { background: var(--sage-deep); }
+.dlv-btn-track    { background: var(--fahad-blue-bg); color: var(--fahad-blue-deep);
+                    border-color: var(--fahad-blue); }
+.dlv-btn-feedback { background: var(--card-subtle); color: var(--text-muted);
+                    border-color: var(--line); }
+.dlv-btn-feedback:hover { border-color: var(--fahad-gold); color: var(--fahad-gold-deep); }
+.dlv-btn-settle   { background: var(--fahad-gold); color: #fff; padding: 10px 24px; flex: none; }
+.dlv-btn-settle:hover { background: var(--fahad-gold-deep); }
+
+.dlv-all-assigned {
+  margin: 0 16px;
+  padding: 16px;
+  background: var(--tint-sage);
+  border-radius: var(--radius);
+  color: var(--sage-deep);
+  font-weight: 700;
+  text-align: center;
+}
+
+/* ── تبويبات العمال ── */
+.dlv-agent-tabs {
+  display: flex;
+  gap: 6px;
+  padding: 0 16px 16px;
+  flex-wrap: wrap;
+  border-bottom: 2px solid var(--line);
+  margin-bottom: 20px;
+}
+.dlv-agent-tab {
+  padding: 8px 16px;
+  border-radius: 20px;
+  border: 2px solid var(--line);
+  background: var(--surface);
+  color: var(--text-muted);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  transition: all .15s;
+}
+.dlv-agent-tab:hover { border-color: var(--fahad-blue); color: var(--fahad-blue); }
+.dlv-agent-tab.active {
+  background: var(--fahad-navy);
+  border-color: var(--fahad-navy);
+  color: #fff;
+}
+.dlv-agent-tab-add {
+  border-style: dashed;
+  color: var(--fahad-blue);
+  border-color: var(--fahad-blue);
+}
+
+/* ملخص العامل */
+.dlv-agent-summary {
+  margin: 0 16px 20px;
+  background: var(--surface);
+  border: 2px solid var(--line);
+  border-radius: var(--radius);
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.dlv-agent-info {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+.dlv-agent-type-badge {
+  padding: 4px 12px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 700;
+}
+.dlv-agent-type-badge.emp     { background: var(--tint-blue);  color: var(--fahad-blue-deep); }
+.dlv-agent-type-badge.company { background: var(--tint-gold);  color: var(--fahad-gold-deep); }
+.dlv-agent-phone { font-size: 13px; color: var(--text-muted); }
+.dlv-agent-fee   { font-size: 13px; color: var(--fahad-gold-deep); font-weight: 700; }
+.dlv-agent-notes { font-size: 12px; color: var(--text-muted); font-style: italic; }
+
+.dlv-agent-stats {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.dlv-agent-stat {
+  text-align: center;
+  min-width: 80px;
+}
+.dlv-agent-stat-val {
+  font-family: 'Changa', sans-serif;
+  font-size: 24px;
+  font-weight: 800;
+  color: var(--fahad-navy);
+}
+.dlv-agent-stat-lbl { font-size: 11px; color: var(--text-muted); }
+.dlv-stat-money .dlv-agent-stat-val { color: var(--sage-deep); }
+.dlv-stat-fee   .dlv-agent-stat-val { color: var(--fahad-gold-deep); }
+
+/* ── جدول الفواتير ── */
+.dlv-table-wrap {
+  margin: 0 16px;
+  overflow-x: auto;
+  border-radius: var(--radius);
+  border: 2px solid var(--line);
+}
+.dlv-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.dlv-table th {
+  background: var(--fahad-navy);
+  color: #fff;
+  padding: 10px 12px;
+  text-align: right;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.dlv-table td {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--line);
+  vertical-align: middle;
+}
+.dlv-table tr:hover td { background: var(--card-subtle); }
+.dlv-row-done td { background: var(--tint-sage) !important; }
+.dlv-tfoot td {
+  background: var(--fahad-navy) !important;
+  color: #fff;
+  font-weight: 700;
+  padding: 12px;
+}
+.dlv-td-money { color: var(--sage-deep); font-weight: 700; text-align: center; }
+.dlv-td-fee   { color: var(--fahad-gold-deep); font-weight: 700; text-align: center; }
+.dlv-done-cnt { color: var(--sage-deep); font-weight: 800; }
+
+.dlv-feedback-cell {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.dlv-feedback-text {
+  color: var(--text-muted);
+  font-style: italic;
+  font-size: 12px;
+  flex: 1;
+}
+.dlv-inline-btn {
+  padding: 4px 8px;
+  border-radius: 6px;
+  background: var(--card-subtle);
+  border: 1px solid var(--line);
+  font-size: 13px;
+  cursor: pointer;
+  transition: all .15s;
+}
+.dlv-inline-btn:hover { background: var(--line); }
+.dlv-inline-btn.dlv-otw  { background: #EDE9FE; }
+.dlv-inline-btn.dlv-done { background: var(--tint-sage); }
+
+/* شريط المحاسبة */
+.dlv-settle-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin: 16px 16px 0;
+  padding: 16px;
+  background: var(--tint-gold);
+  border-radius: var(--radius);
+  border: 2px solid var(--fahad-gold);
+}
+.dlv-settle-info {
+  font-size: 14px;
+  color: var(--fahad-gold-deep);
+}
+
+/* ── تقرير شامل ── */
+.dlv-report-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 12px;
+  padding: 0 16px;
+  margin-bottom: 4px;
+}
+.dlv-rstat-card {
+  background: var(--surface);
+  border: 2px solid var(--line);
+  border-radius: var(--radius);
+  padding: 16px 12px;
+  text-align: center;
+}
+.dlv-rstat-icon { font-size: 28px; margin-bottom: 6px; }
+.dlv-rstat-val  {
+  font-family: 'Changa', sans-serif;
+  font-size: 26px;
+  font-weight: 800;
+  color: var(--fahad-navy);
+}
+.dlv-rstat-lbl  { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+.dlv-rstat-money .dlv-rstat-val { color: var(--sage-deep); }
+.dlv-rstat-fee  .dlv-rstat-val  { color: var(--fahad-gold-deep); }
+
+/* قائمة ملاحظات العملاء */
+.dlv-feedbacks-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 0 16px;
+}
+.dlv-feedback-item {
+  background: var(--surface);
+  border: 2px solid var(--line);
+  border-radius: var(--radius);
+  padding: 12px 16px;
+}
+.dlv-feedback-meta {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--fahad-navy);
+  margin-bottom: 6px;
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.dlv-feedback-agent { color: var(--text-muted); font-weight: 400; }
+.dlv-feedback-text-full { font-size: 13px; color: var(--text-muted); font-style: italic; }
+
+/* ── المودالات ── */
+.dlv-modal-scrim {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,.5);
+  z-index: 900;
+}
+.dlv-modal {
+  position: fixed;
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 901;
+  background: var(--surface);
+  border-radius: var(--radius);
+  width: min(480px, 94vw);
+  max-height: 85vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-shadow: 0 20px 60px rgba(0,0,0,.25);
+}
+.dlv-modal-sm { width: min(380px, 94vw); }
+.dlv-modal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 18px;
+  background: var(--fahad-navy);
+  color: #fff;
+  font-weight: 700;
+}
+.dlv-modal-head button {
+  background: none;
+  color: #fff;
+  font-size: 18px;
+  opacity: .7;
+  padding: 2px 6px;
+}
+.dlv-modal-head button:hover { opacity: 1; }
+.dlv-modal-body {
+  padding: 18px;
+  overflow-y: auto;
+  flex: 1;
+}
+.dlv-modal-foot {
+  display: flex;
+  gap: 10px;
+  padding: 14px 18px;
+  border-top: 2px solid var(--line);
+}
+.dlv-modal-cancel  {
+  flex: 1; padding: 10px; border-radius: 10px;
+  background: var(--card-subtle); color: var(--text-muted);
+  font-weight: 700; border: 2px solid var(--line);
+}
+.dlv-modal-confirm {
+  flex: 1; padding: 10px; border-radius: 10px;
+  background: var(--fahad-navy); color: #fff; font-weight: 700;
+}
+
+.dlv-modal-inv-info {
+  background: var(--card-subtle);
+  border-radius: 10px;
+  padding: 12px;
+  font-size: 14px;
+  margin-bottom: 16px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.dlv-modal-label {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-muted);
+  margin-bottom: 10px;
+}
+
+/* شبكة اختيار العامل */
+.dlv-agents-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 10px;
+}
+.dlv-agent-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 14px 10px;
+  border-radius: var(--radius);
+  border: 2px solid var(--line);
+  background: var(--surface);
+  cursor: pointer;
+  transition: all .15s;
+  text-align: center;
+}
+.dlv-agent-btn:hover {
+  border-color: var(--fahad-navy);
+  background: var(--tint-navy);
+}
+.dlv-agent-btn-icon { font-size: 28px; }
+.dlv-agent-btn-name { font-weight: 700; font-size: 14px; color: var(--fahad-navy); }
+.dlv-agent-btn-fee  {
+  background: var(--tint-gold);
+  color: var(--fahad-gold-deep);
+  border-radius: 12px;
+  padding: 2px 10px;
+  font-size: 12px;
+  font-weight: 700;
+}
+.dlv-agent-btn-free {
+  background: var(--tint-sage);
+  color: var(--sage-deep);
+  border-radius: 12px;
+  padding: 2px 10px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+/* حقل الملاحظة */
+.dlv-feedback-input {
+  width: 100%;
+  border: 2px solid var(--line);
+  border-radius: 10px;
+  padding: 10px 12px;
+  font-family: inherit;
+  font-size: 14px;
+  color: var(--text-main);
+  background: var(--card-subtle);
+  resize: vertical;
+  direction: rtl;
+}
+.dlv-feedback-input:focus {
+  outline: none;
+  border-color: var(--fahad-blue);
+}
+
+/* Empty state */
+.dlv-empty {
+  text-align: center;
+  padding: 60px 20px;
+  color: var(--text-muted);
+  font-size: 15px;
+}
+.dlv-empty-icon { font-size: 48px; margin-bottom: 12px; }
+
+/* ================================================================
+   صفحة التتبع (track.html) — للعميل
+   ================================================================ */
+.track-shell {
+  min-height: 100svh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 24px 16px 40px;
+  background: linear-gradient(135deg, #102A43 0%, #0284C7 100%);
+  gap: 16px;
+}
+.track-brand {
+  font-family: 'Changa', sans-serif;
+  font-size: 22px;
+  font-weight: 800;
+  color: #fff;
+  letter-spacing: 1px;
+}
+.track-card {
+  width: min(480px, 100%);
+  background: var(--surface);
+  border-radius: 20px;
+  overflow: hidden;
+  box-shadow: 0 20px 60px rgba(0,0,0,.3);
+}
+.track-error {
+  padding: 40px;
+  text-align: center;
+}
+.track-error-icon  { font-size: 48px; margin-bottom: 12px; }
+.track-error-title { font-size: 18px; font-weight: 700; color: var(--clay); margin-bottom: 8px; }
+.track-error-sub   { color: var(--text-muted); font-size: 14px; }
+
+/* رأس بطاقة التتبع */
+.track-head {
+  background: var(--fahad-navy);
+  color: #fff;
+  text-align: center;
+  padding: 28px 20px;
+}
+.track-head-done { background: var(--sage); }
+.track-head-icon  { font-size: 48px; margin-bottom: 8px; }
+.track-head-title { font-family: 'Changa', sans-serif; font-size: 22px; font-weight: 800; }
+.track-head-sub   { font-size: 14px; opacity: .85; margin-top: 4px; }
+
+/* بيانات الطلب */
+.track-info {
+  padding: 16px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  border-bottom: 2px solid var(--line);
+}
+.track-info-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 14px;
+}
+.track-info-row span { color: var(--text-muted); }
+.track-info-row strong { color: var(--fahad-navy); }
+
+/* شريط الخطوات */
+.track-steps {
+  padding: 20px;
+  display: flex;
+  gap: 0;
+  position: relative;
+  overflow-x: auto;
+}
+.track-step {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex: 1;
+  position: relative;
+  gap: 6px;
+  min-width: 70px;
+}
+.track-step-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: var(--card-subtle);
+  border: 3px solid var(--line);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  position: relative;
+  z-index: 1;
+  transition: all .2s;
+}
+.track-step.done .track-step-icon {
+  background: var(--sage);
+  border-color: var(--sage);
+}
+.track-step.current .track-step-icon {
+  background: var(--fahad-navy);
+  border-color: var(--fahad-navy);
+  box-shadow: 0 0 0 4px rgba(2,132,199,.25);
+  animation: pulse-step 1.5s infinite;
+}
+@keyframes pulse-step {
+  0%,100% { box-shadow: 0 0 0 4px rgba(2,132,199,.25); }
+  50%      { box-shadow: 0 0 0 8px rgba(2,132,199,.1); }
+}
+.track-step-label {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-align: center;
+  line-height: 1.3;
+}
+.track-step.done .track-step-label,
+.track-step.current .track-step-label { color: var(--fahad-navy); }
+.track-step-line {
+  position: absolute;
+  top: 20px;
+  right: calc(50% + 20px);
+  left: calc(-50% + 20px);
+  height: 3px;
+  background: var(--line);
+  z-index: 0;
+}
+.track-step.done .track-step-line { background: var(--sage); }
+
+/* أصناف الطلب */
+.track-items {
+  padding: 16px 20px;
+  border-top: 2px solid var(--line);
+}
+.track-items-title {
+  font-weight: 700;
+  font-size: 14px;
+  color: var(--fahad-navy);
+  margin-bottom: 10px;
+}
+.track-item-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 13px;
+  color: var(--text-muted);
+  padding: 4px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+/* رسائل */
+.track-done-msg {
+  margin: 16px 20px;
+  background: var(--tint-sage);
+  color: var(--sage-deep);
+  border-radius: 12px;
+  padding: 14px 16px;
+  font-weight: 700;
+  text-align: center;
+}
+.track-refresh-hint {
+  margin: 16px 20px;
+  background: var(--card-subtle);
+  color: var(--text-muted);
+  border-radius: 12px;
+  padding: 12px 16px;
+  font-size: 13px;
+  text-align: center;
+}
+
+.track-footer {
+  color: rgba(255,255,255,.5);
+  font-size: 12px;
+  text-align: center;
+  margin-top: auto;
+}
+
+/* ── Responsive ── */
+@media (max-width: 600px) {
+  .dlv-cards-grid { grid-template-columns: 1fr; }
+  .dlv-report-stats { grid-template-columns: repeat(2, 1fr); }
+  .dlv-agents-grid { grid-template-columns: repeat(2, 1fr); }
+  .dlv-settle-bar { flex-direction: column; }
+  .dlv-agent-summary { flex-direction: column; }
+}
+
+/* ================================================================
+   مودال التتبع المدمج
+   ================================================================ */
+.dlv-modal-track {
+  width: min(520px, 96vw);
+  max-height: 90vh;
+}
+
+/* رأس حالة التتبع */
+.track-head-mini {
+  background: var(--fahad-navy);
+  color: #fff;
+  text-align: center;
+  padding: 20px 16px;
+}
+.track-head-mini.done { background: var(--sage); }
+.track-head-mini-icon  { font-size: 36px; margin-bottom: 6px; }
+.track-head-mini-title {
+  font-family: 'Changa', sans-serif;
+  font-size: 18px;
+  font-weight: 800;
+}
+.track-head-mini-sub { font-size: 13px; opacity: .85; margin-top: 3px; }
+
+/* بيانات الطلب */
+.track-info-mini {
+  padding: 12px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border-bottom: 2px solid var(--line);
+}
+.track-info-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 13px;
+}
+.track-info-row span  { color: var(--text-muted); }
+.track-info-row strong { color: var(--fahad-navy); }
+
+/* شريط التقدم المصغر */
+.track-steps-mini {
+  display: flex;
+  padding: 16px;
+  gap: 0;
+  border-bottom: 2px solid var(--line);
+  overflow-x: auto;
+}
+.track-step-mini {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex: 1;
+  position: relative;
+  gap: 5px;
+  min-width: 64px;
+}
+.track-step-mini-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: var(--card-subtle);
+  border: 3px solid var(--line);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  position: relative;
+  z-index: 1;
+}
+.track-step-mini.done .track-step-mini-icon {
+  background: var(--sage);
+  border-color: var(--sage);
+}
+.track-step-mini.current .track-step-mini-icon {
+  background: var(--fahad-navy);
+  border-color: var(--fahad-navy);
+  animation: pulse-step 1.5s infinite;
+}
+.track-step-mini-label {
+  font-size: 9px;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-align: center;
+  line-height: 1.3;
+}
+.track-step-mini.done .track-step-mini-label,
+.track-step-mini.current .track-step-mini-label { color: var(--fahad-navy); }
+.track-step-mini-line {
+  position: absolute;
+  top: 18px;
+  right: calc(50% + 18px);
+  left: calc(-50% + 18px);
+  height: 3px;
+  background: var(--line);
+  z-index: 0;
+}
+.track-step-mini.done .track-step-mini-line { background: var(--sage); }
+
+/* منطقة مشاركة الرابط */
+.track-share-bar {
+  padding: 14px 16px;
+  border-top: 2px solid var(--line);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.track-share-label {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-muted);
+}
+.track-share-row {
+  display: flex;
+  gap: 8px;
+}
+.track-share-input {
+  flex: 1;
+  padding: 8px 10px;
+  border: 2px solid var(--line);
+  border-radius: 8px;
+  font-size: 11px;
+  color: var(--text-muted);
+  background: var(--card-subtle);
+  direction: ltr;
+  text-align: left;
+  cursor: text;
+}
+.track-copy-btn {
+  padding: 8px 16px;
+  background: var(--fahad-navy);
+  color: #fff;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 700;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.track-whatsapp-btn {
+  display: block;
+  text-align: center;
+  padding: 10px;
+  background: #25D366;
+  color: #fff;
+  border-radius: 10px;
+  font-weight: 700;
+  font-size: 14px;
+  text-decoration: none;
+}
+.track-whatsapp-btn:hover { background: #1da851; }

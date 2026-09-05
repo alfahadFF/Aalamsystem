@@ -1,0 +1,409 @@
+/* ================================================================
+   expenditures.css — شاشة الصادرات — alfaprosys
+   ================================================================ */
+
+/* ── شارة الإجمالي في الرأس ── */
+.exp-total-badge {
+  font-family: 'Changa', sans-serif;
+  font-size: 15px;
+  font-weight: 800;
+  color: var(--clay);
+  background: var(--clay-bg);
+  border: 1px solid rgba(220,38,38,.15);
+  border-radius: 12px;
+  padding: 6px 13px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.exp-total-badge span { font-size: 10px; font-weight: 700; }
+
+/* ================================================================
+   اللوحتان الرئيسيتان
+   ================================================================ */
+.exp-panels {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.exp-panel {
+  background: var(--surface);
+  border: 1.5px solid var(--line);
+  border-radius: var(--radius);
+  overflow: hidden;
+  box-shadow: 0 1px 4px rgba(15,23,42,.04);
+  transition: border-color .18s;
+}
+.exp-panel.open {
+  border-color: var(--line-strong);
+  box-shadow: 0 4px 16px rgba(15,23,42,.07);
+}
+
+/* ── رأس اللوحة ── */
+.exp-panel-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 14px;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: background .12s;
+}
+.exp-panel-head:hover  { background: var(--card-subtle); }
+.exp-panel-head:active { background: var(--fahad-blue-bg); }
+
+.exp-panel-icon-wrap {
+  width: 46px;
+  height: 46px;
+  border-radius: 14px;
+  display: grid;
+  place-items: center;
+  font-size: 22px;
+  flex-shrink: 0;
+}
+.exp-panel-icon-wrap.purchases { background: rgba(2,132,199,.1); }
+.exp-panel-icon-wrap.expenses  { background: rgba(220,38,38,.09); }
+
+.exp-panel-info { flex: 1; min-width: 0; }
+.exp-panel-label {
+  font-size: 11px;
+  font-weight: 800;
+  color: var(--text-muted);
+  margin-bottom: 2px;
+}
+.exp-panel-amount {
+  font-family: 'Changa', sans-serif;
+  font-size: 20px;
+  font-weight: 800;
+  color: var(--fahad-navy);
+  line-height: 1.2;
+}
+.exp-panel-amount span { font-size: 11px; font-weight: 700; color: var(--text-muted); }
+.exp-panel-sub { font-size: 10px; color: var(--text-muted); font-weight: 700; margin-top: 2px; }
+
+.exp-panel-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.exp-add-btn {
+  padding: 6px 12px;
+  border-radius: 9px;
+  background: var(--fahad-navy);
+  color: var(--surface);
+  font-size: 11px;
+  font-weight: 800;
+  border: none;
+  cursor: pointer;
+  white-space: nowrap;
+  -webkit-tap-highlight-color: transparent;
+  transition: .12s;
+}
+.exp-add-btn.expenses { background: var(--clay); }
+.exp-add-btn:active   { transform: scale(.94); }
+
+.exp-panel-arrow {
+  font-size: 20px;
+  color: var(--text-muted);
+  font-weight: 800;
+  display: grid;
+  place-items: center;
+  width: 24px;
+  transition: transform .2s ease;
+  user-select: none;
+}
+.exp-panel-arrow.open { transform: rotate(90deg); }
+
+/* ── جسم اللوحة (التفاصيل) ── */
+.exp-panel-body {
+  display: none;
+  border-top: 1px solid var(--line);
+}
+.exp-panel.open .exp-panel-body { display: block; }
+
+.exp-item-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--line);
+}
+.exp-item-row:last-of-type { border-bottom: none; }
+
+.exp-item-icon {
+  font-size: 18px;
+  flex-shrink: 0;
+  width: 28px;
+  text-align: center;
+}
+
+.exp-item-main { flex: 1; min-width: 0; }
+.exp-item-title {
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--text-main);
+  margin-bottom: 3px;
+}
+.exp-item-sub {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  font-size: 10px;
+  color: var(--text-muted);
+  font-weight: 700;
+}
+.exp-item-cat {
+  background: var(--card-subtle);
+  color: var(--text-muted);
+  border-radius: 5px;
+  padding: 1px 6px;
+  font-size: 9.5px;
+  font-weight: 800;
+}
+
+.exp-item-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+.exp-item-amount {
+  font-family: 'Changa', sans-serif;
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--fahad-blue);
+  white-space: nowrap;
+}
+.exp-item-amount.expenses { color: var(--clay); }
+
+.exp-del-btn {
+  width: 26px;
+  height: 26px;
+  border-radius: 7px;
+  background: var(--clay-bg);
+  color: var(--clay);
+  border: none;
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 900;
+  display: grid;
+  place-items: center;
+  -webkit-tap-highlight-color: transparent;
+}
+.exp-del-btn:active { transform: scale(.9); }
+
+.exp-empty {
+  text-align: center;
+  padding: 20px;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.exp-panel-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  background: var(--card-subtle);
+  border-top: 1px solid var(--line);
+  font-size: 11.5px;
+  font-weight: 800;
+  color: var(--text-muted);
+}
+.exp-panel-footer strong {
+  font-family: 'Changa', sans-serif;
+  font-size: 14px;
+  color: var(--fahad-navy);
+}
+
+/* ================================================================
+   بطاقة الملخص
+   ================================================================ */
+.exp-summary-card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 13px;
+  box-shadow: 0 1px 4px rgba(15,23,42,.03);
+}
+.exp-summary-title {
+  font-family: 'Changa', sans-serif;
+  font-size: 12.5px;
+  font-weight: 800;
+  color: var(--fahad-navy);
+  margin-bottom: 10px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--line);
+}
+.exp-summary-rows { display: flex; flex-direction: column; gap: 2px; }
+.exp-summary-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 7px 4px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-muted);
+  border-radius: 8px;
+}
+.exp-summary-row strong {
+  font-family: 'Changa', sans-serif;
+  font-size: 14px;
+  font-weight: 800;
+  color: var(--fahad-navy);
+}
+.exp-summary-row strong.blue { color: var(--fahad-blue); }
+.exp-summary-row strong.red  { color: var(--clay); }
+.exp-summary-row.total-row {
+  margin-top: 4px;
+  padding-top: 10px;
+  border-top: 2px solid var(--line-strong);
+  color: var(--fahad-navy);
+  font-weight: 800;
+}
+.exp-summary-row.total-row strong { font-size: 17px; }
+
+/* ================================================================
+   المودالات
+   ================================================================ */
+.exp-modal-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  background: transparent;
+  
+  -webkit-
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .18s;
+}
+.exp-modal-scrim.show { opacity: 1; pointer-events: auto; }
+
+.exp-modal {
+  position: fixed;
+  bottom: 0; right: 0; left: 0;
+  z-index: 71;
+  background: var(--surface);
+  border-radius: 20px 20px 0 0;
+  border-top: 1px solid var(--line);
+  box-shadow: 0 -6px 30px rgba(15,23,42,.15);
+  max-height: 90svh;
+  overflow-y: auto;
+  transform: translateY(100%);
+  transition: transform .15s ease;
+}
+.exp-modal.show { transform: translateY(0); }
+
+@media (min-width: 580px) {
+  .exp-modal {
+    top: 50%;
+    left: 50%;
+    right: auto;
+    bottom: auto;
+    transform: translate(-50%, -46%) scale(.96);
+    width: min(96vw, 460px);
+    border-radius: 18px;
+    max-height: 92svh;
+    opacity: 0;
+  }
+  .exp-modal.show {
+    transform: translate(-50%, -50%) scale(1);
+    opacity: 1;
+  }
+}
+
+.exp-modal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--line);
+  position: sticky;
+  top: 0;
+  background: var(--surface);
+  z-index: 2;
+  font-family: 'Changa', sans-serif;
+  font-size: 14px;
+  font-weight: 800;
+  color: var(--fahad-navy);
+}
+.exp-modal-head button {
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  background: var(--card-subtle);
+  color: var(--text-muted);
+  font-size: 14px;
+  font-weight: 800;
+  border: none;
+  cursor: pointer;
+}
+.exp-modal-body { padding: 14px 16px; }
+
+/* ── بوكس سعر الوحدة ── */
+.pur-unit-cost-box {
+  background: var(--fahad-blue-bg);
+  border: 1px solid rgba(2,132,199,.2);
+  border-radius: 10px;
+  padding: 10px 12px;
+  margin-bottom: 12px;
+}
+.pur-unit-cost-label {
+  font-size: 10px;
+  font-weight: 800;
+  color: var(--fahad-blue);
+  margin-bottom: 3px;
+}
+.pur-unit-cost-val {
+  font-family: 'Changa', sans-serif;
+  font-size: 17px;
+  font-weight: 800;
+  color: var(--fahad-navy);
+}
+.pur-unit-cost-formula {
+  font-size: 9.5px;
+  color: var(--text-muted);
+  margin-top: 3px;
+  font-weight: 700;
+}
+
+/* ── شبكة أنواع المصاريف ── */
+.exp-type-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 6px;
+  margin-bottom: 14px;
+}
+@media (max-width: 380px) {
+  .exp-type-grid { grid-template-columns: repeat(3, 1fr); }
+}
+
+.exp-type-btn {
+  height: 62px;
+  border-radius: 12px;
+  background: var(--surface);
+  border: 1.5px solid var(--line);
+  color: var(--text-muted);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  cursor: pointer;
+  transition: .12s;
+  -webkit-tap-highlight-color: transparent;
+  font-family: inherit;
+}
+.exp-type-btn span  { font-size: 20px; line-height: 1; }
+.exp-type-btn small { font-size: 9px; font-weight: 800; color: inherit; }
+.exp-type-btn.active {
+  background: var(--fahad-navy);
+  border-color: var(--fahad-navy);
+  color: var(--surface);
+  box-shadow: 0 4px 10px rgba(16,42,67,.2);
+}
+.exp-type-btn:active { transform: scale(.94); }

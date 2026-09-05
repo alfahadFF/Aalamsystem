@@ -1,0 +1,214 @@
+/* ================================================================
+   inventory.css — المخزون — alfaprosys
+   ================================================================ */
+
+/* ── تنبيه المخزون المنخفض ── */
+.inv-alert-strip {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 7px;
+  background: var(--clay-bg); border: 1px solid rgba(220,38,38,.2);
+  border-radius: 12px; padding: 10px 13px; margin-bottom: 12px;
+  font-size: 11.5px; font-weight: 800; color: var(--clay);
+}
+.inv-alert-chip {
+  background: var(--surface); border-radius: 6px; padding: 2px 8px;
+  font-size: 10.5px; color: var(--clay); border: 1px solid rgba(220,38,38,.25);
+}
+
+/* ── شرائح التصنيف ── */
+.inv-cat-strip {
+  display: flex; gap: 6px; overflow-x: auto;
+  overscroll-behavior-x: contain; padding-bottom: 6px;
+  margin-bottom: 12px; scrollbar-width: none;
+}
+.inv-cat-strip::-webkit-scrollbar { display: none; }
+.inv-cat-chip {
+  flex-shrink: 0; display: inline-flex; align-items: center; gap: 5px;
+  padding: 6px 12px; border-radius: 10px;
+  background: var(--surface); border: 1.5px solid var(--line);
+  font-size: 11px; font-weight: 800; color: var(--text-muted);
+  white-space: nowrap; cursor: pointer; font-family: inherit; transition: .12s;
+}
+.inv-cat-chip span { background: var(--card-subtle); color: var(--text-muted); border-radius: 5px; padding: 1px 5px; font-size: 9px; }
+.inv-cat-chip.active { background: var(--fahad-navy); border-color: var(--fahad-navy); color: var(--surface); }
+.inv-cat-chip.active span { background: rgba(255,255,255,.2); color: var(--surface); }
+.inv-cat-chip:active { transform: scale(.95); }
+
+/* ── صفوف المخزون ── */
+.inv-row { border-bottom: 1px solid var(--line); }
+.inv-row:last-child { border-bottom: none; }
+.inv-row.open { background: rgba(2,132,199,.03); }
+
+.inv-row-main {
+  display: flex; align-items: center; gap: 10px;
+  padding: 11px 13px; cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.inv-row-main:active { background: var(--card-subtle); }
+
+.inv-row-icon {
+  flex-shrink: 0; width: 38px; height: 38px; border-radius: 10px;
+  background: var(--card-subtle); display: grid; place-items: center; font-size: 18px;
+}
+.inv-row-info { flex: 1; min-width: 0; }
+.inv-row-name {
+  font-size: 12.5px; font-weight: 800; color: var(--text-main);
+  display: flex; flex-wrap: wrap; align-items: center; gap: 5px;
+  margin-bottom: 2px;
+}
+.inv-row-sub { font-size: 10px; color: var(--text-muted); font-weight: 700; }
+.inv-badge {
+  display: inline-flex; padding: 1px 6px; border-radius: 5px;
+  font-size: 9.5px; font-weight: 800;
+}
+.inv-badge.auto { background: var(--fahad-blue-bg); color: var(--fahad-blue); }
+.inv-badge.low  { background: var(--clay-bg); color: var(--clay); }
+
+/* شريط الكمية */
+.inv-bar-wrap { margin-top: 5px; }
+.inv-bar { height: 4px; background: var(--line); border-radius: 2px; overflow: hidden; width: 100%; }
+.inv-bar-fill { height: 100%; background: var(--sage); border-radius: 2px; transition: width .4s; min-width: 2px; }
+.inv-bar-fill.warn { background: var(--fahad-gold); }
+.inv-bar-fill.low  { background: var(--clay); }
+
+.inv-row-qty { text-align: left; flex-shrink: 0; }
+.inv-qty-val { font-family: 'Changa', sans-serif; font-size: 14px; font-weight: 800; color: var(--fahad-navy); }
+.inv-qty-val.red { color: var(--clay); }
+.inv-qty-unit { font-size: 9.5px; color: var(--text-muted); font-weight: 700; }
+
+.inv-row-chevron { color: var(--text-muted); font-size: 18px; font-weight: 900; transition: transform .2s; flex-shrink: 0; }
+.inv-row-chevron.open { transform: rotate(90deg); }
+
+/* ── تفاصيل accordion ── */
+.inv-row-detail { max-height: 0; overflow: hidden; transition: max-height .35s ease; }
+.inv-row-detail.open { max-height: 900px; }
+.inv-detail-inner { padding: 0 13px 14px; border-top: 1px solid var(--line); padding-top: 10px; }
+
+/* شبكة المعلومات */
+.inv-info-grid {
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: 7px; margin-bottom: 10px;
+}
+@media (max-width: 420px) { .inv-info-grid { grid-template-columns: repeat(2, 1fr); } }
+.inv-info-cell {
+  background: var(--card-subtle); border: 1px solid var(--line);
+  border-radius: 9px; padding: 8px; text-align: center;
+}
+.inv-info-cell.red  { background: var(--clay-bg); border-color: rgba(220,38,38,.2); }
+.inv-info-cell.gold { background: rgba(217,119,6,.08); border-color: rgba(217,119,6,.2); }
+.inv-info-val { font-family: 'Changa', sans-serif; font-size: 13px; font-weight: 800; color: var(--fahad-navy); }
+.inv-info-cell.red  .inv-info-val { color: var(--clay); }
+.inv-info-cell.gold .inv-info-val { color: var(--fahad-gold); }
+.inv-info-lbl { font-size: 9px; color: var(--text-muted); font-weight: 700; margin-top: 2px; }
+
+.inv-bread-note {
+  font-size: 11px; font-weight: 700; color: var(--fahad-blue);
+  background: var(--fahad-blue-bg); border-radius: 8px;
+  padding: 7px 10px; margin-bottom: 10px;
+}
+
+/* أزرار الإجراءات */
+.inv-action-row { display: flex; gap: 6px; flex-wrap: wrap; }
+.inv-action-btn {
+  height: 32px; padding: 0 12px; border-radius: 8px;
+  font-size: 11px; font-weight: 800; cursor: pointer; font-family: inherit;
+  border: 1px solid var(--line); background: var(--card-subtle); color: var(--text-muted);
+  transition: .12s;
+}
+.inv-action-btn.green  { background: var(--sage-bg); color: var(--sage); border-color: rgba(22,163,74,.2); }
+.inv-action-btn.red    { background: var(--clay-bg); color: var(--clay); border-color: rgba(220,38,38,.2); }
+.inv-action-btn.danger { background: var(--clay-bg); color: var(--clay); border-color: rgba(220,38,38,.2); }
+.inv-action-btn:active { transform: scale(.93); }
+
+/* ── السجل ── */
+.inv-log-list { display: grid; gap: 5px; }
+.inv-log-row {
+  display: flex; align-items: center; gap: 8px;
+  background: var(--surface); border: 1px solid var(--line);
+  border-radius: 9px; padding: 8px 10px;
+}
+.inv-log-row.in  { border-color: rgba(22,163,74,.2); }
+.inv-log-row.out { border-color: rgba(220,38,38,.15); }
+.inv-log-icon { font-size: 14px; flex-shrink: 0; }
+.inv-log-info { flex: 1; min-width: 0; }
+.inv-log-note { font-size: 11px; font-weight: 800; color: var(--text-main); }
+.inv-log-date { font-size: 10px; color: var(--text-muted); font-weight: 700; margin-top: 1px; }
+.inv-log-qty { font-family: 'Changa', sans-serif; font-size: 12px; font-weight: 800; white-space: nowrap; }
+.inv-log-qty.green { color: var(--sage); }
+.inv-log-qty.red   { color: var(--clay); }
+.inv-empty-log { text-align: center; padding: 14px; font-size: 11px; color: var(--text-muted); font-weight: 700; }
+
+/* ── المعادلة ── */
+.inv-recipe-title { font-size: 11px; font-weight: 800; color: var(--fahad-blue); margin-bottom: 8px; }
+.inv-recipe-list { display: grid; gap: 5px; margin-bottom: 8px; }
+.inv-recipe-row {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 6px 10px; background: var(--fahad-blue-bg); border-radius: 8px;
+  font-size: 11px;
+}
+.inv-recipe-name { color: var(--text-main); font-weight: 700; }
+.inv-recipe-qty  { color: var(--fahad-blue); font-weight: 800; white-space: nowrap; }
+.inv-recipe-note {
+  font-size: 11px; font-weight: 700; color: var(--text-muted);
+  background: var(--card-subtle); border-radius: 8px; padding: 7px 10px;
+}
+.inv-recipe-note strong { color: var(--fahad-navy); }
+
+/* ── رسالة فارغة ── */
+.inv-empty { text-align: center; padding: 40px 20px; font-size: 12px; color: var(--text-muted); font-weight: 700; }
+
+/* ================================================================
+   مودال المخزون
+   ================================================================ */
+.inv-modal-scrim {
+  position: fixed; inset: 0; z-index: 70;
+  background: transparent;
+   -webkit-
+  opacity: 0; pointer-events: none; transition: opacity .18s;
+}
+.inv-modal-scrim.show { opacity: 1; pointer-events: auto; }
+.inv-modal {
+  position: fixed; bottom: 0; left: 0; right: 0; z-index: 71;
+  background: var(--surface); border-radius: 20px 20px 0 0;
+  border-top: 1px solid var(--line); box-shadow: 0 -6px 30px rgba(15,23,42,.15);
+  max-height: 90svh; overflow-y: auto;
+  transform: translateY(100%); transition: transform .15s ease;
+}
+.inv-modal.show { transform: translateY(0); }
+@media (min-width: 580px) {
+  .inv-modal {
+    top: 50%; left: 50%; right: auto; bottom: auto;
+    transform: translate(-50%, -46%) scale(.96);
+    width: min(96vw, 480px); border-radius: 18px; opacity: 0;
+  }
+  .inv-modal.show { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+}
+.inv-modal-head {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 14px 16px; border-bottom: 1px solid var(--line);
+  position: sticky; top: 0; background: var(--surface); z-index: 2;
+  font-family: 'Changa', sans-serif; font-size: 14px; font-weight: 800; color: var(--fahad-navy);
+}
+.inv-modal-head button {
+  width: 30px; height: 30px; border-radius: 8px;
+  background: var(--card-subtle); border: none; cursor: pointer;
+  color: var(--text-muted); font-size: 14px; font-weight: 800;
+}
+.inv-modal-body { padding: 14px 16px 20px; display: grid; gap: 10px; }
+.inv-modal-label {
+  display: flex; flex-direction: column; gap: 5px;
+  font-size: 10.5px; font-weight: 800; color: var(--text-muted);
+}
+.inv-modal-input {
+  height: 40px; border-radius: 9px; border: 1.5px solid var(--line);
+  padding: 0 10px; font-size: 13px; font-weight: 800; font-family: inherit;
+  color: var(--text-main); background: var(--surface); outline: none;
+  transition: border-color .15s; width: 100%; box-sizing: border-box;
+}
+.inv-modal-input:focus { border-color: var(--fahad-blue); }
+.inv-modal-confirm {
+  height: 46px; border-radius: 12px; border: none;
+  font-size: 13px; font-weight: 800; font-family: 'Changa', sans-serif;
+  cursor: pointer; width: 100%; margin-top: 4px;
+}
+.inv-modal-confirm.green { background: var(--sage); color: var(--surface); }
+.inv-modal-confirm.red   { background: var(--clay); color: var(--surface); }
+.inv-modal-confirm:active { transform: scale(.97); }

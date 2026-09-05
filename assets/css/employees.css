@@ -1,0 +1,380 @@
+/* ================================================================
+   employees.css — شاشة الموظفين — alfaprosys
+   ================================================================ */
+
+/* ── فلاتر ── */
+.emp-filters { display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px; }
+
+.emp-filter-strip {
+  display: flex; gap: 6px; overflow-x: auto;
+  overscroll-behavior-x: contain; padding-bottom: 2px;
+  scrollbar-width: none;
+}
+.emp-filter-strip::-webkit-scrollbar { display: none; }
+
+.emp-chip {
+  flex-shrink: 0; display: inline-flex; align-items: center; gap: 5px;
+  padding: 5px 11px; border-radius: 9px;
+  background: var(--surface); border: 1.5px solid var(--line);
+  font-size: 11px; font-weight: 800; color: var(--text-muted);
+  white-space: nowrap; cursor: pointer; font-family: inherit;
+  transition: .12s; -webkit-tap-highlight-color: transparent;
+}
+.emp-chip span {
+  background: var(--card-subtle); color: var(--text-muted);
+  border-radius: 5px; padding: 1px 5px; font-size: 9px;
+}
+.emp-chip.active {
+  background: var(--fahad-navy); border-color: var(--fahad-navy); color: var(--surface);
+}
+.emp-chip.active span { background: rgba(255,255,255,.2); color: var(--surface); }
+.emp-chip.shift.active { background: var(--fahad-blue); border-color: var(--fahad-blue); }
+.emp-chip:active { transform: scale(.95); }
+
+/* ── صفوف الموظفين ── */
+.emp-row { border-bottom: 1px solid var(--line); }
+.emp-row:last-child { border-bottom: none; }
+.emp-row.open { background: rgba(2,132,199,.03); }
+
+.emp-row-main {
+  display: flex; align-items: center; gap: 10px;
+  padding: 11px 13px; cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.emp-row-main:active { background: var(--card-subtle); }
+
+/* أفاتار الاسم */
+.emp-avatar {
+  flex-shrink: 0; width: 40px; height: 40px; border-radius: 12px;
+  background: var(--fahad-navy); color: var(--surface);
+  display: grid; place-items: center;
+  font-family: 'Changa', sans-serif; font-size: 16px; font-weight: 800;
+}
+
+.emp-row-info { flex: 1; min-width: 0; }
+.emp-row-name {
+  font-size: 12.5px; font-weight: 800; color: var(--text-main);
+  display: flex; align-items: center; flex-wrap: wrap; gap: 5px;
+  margin-bottom: 3px;
+}
+.emp-row-sub {
+  font-size: 10.5px; color: var(--text-muted); font-weight: 700;
+  display: flex; gap: 6px; flex-wrap: wrap;
+}
+
+/* الراتب يمين الصف */
+.emp-row-salary { text-align: left; flex-shrink: 0; }
+.emp-salary-val {
+  font-family: 'Changa', sans-serif; font-size: 13px;
+  font-weight: 800; color: var(--fahad-navy); white-space: nowrap;
+}
+.emp-salary-type { font-size: 9.5px; color: var(--text-muted); font-weight: 700; }
+
+.emp-row-chevron {
+  color: var(--text-muted); font-size: 18px; font-weight: 900;
+  transition: transform .2s; flex-shrink: 0;
+}
+.emp-row-chevron.open { transform: rotate(90deg); }
+
+/* ── تفاصيل accordion ── */
+.emp-row-detail { max-height: 0; overflow: hidden; transition: max-height .35s ease; }
+.emp-row-detail.open { max-height: 1400px; }
+.emp-detail-inner { padding: 0 13px 16px; border-top: 1px solid var(--line); }
+
+/* ── تابز ── */
+.emp-tabs {
+  display: flex; gap: 5px; padding: 10px 0 0;
+  border-bottom: 1px solid var(--line); margin-bottom: 12px;
+}
+.emp-tab {
+  padding: 6px 13px; border-radius: 9px 9px 0 0;
+  border: 1px solid transparent; border-bottom: none;
+  font-size: 11px; font-weight: 800; color: var(--text-muted);
+  background: transparent; cursor: pointer; font-family: inherit;
+  margin-bottom: -1px; transition: .12s;
+}
+.emp-tab.active {
+  background: var(--surface); border-color: var(--line);
+  border-bottom-color: var(--surface); color: var(--fahad-navy);
+}
+.emp-tab:hover:not(.active) { color: var(--fahad-blue); }
+
+.emp-tab-content { padding-top: 4px; }
+
+/* ── شبكة الحقول ── */
+.emp-fields-grid {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 8px 14px;
+  margin-bottom: 12px;
+}
+@media (max-width: 440px) { .emp-fields-grid { grid-template-columns: 1fr; } }
+
+.emp-field { display: flex; flex-direction: column; gap: 2px; }
+.emp-field.full { grid-column: 1 / -1; }
+.emp-field span { font-size: 9.5px; color: var(--text-muted); font-weight: 800; }
+.emp-field strong { font-size: 12px; color: var(--text-main); font-weight: 800; }
+
+/* ── أزرار التفاصيل ── */
+.emp-detail-actions { display: flex; gap: 8px; }
+.emp-action-btn {
+  height: 33px; padding: 0 14px; border-radius: 9px;
+  font-size: 11px; font-weight: 800; border: none;
+  cursor: pointer; font-family: inherit; transition: .12s;
+}
+.emp-action-btn.primary { background: var(--fahad-navy); color: var(--surface); }
+.emp-action-btn.danger  { background: var(--clay-bg); color: var(--clay); border: 1px solid rgba(220,38,38,.2); }
+.emp-action-btn:active  { transform: scale(.93); }
+
+/* شارات الدور والوردية */
+.emp-badge {
+  display: inline-flex; padding: 2px 7px; border-radius: 6px;
+  font-size: 9.5px; font-weight: 800;
+}
+.emp-badge.role  { background: var(--fahad-blue-bg); color: var(--fahad-blue); }
+.emp-badge.shift { background: var(--card-subtle); color: var(--text-muted); }
+
+/* ── ملخص الراتب ── */
+.emp-salary-summary {
+  display: grid; grid-template-columns: repeat(3, 1fr);
+  gap: 8px; margin-bottom: 12px;
+}
+@media (max-width: 400px) { .emp-salary-summary { grid-template-columns: 1fr 1fr; } }
+
+.emp-salary-cell {
+  background: var(--card-subtle); border: 1px solid var(--line);
+  border-radius: 10px; padding: 9px; text-align: center;
+}
+.emp-salary-cell.green { background: var(--sage-bg); border-color: rgba(22,163,74,.2); }
+.emp-salary-cell.red   { background: var(--clay-bg); border-color: rgba(220,38,38,.18); }
+.emp-salary-cell-val {
+  font-family: 'Changa', sans-serif; font-size: 13px;
+  font-weight: 800; color: var(--fahad-navy);
+}
+.emp-salary-cell.green .emp-salary-cell-val { color: var(--sage); }
+.emp-salary-cell.red   .emp-salary-cell-val { color: var(--clay); }
+.emp-salary-cell-lbl { font-size: 9px; color: var(--text-muted); font-weight: 700; margin-top: 2px; }
+
+/* ── أزرار الدفع ── */
+.emp-pay-actions {
+  display: grid; grid-template-columns: repeat(4, 1fr);
+  gap: 6px; margin-bottom: 12px;
+}
+@media (max-width: 440px) { .emp-pay-actions { grid-template-columns: repeat(2, 1fr); } }
+
+.emp-pay-btn {
+  height: 36px; border-radius: 9px; border: none;
+  font-size: 11px; font-weight: 800; cursor: pointer;
+  font-family: inherit; transition: .12s; padding: 0 8px;
+  -webkit-tap-highlight-color: transparent;
+}
+.emp-pay-btn.salary  { background: var(--fahad-navy); color: var(--surface); }
+.emp-pay-btn.advance { background: rgba(217,119,6,.12); color: var(--fahad-gold); border: 1px solid rgba(217,119,6,.25); }
+.emp-pay-btn.bonus   { background: var(--fahad-blue-bg); color: var(--fahad-blue); border: 1px solid rgba(2,132,199,.2); }
+.emp-pay-btn.deduct  { background: var(--clay-bg); color: var(--clay); border: 1px solid rgba(220,38,38,.2); }
+.emp-pay-btn.sm      { height: 28px; font-size: 10px; padding: 0 10px; }
+.emp-pay-btn:active  { transform: scale(.94); }
+
+/* ── السجل المالي ── */
+.emp-log-mini { margin-top: 4px; }
+.emp-log-mini-title {
+  font-size: 10.5px; font-weight: 800; color: var(--text-muted);
+  margin-bottom: 7px;
+}
+.emp-log-header {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 10px;
+}
+.emp-log-header-title { font-size: 11px; font-weight: 800; color: var(--fahad-navy); }
+
+.emp-log-list { display: grid; gap: 5px; }
+.emp-log-row {
+  display: flex; align-items: center; gap: 8px;
+  background: var(--surface); border: 1px solid var(--line);
+  border-radius: 9px; padding: 8px 10px;
+}
+.emp-log-row.deduction { background: var(--clay-bg); border-color: rgba(220,38,38,.15); }
+
+.emp-log-type-icon { font-size: 15px; flex-shrink: 0; }
+.emp-log-info { flex: 1; min-width: 0; }
+.emp-log-note { font-size: 11px; font-weight: 800; color: var(--text-main); }
+.emp-log-date { font-size: 10px; color: var(--text-muted); font-weight: 700; margin-top: 1px; }
+
+.emp-log-badge {
+  display: inline-flex; padding: 1px 6px; border-radius: 5px;
+  font-size: 9px; font-weight: 800;
+}
+.emp-log-badge.green { background: var(--sage-bg); color: var(--sage); }
+.emp-log-badge.gold  { background: rgba(217,119,6,.12); color: var(--fahad-gold); }
+.emp-log-badge.blue  { background: var(--fahad-blue-bg); color: var(--fahad-blue); }
+.emp-log-badge.red   { background: var(--clay-bg); color: var(--clay); }
+
+.emp-log-amount { font-family: 'Changa', sans-serif; font-size: 12px; font-weight: 800; white-space: nowrap; }
+.emp-log-amount.green { color: var(--sage); }
+.emp-log-amount.red   { color: var(--clay); }
+
+.emp-del-log-btn {
+  width: 22px; height: 22px; border-radius: 6px;
+  background: var(--card-subtle); border: 1px solid var(--line);
+  color: var(--text-muted); font-size: 10px; font-weight: 800;
+  cursor: pointer; flex-shrink: 0; display: grid; place-items: center;
+}
+.emp-del-log-btn:hover { background: var(--clay-bg); color: var(--clay); }
+
+.emp-see-all-btn {
+  width: 100%; margin-top: 7px; height: 30px; border-radius: 8px;
+  background: var(--card-subtle); border: 1px solid var(--line);
+  color: var(--fahad-blue); font-size: 10.5px; font-weight: 800;
+  cursor: pointer; font-family: inherit;
+}
+.emp-no-log {
+  text-align: center; padding: 14px; font-size: 11px;
+  color: var(--text-muted); font-weight: 700;
+}
+.emp-empty {
+  text-align: center; padding: 40px 20px;
+  font-size: 12px; color: var(--text-muted); font-weight: 700;
+}
+
+/* ================================================================
+   مودال الموظف
+   ================================================================ */
+.emp-modal-scrim {
+  position: fixed; inset: 0; z-index: 70;
+  background: rgba(15,23,42,.42);
+  backdrop-filter: blur(3px); -webkit-backdrop-filter: blur(3px);
+  opacity: 0; pointer-events: none; transition: opacity .18s;
+}
+.emp-modal-scrim.show { opacity: 1; pointer-events: auto; }
+
+.emp-modal {
+  position: fixed; bottom: 0; left: 0; right: 0; z-index: 71;
+  background: var(--surface); border-radius: 20px 20px 0 0;
+  border-top: 1px solid var(--line);
+  box-shadow: 0 -6px 32px rgba(15,23,42,.16);
+  max-height: 93svh; overflow-y: auto;
+  transform: translateY(100%); transition: transform .22s ease;
+}
+.emp-modal.show { transform: translateY(0); }
+
+@media (min-width: 580px) {
+  .emp-modal {
+    top: 50%; left: 50%; right: auto; bottom: auto;
+    transform: translate(-50%, -46%) scale(.96);
+    width: min(96vw, 500px); border-radius: 18px;
+    max-height: 94svh; opacity: 0;
+  }
+  .emp-modal.show { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+  .emp-modal.wide { width: min(96vw, 620px); }
+}
+
+.emp-modal-head {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 14px 16px; border-bottom: 1px solid var(--line);
+  position: sticky; top: 0; background: var(--surface); z-index: 2;
+  font-family: 'Changa', sans-serif; font-size: 14px;
+  font-weight: 800; color: var(--fahad-navy);
+}
+.emp-modal-head button {
+  width: 30px; height: 30px; border-radius: 8px;
+  background: var(--card-subtle); color: var(--text-muted);
+  font-size: 14px; font-weight: 800; border: none; cursor: pointer;
+}
+.emp-modal-body { padding: 14px 16px; }
+.emp-modal-footer {
+  display: flex; gap: 8px; padding-top: 14px;
+  border-top: 1px solid var(--line); margin-top: 6px;
+}
+
+/* فورم الموظف */
+.emp-form-section-title {
+  font-size: 11px; font-weight: 800; color: var(--fahad-blue);
+  margin: 12px 0 8px; padding-bottom: 6px;
+  border-bottom: 1px dashed rgba(2,132,199,.25);
+}
+.emp-form-section-title:first-child { margin-top: 0; }
+
+.emp-form-grid {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 10px;
+  margin-bottom: 4px;
+}
+@media (max-width: 460px) { .emp-form-grid { grid-template-columns: 1fr; } }
+
+.emp-field-label {
+  display: flex; flex-direction: column; gap: 5px;
+  font-size: 10.5px; font-weight: 800; color: var(--text-muted);
+  grid-column: auto;
+}
+.emp-field-label.full { grid-column: 1 / -1; }
+
+.emp-field-input {
+  height: 38px; border-radius: 9px;
+  border: 1.5px solid var(--line); padding: 0 10px;
+  font-size: 12px; font-weight: 800; font-family: inherit;
+  color: var(--text-main); background: var(--surface);
+  outline: none; transition: border-color .15s; width: 100%;
+  box-sizing: border-box;
+}
+.emp-field-input:focus { border-color: var(--fahad-blue); }
+select.emp-field-input { cursor: pointer; }
+
+.emp-currency-badge {
+  flex-shrink: 0; height: 38px; padding: 0 10px;
+  background: var(--card-subtle); border: 1.5px solid var(--line);
+  border-radius: 9px; display: grid; place-items: center;
+  font-size: 11px; font-weight: 800; color: var(--text-muted);
+  white-space: nowrap;
+}
+
+/* ── زر تأكيد الدفع — يمتد عرض المودال كاملاً ── */
+.emp-pay-confirm-btn {
+  display: block; width: 100%;
+  margin-top: 14px; height: 46px;
+  border-radius: 12px; border: none;
+  font-size: 14px; font-weight: 800;
+  font-family: 'Changa', sans-serif;
+  cursor: pointer; transition: .12s;
+  -webkit-tap-highlight-color: transparent;
+}
+.emp-pay-confirm-btn.salary  { background: var(--fahad-navy); color: var(--surface); }
+.emp-pay-confirm-btn.advance { background: var(--fahad-gold); color: var(--surface); }
+.emp-pay-confirm-btn.bonus   { background: var(--fahad-blue); color: var(--surface); }
+.emp-pay-confirm-btn.deduction { background: var(--clay); color: var(--surface); }
+.emp-pay-confirm-btn:active  { transform: scale(.97); opacity: .9; }
+
+/* ── زر حفظ الموظف ── */
+.emp-save-btn {
+  display: block; width: 100%;
+  margin-top: 16px; height: 46px;
+  border-radius: 12px; border: none;
+  background: var(--fahad-navy); color: var(--surface);
+  font-size: 14px; font-weight: 800;
+  font-family: 'Changa', sans-serif;
+  cursor: pointer; transition: .12s;
+}
+.emp-save-btn:active { transform: scale(.97); opacity: .9; }
+
+/* ── شبكة الاختيار (بديل select) ── */
+.emp-pick-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+.emp-pick-btn {
+  padding: 7px 14px;
+  border-radius: 9px;
+  border: 1.5px solid var(--line);
+  background: var(--surface);
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 800;
+  font-family: inherit;
+  cursor: pointer;
+  transition: .1s;
+  -webkit-tap-highlight-color: transparent;
+}
+.emp-pick-btn:hover  { border-color: var(--fahad-blue); color: var(--fahad-blue); }
+.emp-pick-btn.active {
+  background: var(--fahad-navy);
+  border-color: var(--fahad-navy);
+  color: var(--surface);
+}
+.emp-pick-btn:active { transform: scale(.94); }
