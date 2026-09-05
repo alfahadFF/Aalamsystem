@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>التكاليف وهوامش الربح — alfaprosys</title>
+  <link rel="stylesheet" href="assets/css/style.css" />
+  <link rel="stylesheet" href="assets/css/manager.css" />
+  <link rel="stylesheet" href="assets/css/costs.css" />
+  <link rel="manifest" href="manifest.webmanifest" />
+  <meta name="theme-color" content="#102A43" />
+  <link rel="icon" href="assets/icon/logo.png" type="image/png" />
+  <link rel="apple-touch-icon" href="assets/icon/logo.png" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+</head>
+<body class="mgr-body">
+
+  <!-- Sidebar (desktop) -->
+  <aside class="mgr-sidebar" id="mgrSidebar">
+    <div class="mgr-sidebar-logo">
+      <span class="mgr-logo-icon">🍽️</span>
+      <span class="mgr-logo-text">alfa<b>pro</b></span>
+    </div>
+    <nav class="mgr-side-nav" id="sideNav"></nav>
+  </aside>
+
+  <!-- Main -->
+  <div class="mgr-main">
+
+    <!-- Topbar -->
+    <header class="mgr-topbar">
+      <button class="mgr-fab" onclick="toggleNav()" title="القائمة">☰</button>
+      <h1 class="mgr-topbar-title">💰 التكاليف وهوامش الربح</h1>
+      <div class="mgr-topbar-actions">
+        <button class="cost-print-btn" onclick="window.print()" title="طباعة">🖨️</button>
+      </div>
+    </header>
+
+    <!-- Content -->
+    <main class="mgr-content" id="mainContent">
+
+      <!-- مؤشرات -->
+      <section class="mgr-stats-grid" id="costStats"></section>
+
+      <!-- تنبيه الأصناف بلا تكلفة -->
+      <section class="cost-nocost-banner" id="noCostBanner" style="display:none"></section>
+
+      <!-- فلاتر -->
+      <section class="cost-filter-bar">
+        <div class="cost-search-wrap">
+          <input type="search" id="costSearch" placeholder="🔍 ابحث عن صنف..." oninput="onCostSearch(this.value)" />
+        </div>
+        <div class="cost-controls">
+          <select id="costSort" onchange="setCostSort(this.value)">
+            <option value="margin_desc">الأعلى هامشاً %</option>
+            <option value="margin_asc">الأدنى هامشاً %</option>
+            <option value="cost_desc">الأعلى تكلفة</option>
+            <option value="pop_desc">الأكثر مبيعاً</option>
+            <option value="name">الاسم</option>
+          </select>
+          <label class="cost-toggle"><input type="checkbox" id="onlyNoCost" onchange="setOnlyNoCost(this.checked)" /> بلا تكلفة فقط</label>
+        </div>
+        <div class="cost-cat-row" id="costCatRow"></div>
+      </section>
+
+      <!-- مصفوفة هندسة المنيو -->
+      <section class="cost-matrix" id="costMatrix"></section>
+
+      <!-- ربحية العروض -->
+      <section class="mgr-table-wrap" id="offersCostWrap" style="display:none">
+        <h2 class="cost-offers-title">🎟️ ربحية العروض</h2>
+        <table class="mgr-table">
+          <thead><tr><th>العرض</th><th>مكوناته</th><th>تكلفته</th><th>سعره</th><th>الهامش</th></tr></thead>
+          <tbody id="offersCostBody"></tbody>
+        </table>
+      </section>
+
+      <!-- الجدول -->
+      <section class="mgr-table-wrap">
+        <table class="mgr-table cost-table">
+          <thead>
+            <tr>
+              <th>الصنف</th>
+              <th>سعر البيع</th>
+              <th>التكلفة</th>
+              <th>الهامش</th>
+              <th>الهامش %</th>
+              <th>المبيع</th>
+              <th>التصنيف الهندسي</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="costBody"></tbody>
+        </table>
+      </section>
+
+      <!-- تفاصيل تكلفة صنف -->
+      <section class="cost-detail" id="costDetail" style="display:none"></section>
+
+    </main>
+  </div>
+
+  <!-- Mobile nav overlay -->
+  <div class="mgr-nav-scrim" id="mgrNavScrim" onclick="closeNav()"></div>
+  <nav class="mgr-mobile-nav" id="mgrMobileNav">
+    <div class="mgr-mobile-nav-grid" id="mobileNavGrid"></div>
+  </nav>
+
+  <!-- Toast -->
+  <div class="toast" id="toast"></div>
+
+    <script src="assets/js/config.js"></script>
+  <script src="assets/js/sync/storage.js"></script>
+  <script src="assets/js/sync/queue.js"></script>
+  <script src="assets/js/sync/remote.js"></script>
+  <script src="assets/js/sync/manager.js"></script>
+  <script src="assets/js/utils.js"></script>
+  <script src="assets/js/data.js"></script>
+  <script src="assets/js/db.js"></script>
+  <script src="assets/js/stock.js"></script>
+  <script src="assets/js/nav.js"></script>
+  <script src="assets/js/costs.js"></script>
+</body>
+</html>

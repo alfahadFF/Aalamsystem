@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>تشخيص عمليات الإلغاء — alfaprosys</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:'Cairo','Tajawal',Tahoma,sans-serif;background:#f0f4f8;color:#1e293b;padding:16px;font-size:13px;}
+h1{font-size:18px;color:#1e40af;text-align:center;margin-bottom:6px;}
+.subtitle{text-align:center;color:#64748b;font-size:12px;margin-bottom:16px;}
+.summary{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:8px;margin-bottom:20px;}
+.summary-card{background:#fff;border:1.5px solid #e2e8f0;border-radius:10px;padding:12px;text-align:center;}
+.summary-card .val{font-size:22px;font-weight:800;color:#1e40af;}
+.summary-card .lbl{font-size:11px;color:#64748b;margin-top:2px;}
+.summary-card.danger .val{color:#dc2626;}
+.summary-card.green .val{color:#16a34a;}
+.summary-card.gold .val{color:#d97706;}
+.section{background:#fff;border:1.5px solid #e2e8f0;border-radius:12px;margin-bottom:14px;overflow:hidden;}
+.section-head{background:#1e40af;color:#fff;padding:10px 14px;font-weight:700;font-size:14px;display:flex;justify-content:space-between;align-items:center;}
+.section-head .count{background:rgba(255,255,255,.2);border-radius:10px;padding:2px 10px;font-size:12px;}
+.section-body{padding:12px;max-height:500px;overflow-y:auto;}
+table{width:100%;border-collapse:collapse;font-size:12px;}
+th{background:#f1f5f9;padding:7px 8px;text-align:right;font-size:11px;border-bottom:1.5px solid #cbd5e1;position:sticky;top:0;}
+td{padding:6px 8px;border-bottom:1px solid #e2e8f0;vertical-align:top;}
+tr:hover{background:#f8fafc;}
+.badge{display:inline-block;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700;}
+.badge.cancelled{background:#fef2f2;color:#991b1b;}
+.badge.returnable{background:#d1fae5;color:#065f46;}
+.badge.prepared{background:#fee2e2;color:#991b1b;}
+.badge.in{background:#dbeafe;color:#1e40af;}
+.badge.waste{background:#fef3c7;color:#92400e;}
+.badge.refund{background:#e0e7ff;color:#3730a3;}
+.detail-row{background:#f8fafc;font-size:11px;color:#475569;}
+.detail-row td{padding:4px 8px;border-bottom:1px dashed #e2e8f0;}
+.empty{text-align:center;color:#94a3b8;padding:20px;font-style:italic;}
+.ok{color:#16a34a;} .err{color:#dc2626;} .warn{color:#d97706;}
+.check-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:8px;}
+.check-item{padding:10px;border-radius:8px;border:1.5px solid #e2e8f0;font-size:12px;}
+.check-item.pass{border-color:#86efac;background:#f0fdf4;}
+.check-item.fail{border-color:#fca5a5;background:#fef2f2;}
+.check-item.warn{border-color:#fcd34d;background:#fffbeb;}
+.check-icon{font-size:16px;margin-left:4px;}
+</style>
+</head>
+<body>
+<h1>🔍 تشخيص عمليات الإلغاء</h1>
+<div class="subtitle">فحص شامل لجميع الجداول المتأثرة بالإلغاء — <span id="ts"></span></div>
+<div id="dataInfo"></div>
+<div id="app"></div>
+
+<script src="assets/js/config.js"></script>
+<script src="assets/js/data.js"></script>
+<script src="assets/js/sync/storage.js"></script>
+<script>
+/* ── تحميل البيانات من IndexedDB ثم التحليل ── */
+setTimeout(function(){
+  window.SyncStorage.load().then(function(saved){
+    if(saved){
+      /* دمج البيانات المحفوظة مع DEMO_DATA */
+      Object.keys(saved).forEach(function(k){
+        if(Array.isArray(saved[k]) && saved[k].length) window.DEMO_DATA[k] = saved[k];
+        else if(typeof saved[k]==='object' && saved[k]) window.DEMO_DATA[k] = saved[k];
+      });
+    }
+    runDiagnostic();
+  }).catch(function(){ runDiagnostic(); });
+}, 1000);
+
+function runDiagnostic(){
+const D = window.DEMO_DATA || {};
+const ts = document.getElementById('ts');
+ts.textContent = new Date().toLocaleString('ar-EG');
+
+/* ── فحص مصدر البيانات ── */
+const invCount = (D.invoices || []).length;
+const cancelledCount = (D.invoices || []).filter(i => i.status === 'cancelled').length;
+const auditCount = (D.audit_log || []).length;
+const invItemsCount = (D.items || []).length;
+const custCount = (D.customers || []).length;
+
+document.getElementById('dataInfo').innerHTML = `
+  <div style="background:#f1f5f9;padding:12px;border-radius:10px;margin-bottom:16px;font-size:12px;">
+    <strong>📊 حالة DEMO_DATA:</strong><br>
+    invoices: ${invCount} فاتورة (${cancelledCount} ملغاة) | 
+    items: ${invItemsCount} صنف | 
+    customers: ${custCount} عميل | 
+    audit_log: ${auditCount} سجل | 
+    inventory: ${(D.inventory||[]).length} مادة
+  </div>`;
+
+function fmt(n){return Number(n||0).toLocaleString('ar-EG');}
+function e(s){return String(s||'').replace(/</g,'&lt;');}
+
+/* ── جمع البيانات ── */
+const invoices = D.invoices || [];
+const cancelled = invoices.filter(i => i.status === 'cancelled');
+const inventory = D.inventory || [];
+const customers = D.customers || [];
+const auditLog = D.audit_log || [];
+
+/* 1) الفواتير الملغاة */
+let cancelDetails = '';
+let totalPrepared = 0, totalReturnable = 0;
+cancelled.forEach(inv => {
+  const items = inv.items || [];
+  const ci = inv.cancel_items || {};
+  let prep = 0, ret = 0;
+  items.forEach(it => {
+    const st = ci[it.id || it.name] || 'prepared';
+    if (st === 'returnable') ret++; else prep++;
+  });
+  totalPrepared += prep;
+  totalReturnable += ret;
+  cancelDetails += `
+    <tr>
+      <td><strong>${e(inv.id)}</strong></td>
+      <td>${e(inv.date||'')} ${e(inv.time||'')}</td>
+      <td>${e(inv.customer_name||'—')}</td>
+      <td dir="ltr">${e(inv.phone||'—')}</td>
+      <td>${fmt(inv.total)} ل.س</td>
+      <td><span class="badge ${inv.pay_type||'cash'}">${
+        inv.pay_type==='deferred'?'آجل':inv.pay_type==='partial'?'جزئي':'نقدي'
+      }</span></td>
+      <td>${items.length} صنف</td>
+      <td><span class="badge prepared">${prep} مستهلك</span></td>
+      <td><span class="badge returnable">${ret} يُرجع</span></td>
+      <td style="max-width:200px;font-size:11px;">${e(inv.cancel_reason||'—')}</td>
+      <td>${e(inv.cancelled_at ? inv.cancelled_at.slice(0,16).replace('T',' ') : '—')}</td>
+      <td>${ci && Object.keys(ci).length ? '<span class="ok">✅</span>' : '<span class="err">❌ مفقود</span>'}</td>
+    </tr>`;
+});
+
+/* 2) سجلات المخزون المرتبطة بالإلغاء */
+let stockLogs = [];
+inventory.forEach(item => {
+  (item.log || []).forEach(l => {
+    if (l.note && (l.note.includes('إلغاء') || l.note.includes('خسارة'))) {
+      stockLogs.push({ itemName: item.name, itemUnit: item.unit, ...l });
+    }
+  });
+});
+let stockHTML = '';
+stockLogs.forEach(l => {
+  stockHTML += `
+    <tr>
+      <td>${e(l.date)}</td>
+      <td><strong>${e(l.itemName)}</strong></td>
+      <td><span class="badge ${l.type}">${l.type==='in'?'↩️ إرجاع':l.type==='waste'?'🗑️ خسارة':l.type}</span></td>
+      <td>${fmt(l.qty)} ${e(l.itemUnit)}</td>
+      <td style="max-width:250px;font-size:11px;">${e(l.note)}</td>
+      <td>${l.auto?'تلقائي':'يدوي'}</td>
+    </tr>`;
+});
+
+/* 3) دفعات إلغاء الذمة في جدول العملاء */
+let custPayments = [];
+customers.forEach(c => {
+  (c.payments || []).forEach(p => {
+    if (p.type === 'cancel_refund') {
+      custPayments.push({ custName: c.name, custPhone: c.phone, custId: c.id, ...p });
+    }
+  });
+});
+let custHTML = '';
+custPayments.forEach(p => {
+  custHTML += `
+    <tr>
+      <td><strong>${e(p.custName)}</strong></td>
+      <td dir="ltr">${e(p.custPhone)}</td>
+      <td>${fmt(p.amount)} ل.س</td>
+      <td>${e(p.date)}</td>
+      <td style="max-width:200px;font-size:11px;">${e(p.note)}</td>
+      <td>${e(p.invoice_id||'—')}</td>
+    </tr>`;
+});
+
+/* 4) سجل التدقيق */
+let auditEntries = auditLog.filter(a =>
+  (a.action || '').includes('إلغاء') || (a.detail || '').includes('إلغاء')
+);
+let auditHTML = '';
+auditEntries.forEach(a => {
+  auditHTML += `
+    <tr>
+      <td>${a.id}</td>
+      <td>${e(a.ts || a.at || '')}</td>
+      <td>${e(a.module)}</td>
+      <td>${e(a.action)}</td>
+      <td style="max-width:300px;font-size:11px;">${e(a.detail)}</td>
+      <td>${e(a.actor)}</td>
+    </tr>`;
+});
+
+/* 5) فحوصات التكامل */
+let checks = [];
+
+/* فحص: كل فاتورة ملغاة لها cancel_items */
+cancelled.forEach(inv => {
+  const ci = inv.cancel_items;
+  if (!ci || !Object.keys(ci).length) {
+    checks.push({ status: 'fail', msg: `فاتورة ${inv.id}: حقل cancel_items مفقود` });
+  } else {
+    checks.push({ status: 'pass', msg: `فاتورة ${inv.id}: cancel_items ✅ (${Object.keys(ci).length} صنف)` });
+  }
+});
+
+/* فحص: كل فاتورة ملغاة لها cancel_reason */
+cancelled.forEach(inv => {
+  if (!inv.cancel_reason) {
+    checks.push({ status: 'fail', msg: `فاتورة ${inv.id}: cancel_reason مفقود` });
+  } else {
+    checks.push({ status: 'pass', msg: `فاتورة ${inv.id}: cancel_reason ✅` });
+  }
+});
+
+/* فحص: كل فاتورة ملغاة لها cancelled_at */
+cancelled.forEach(inv => {
+  if (!inv.cancelled_at) {
+    checks.push({ status: 'fail', msg: `فاتورة ${inv.id}: cancelled_at مفقود` });
+  } else {
+    checks.push({ status: 'pass', msg: `فاتورة ${inv.id}: cancelled_at ✅` });
+  }
+});
+
+/* فحص: كل فاتورة ملغاة لها سجل تدقيق */
+cancelled.forEach(inv => {
+  const found = auditLog.some(a => (a.detail||'').includes(inv.id) && ((a.action||'').includes('إلغاء')));
+  checks.push({ status: found ? 'pass' : 'fail', msg: `فاتورة ${inv.id}: سجل تدقيق ${found ? '✅' : '❌ مفقود'}` });
+});
+
+/* فحص: كل فاتورة ملغاة مؤجلة/جزئية لها cancel_refund في payments العميل */
+cancelled.filter(i => i.pay_type === 'deferred' || i.pay_type === 'partial').forEach(inv => {
+  const ph = String(inv.phone || '').trim();
+  const cust = ph ? customers.find(c => String(c.phone||'').trim() === ph) : null;
+  if (cust) {
+    const found = (cust.payments || []).some(p => p.type === 'cancel_refund' && p.invoice_id === inv.id);
+    checks.push({ status: found ? 'pass' : 'fail', msg: `فاتورة ${inv.id}: cancel_refund في ذمة ${cust.name} ${found ? '✅' : '❌ مفقود'}` });
+  } else {
+    checks.push({ status: 'warn', msg: `فاتورة ${inv.id}: لا يوجد عميل مرتبط (هاتف: ${ph||'—'})` });
+  }
+});
+
+/* فحص: المواد المُرجعة لها سجل 'in' في المخزون */
+const returnableLogs = stockLogs.filter(l => l.type === 'in');
+checks.push({ status: returnableLogs.length > 0 || totalReturnable === 0 ? 'pass' : 'warn',
+  msg: `سجلات إرجاع المخزون: ${returnableLogs.length} سجل ${totalReturnable > 0 && returnableLogs.length === 0 ? '⚠️ (يوجد أصناف قابلة للإرجاع بدون سجلات!)' : '✅'}` });
+
+/* فحص: المواد المستهلكة لها سجل 'waste' في المخزون */
+const wasteLogs = stockLogs.filter(l => l.type === 'waste');
+checks.push({ status: wasteLogs.length > 0 || totalPrepared === 0 ? 'pass' : 'warn',
+  msg: `سجلات الخسارة في المخزون: ${wasteLogs.length} سجل ${totalPrepared > 0 && wasteLogs.length === 0 ? '⚠️ (يوجد مواد مستهلكة بدون سجلات خسارة!)' : '✅'}` });
+
+/* فحص: الفواتير الملغاة لا تدخل في حسابات الجلسة النقدية */
+const today = typeof businessDay === 'function' ? businessDay() : new Date().toISOString().slice(0,10);
+const cashCancelled = cancelled.filter(i => (i.date||'') === today && (i.pay_type||'cash') === 'cash');
+checks.push({ status: 'pass', msg: `فواتير ملغاة اليوم (نقدية): ${cashCancelled.length} — مستبعدة من حسابات الجلسة ✅` });
+
+/* ── بناء الصفحة ── */
+const totalLoss = cancelled.reduce((s, inv) => {
+  const ci = inv.cancel_items || {};
+  return s + (inv.items||[]).filter(it => (ci[it.id||it.name]||'prepared')==='prepared').reduce((ss,it)=>ss+(it.total||0),0);
+}, 0);
+const totalReturned = cancelled.reduce((s, inv) => {
+  const ci = inv.cancel_items || {};
+  return s + (inv.items||[]).filter(it => (ci[it.id||it.name])==='returnable').reduce((ss,it)=>ss+(it.total||0),0);
+}, 0);
+const totalDebtCleared = custPayments.reduce((s,p) => s + (p.amount||0), 0);
+
+document.getElementById('app').innerHTML = `
+  <!-- ملخص -->
+  <div class="summary">
+    <div class="summary-card danger"><div class="val">${cancelled.length}</div><div class="lbl">فاتورة ملغاة</div></div>
+    <div class="summary-card"><div class="val">${fmt(cancelled.reduce((s,i)=>s+(i.total||0),0))}</div><div class="lbl">إجمالي قيمتها (ل.س)</div></div>
+    <div class="summary-card danger"><div class="val">${fmt(totalLoss)}</div><div class="lbl">قيمة المواد المستهلكة (خسارة)</div></div>
+    <div class="summary-card green"><div class="val">${fmt(totalReturned)}</div><div class="lbl">قيمة المواد المُرجعة للمخزون</div></div>
+    <div class="summary-card gold"><div class="val">${fmt(totalDebtCleared)}</div><div class="lbl">ذمم أُلغيت من العملاء</div></div>
+    <div class="summary-card"><div class="val">${auditEntries.length}</div><div class="lbl">سجل تدقيق</div></div>
+    <div class="summary-card"><div class="val">${stockLogs.length}</div><div class="lbl">حركة مخزون</div></div>
+  </div>
+
+  <!-- فحوصات التكامل -->
+  <div class="section">
+    <div class="section-head">✅ فحوصات التكامل (${checks.filter(c=>c.status==='pass').length}/${checks.length} ناجح)</div>
+    <div class="section-body">
+      <div class="check-grid">
+        ${checks.map(c => `<div class="check-item ${c.status}">
+          <span class="check-icon">${c.status==='pass'?'✅':c.status==='fail'?'❌':'⚠️'}</span>
+          ${e(c.msg)}
+        </div>`).join('')}
+      </div>
+    </div>
+  </div>
+
+  <!-- 1. الفواتير الملغاة -->
+  <div class="section">
+    <div class="section-head">🧾 1. جدول الفواتير الملغاة (DATA.invoices) <span class="count">${cancelled.length}</span></div>
+    <div class="section-body">
+      ${cancelled.length ? `<table>
+        <thead><tr><th>رقم</th><th>التاريخ</th><th>العميل</th><th>الهاتف</th><th>المبلغ</th><th>الدفع</th><th>أصناف</th><th>مستهلك</th><th>يُرجع</th><th>السبب</th><th>وقت الإلغاء</th><th>cancel_items</th></tr></thead>
+        <tbody>${cancelDetails}</tbody>
+      </table>` : '<div class="empty">لا توجد فواتير ملغاة</div>'}
+    </div>
+  </div>
+
+  <!-- 2. سجلات المخزون -->
+  <div class="section">
+    <div class="section-head">📦 2. حركات المخزون المرتبطة بالإلغاء (DATA.inventory[].log) <span class="count">${stockLogs.length}</span></div>
+    <div class="section-body">
+      ${stockLogs.length ? `<table>
+        <thead><tr><th>التاريخ</th><th>المادة</th><th>النوع</th><th>الكمية</th><th>الملاحظة</th><th>تلقائي</th></tr></thead>
+        <tbody>${stockHTML}</tbody>
+      </table>` : '<div class="empty">لا توجد حركات مخزون مرتبطة بالإلغاء</div>'}
+    </div>
+  </div>
+
+  <!-- 3. دفعات إلغاء الذمة -->
+  <div class="section">
+    <div class="section-head">📒 3. دفعات إلغاء الذمة (DATA.customers[].payments) <span class="count">${custPayments.length}</span></div>
+    <div class="section-body">
+      ${custPayments.length ? `<table>
+        <thead><tr><th>العميل</th><th>الهاتف</th><th>المبلغ</th><th>التاريخ</th><th>الملاحظة</th><th>رقم الفاتورة</th></tr></thead>
+        <tbody>${custHTML}</tbody>
+      </table>` : '<div class="empty">لا توجد دفعات إلغاء ذمة</div>'}
+    </div>
+  </div>
+
+  <!-- 4. سجل التدقيق -->
+  <div class="section">
+    <div class="section-head">🛡️ 4. سجل التدقيق (DATA.audit_log) <span class="count">${auditEntries.length}</span></div>
+    <div class="section-body">
+      ${auditEntries.length ? `<table>
+        <thead><tr><th>#</th><th>الوقت</th><th>الوحدة</th><th>العملية</th><th>التفاصيل</th><th>المنفذ</th></tr></thead>
+        <tbody>${auditHTML}</tbody>
+      </table>` : '<div class="empty">لا توجد سجلات تدقيق للإلغاء</div>'}
+    </div>
+  </div>
+`;
+} /* end runDiagnostic */
+</script>
+</body>
+</html>

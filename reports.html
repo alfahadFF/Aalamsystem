@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>التقارير — alfaprosys</title>
+  <link rel="stylesheet" href="assets/css/style.css" />
+  <link rel="stylesheet" href="assets/css/manager.css" />
+  <link rel="stylesheet" href="assets/css/reports.css" />
+  <link rel="manifest" href="manifest.webmanifest" />
+  <meta name="theme-color" content="#102A43" />
+  <link rel="icon" href="assets/icon/logo.png" type="image/png" />
+  <link rel="apple-touch-icon" href="assets/icon/logo.png" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+</head>
+<body class="mgr-body">
+
+  <!-- Sidebar (desktop) -->
+  <aside class="mgr-sidebar" id="mgrSidebar">
+    <div class="mgr-sidebar-logo">
+      <span class="mgr-logo-icon">🍽️</span>
+      <span class="mgr-logo-text">alfa<b>pro</b></span>
+    </div>
+    <nav class="mgr-side-nav" id="sideNav"></nav>
+  </aside>
+
+  <!-- Main -->
+  <div class="mgr-main">
+
+    <!-- Topbar -->
+    <header class="mgr-topbar">
+      <button class="mgr-fab" onclick="toggleNav()" title="القائمة">☰</button>
+      <h1 class="mgr-topbar-title">📈 التقارير</h1>
+      <div class="mgr-topbar-actions">
+        <button class="rpt-print-btn" onclick="printReport()" title="طباعة">🖨️</button>
+      </div>
+    </header>
+
+    <!-- Content -->
+    <main class="mgr-content" id="mainContent">
+
+      <!-- فلتر التاريخ -->
+      <section class="rpt-filter-bar">
+        <div class="rpt-preset-row" id="presetRow">
+          <button class="rpt-preset active" data-p="today"   onclick="setPreset(this,'today')">اليوم</button>
+          <button class="rpt-preset"        data-p="week"    onclick="setPreset(this,'week')">هذا الأسبوع</button>
+          <button class="rpt-preset"        data-p="month"   onclick="setPreset(this,'month')">هذا الشهر</button>
+          <button class="rpt-preset"        data-p="year"    onclick="setPreset(this,'year')">هذا العام</button>
+          <button class="rpt-preset"        data-p="custom"  onclick="setPreset(this,'custom')">مخصص ↓</button>
+        </div>
+        <div class="rpt-custom-row" id="customRow" style="display:none">
+          <label>من <input type="date" id="dateFrom" onchange="applyFilter()" /></label>
+          <label>إلى <input type="date" id="dateTo"  onchange="applyFilter()" /></label>
+        </div>
+        <div class="rpt-period-label" id="periodLabel"></div>
+        <div class="rpt-export">
+          <button class="rpt-export-btn" onclick="toggleExportMenu(event)">⬇️ تصدير التقرير</button>
+          <div class="rpt-export-menu" id="exportMenu">
+            <button onclick="exportReportCSV()">📊 Excel (CSV)</button>
+            <button onclick="printReport()">🖨️ طباعة / PDF</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- رأس يظهر عند الطباعة فقط -->
+      <div class="rpt-print-head" id="rptPrintHead"></div>
+
+      <!-- تبويبات -->
+      <div class="rpt-tabs" id="rptTabs">
+        <button class="rpt-tab active" data-tab="summary"   onclick="switchTab(this,'summary')">📊 ملخص</button>
+        <button class="rpt-tab"        data-tab="sales"     onclick="switchTab(this,'sales')">🧾 المبيعات</button>
+        <button class="rpt-tab"        data-tab="expenses"  onclick="switchTab(this,'expenses')">💸 المصروفات</button>
+        <button class="rpt-tab"        data-tab="items"     onclick="switchTab(this,'items')">🍔 الأصناف</button>
+        <button class="rpt-tab"        data-tab="employees" onclick="switchTab(this,'employees')">👤 الموظفون</button>
+        <button class="rpt-tab"        data-tab="customers" onclick="switchTab(this,'customers')">👥 العملاء</button>
+        <button class="rpt-tab"        data-tab="compare"   onclick="switchTab(this,'compare')">⚖️ مقارنة الفترات</button>
+        <button class="rpt-tab"        data-tab="cats"      onclick="switchTab(this,'cats')">🏷️ التصنيفات</button>
+        <button class="rpt-tab"        data-tab="purchases" onclick="switchTab(this,'purchases')">🚚 المشتريات</button>
+      </div>
+
+      <!-- محتوى التبويبات -->
+      <div id="tabContent"></div>
+
+    </main>
+  </div>
+
+  <!-- Mobile nav overlay -->
+  <div class="mgr-nav-scrim" id="mgrNavScrim" onclick="closeNav()"></div>
+  <nav class="mgr-mobile-nav" id="mgrMobileNav" id="mgrMobileNav">
+    <div class="mgr-mobile-nav-grid" id="mobileNavGrid"></div>
+  </nav>
+
+  <!-- Toast -->
+  <div class="toast" id="toast"></div>
+
+    <script src="assets/js/config.js"></script>
+  <script src="assets/js/sync/storage.js"></script>
+  <script src="assets/js/sync/queue.js"></script>
+  <script src="assets/js/sync/remote.js"></script>
+  <script src="assets/js/sync/manager.js"></script>
+  <script src="assets/js/utils.js"></script>
+  <script src="assets/js/data.js"></script>
+  <script src="assets/js/db.js"></script>
+  <script src="assets/js/stock.js"></script>
+  <script src="assets/js/nav.js"></script>
+  <script src="assets/js/reports.js"></script>
+</body>
+</html>

@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="theme-color" content="#102A43" />
+  <title>alfaprosys — أنظمة إدارة المطاعم</title>
+
+  <!-- تعمل على Netlify/GitHub، وفي المعاينة الداخلية يتم استخدام الخطوط الاحتياطية عند منع الشبكة -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Changa:wght@600;700;800&family=Almarai:wght@400;700;800&display=swap" rel="stylesheet" />
+
+  <link rel="stylesheet" href="assets/css/style.css" />
+  <link rel="manifest" href="manifest.webmanifest" />
+  <meta name="theme-color" content="#102A43" />
+  <link rel="icon" href="assets/icon/logo.png" type="image/png" />
+  <link rel="apple-touch-icon" href="assets/icon/logo.png" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+</head>
+<body>
+  <!-- شاشة تسجيل الدخول: أول شاشة تظهر دائمًا -->
+  <section id="loginScreen" class="login-screen" aria-label="شاشة تسجيل الدخول">
+    <div class="login-card">
+      <div class="logo-box">
+        <svg class="logo-svg" viewBox="0 0 120 120" fill="none" aria-hidden="true">
+          <path d="M25 95L50 30H95L82 50H55L45 72H72L62 95H25Z" fill="#102A43"/>
+          <path d="M52 28C68 20 85 18 100 24C102 28 98 35 90 38C82 40 70 48 62 60L52 28Z" fill="#0284C7"/>
+          <circle cx="95" cy="30" r="3" fill="#D97706"/>
+          <circle cx="75" cy="45" r="2.5" fill="#0284C7"/>
+          <circle cx="60" cy="70" r="3" fill="#D97706"/>
+          <path d="M60 70L75 45L95 30" stroke="#0284C7" stroke-width="2" stroke-linecap="round"/>
+          <path d="M85 70L98 50M98 50L90 48M98 50L100 58" stroke="#D97706" stroke-width="2.5" stroke-linecap="round"/>
+        </svg>
+
+        <h1 class="logo-title-ar">alfaprosys</h1>
+        <div class="logo-title-en">RESTAURANT MANAGEMENT SYSTEMS</div>
+        <p class="logo-sub">لأنظمة إدارة المطاعم</p>
+      </div>
+
+      <span class="login-badge">⚡ اختر الحساب للمعاينة</span>
+
+      <div class="role-grid" id="roleGrid"></div>
+    </div>
+  </section>
+
+  <!-- هيكل التطبيق لاحقًا: مخفي افتراضيًا حتى تسجيل الدخول -->
+  <section id="appShell" class="app-shell" aria-label="التطبيق الرئيسي">
+    <div class="app-placeholder">
+      <div class="placeholder-card">
+        <div class="placeholder-icon" id="placeholderIcon">👑</div>
+        <h2 id="placeholderTitle">مرحبًا بك</h2>
+        <p id="placeholderText">سيتم بناء الشاشات التالية هنا مع الحفاظ على نفس الهوية البصرية.</p>
+        <button class="logout-btn" type="button" onclick="logout()">🚪 خروج</button>
+      </div>
+    </div>
+  </section>
+
+  
+  <!-- شاشة إدخال الرمز (PIN) -->
+  <div id="pinModal" class="pin-modal" style="display:none;" aria-hidden="true">
+    <div class="pin-card">
+      <h3 id="pinTitle">أدخل الرمز السري</h3>
+      <div class="pin-display" id="pinDisplay"></div>
+      <div class="pin-pad">
+        <button type="button" onclick="pinPress('1')">1</button>
+        <button type="button" onclick="pinPress('2')">2</button>
+        <button type="button" onclick="pinPress('3')">3</button>
+        <button type="button" onclick="pinPress('4')">4</button>
+        <button type="button" onclick="pinPress('5')">5</button>
+        <button type="button" onclick="pinPress('6')">6</button>
+        <button type="button" onclick="pinPress('7')">7</button>
+        <button type="button" onclick="pinPress('8')">8</button>
+        <button type="button" onclick="pinPress('9')">9</button>
+        <button type="button" onclick="pinClear()" class="pin-clear">C</button>
+        <button type="button" onclick="pinPress('0')">0</button>
+        <button type="button" onclick="pinCancel()" class="pin-cancel">إلغاء</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+    <script src="assets/js/config.js"></script>
+  <script src="assets/js/sync/storage.js"></script>
+  <script src="assets/js/sync/queue.js"></script>
+  <script src="assets/js/sync/remote.js"></script>
+  <script src="assets/js/sync/manager.js"></script>
+  <script src="assets/js/utils.js"></script>
+  <script src="assets/js/data.js"></script>
+  <script src="assets/js/db.js"></script>
+  <script src="assets/js/stock.js"></script>
+  <script src="assets/js/app.js"></script>
+</body>
+</html>

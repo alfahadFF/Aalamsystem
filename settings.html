@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>الإعدادات — alfaprosys</title>
+  <link rel="stylesheet" href="assets/css/style.css" />
+  <link rel="stylesheet" href="assets/css/manager.css" />
+  <link rel="manifest" href="manifest.webmanifest" />
+  <meta name="theme-color" content="#102A43" />
+  <link rel="icon" href="assets/icon/logo.png" type="image/png" />
+  <link rel="apple-touch-icon" href="assets/icon/logo.png" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+</head>
+<body class="mgr-body">
+
+  <aside class="mgr-sidebar" id="mgrSidebar">
+    <div class="mgr-sidebar-logo">
+      <span class="mgr-logo-icon">🍽️</span>
+      <span class="mgr-logo-text">alfa<b>pro</b></span>
+    </div>
+    <nav class="mgr-side-nav" id="sideNav"></nav>
+  </aside>
+
+  <div class="mgr-main">
+    <header class="mgr-topbar">
+      <button class="mgr-fab" onclick="toggleNav()" title="القائمة">☰</button>
+      <h1 class="mgr-topbar-title">⚙️ الإعدادات</h1>
+      <div class="mgr-topbar-actions"></div>
+    </header>
+
+    <main class="mgr-content" id="mainContent">
+
+      <!-- ═══ الخصم ═══ -->
+            <!-- ═══ هوية المطعم ═══ -->
+      <section class="set-card" id="brandingCard">
+        <div class="set-card-head">
+          <div>
+            <h2>🏪 هوية المطعم</h2>
+            <p>الاسم والعنوان والهاتف تظهر على الإيصالات الحرارية ورؤوس الطباعة — وتُطبق فوراً على كل الشاشات</p>
+          </div>
+        </div>
+        <div class="set-block">
+          <div class="set-add-row">
+            <input type="text" id="brandName" placeholder="اسم المطعم (مثال: مطعم الفهد)">
+            <input type="text" id="brandAddress" placeholder="العنوان (اختياري)">
+            <input type="text" id="brandPhone" placeholder="هاتف (اختياري)">
+          </div>
+          <div class="set-add-row">
+            <input type="text" id="brandFooter" placeholder="سطر ذيل الفاتورة (شكراً لزيارتكم...)">
+            <button class="set-btn primary" onclick="saveBranding()">💾 حفظ الهوية</button>
+          </div>
+        </div>
+      </section>
+
+<section class="set-card" id="discountCard">
+        <div class="set-card-head">
+          <div>
+            <h2>💸 الخصم</h2>
+            <p>يُطبَّق تلقائياً على كل فاتورة — الكاشير لا يرى ولا يختار أي خصم</p>
+          </div>
+        </div>
+
+        <div class="set-block">
+          <h3>خصم على كامل الفاتورة</h3>
+          <div class="set-add-row">
+            <input type="number" id="invPctInput" min="0" max="99" inputmode="numeric" placeholder="نسبة % (0 = بلا خصم)">
+            <button class="set-btn" onclick="saveInvPct()">اعتماد النسبة</button>
+          </div>
+          <p class="set-hint" id="invPctHint"></p>
+        </div>
+
+        <div class="set-block">
+          <h3>خصم على أصناف محددة</h3>
+          <div class="set-add-row">
+            <select id="discItemPick"></select>
+            <input type="number" id="discItemPct" min="1" max="99" inputmode="numeric" placeholder="نسبة %">
+            <button class="set-btn" onclick="addItemDiscount()">ربط الخصم بالصنف</button>
+          </div>
+          <div class="set-rows" id="itemDiscountRows"></div>
+        </div>
+      </section>
+
+      <!-- ═══ العروض ═══ -->
+      <section class="set-card" id="offersCard">
+        <div class="set-card-head">
+          <div>
+            <h2>🎟️ العروض</h2>
+            <p>ينشئها المدير وحده — أي عرض ينتهي أو يُوقف يختفي فوراً من شاشة الكاشير</p>
+          </div>
+        </div>
+
+        <div class="set-block">
+          <div class="set-rows" id="offersAdminRows"></div>
+        </div>
+
+        <div class="set-block">
+          <h3>عرض جديد</h3>
+          <div class="set-add-row">
+            <input type="text" id="newOfferTitle" placeholder="اسم العرض (مثال: وجبة العائلة)">
+            <input type="number" id="newOfferPrice" min="0" inputmode="numeric" placeholder="سعر العرض (ل.س)">
+            <input type="date" id="newOfferExpiry" title="تاريخ الانتهاء (اختياري)">
+          </div>
+          <div class="set-offer-lines" id="offerLines"></div>
+          <div class="set-add-row">
+            <select id="offerItemPick"></select>
+            <input type="number" id="offerItemQty" min="1" value="1" inputmode="numeric" placeholder="الكمية">
+            <button class="set-btn" onclick="addOfferLine()">+ إضافة صنف للعرض</button>
+          </div>
+          <label class="set-toggle"><input type="checkbox" id="offerLastFree"> آخر صنف مضاف يكون <b>مجاناً</b> 🎁</label>
+          <div class="set-actions">
+            <button class="set-btn primary" onclick="saveOffer()">حفظ العرض</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- ═══ قواعد البيع ═══ -->
+      <section class="set-card" id="posRulesCard">
+        <div class="set-card-head">
+          <div>
+            <h2>⚙️ قواعد البيع</h2>
+            <p>ضوابط إلزامية على شاشة الكاشير</p>
+          </div>
+        </div>
+        <div class="set-block">
+          <label class="set-toggle">
+            <input type="checkbox" id="requireShiftToggle" onchange="saveRequireShift(this.checked)">
+            <b>منع البيع قبل فتح الوردية</b> — لا تُقبل أي فاتورة والوردية مغلقة، وتظهر للكاشير شارة «الوردية مغلقة» مع رابط فتحها
+          </label>
+        </div>
+      </section>
+
+      <!-- ═══ إشعارات الهاتف ═══ -->
+      <section class="set-card" id="phoneNotifyCard">
+        <div class="set-card-head">
+          <div>
+            <h2>📱 إشعارات الهاتف</h2>
+            <p>التنبيهات العاجلة تصلك إشعاراً أصلياً على هاتفك — أندرويد مباشرة، وآيفون بعد إضافة الأيقونة للشاشة الرئيسية</p>
+          </div>
+        </div>
+        <div class="set-block">
+          <div class="set-rows" id="phoneNotifyRows"></div>
+          <div class="set-actions">
+            <button class="set-btn primary" onclick="enablePhoneNotify()">🔔 تفعيل الإشعارات على هذا الجهاز</button>
+            <button class="set-btn" onclick="testPhoneNotify()">إشعار تجريبي</button>
+          </div>
+          <p class="set-hint" id="phoneNotifyHint" style="font-size:11px;color:var(--text-muted);margin-top:8px;"></p>
+        </div>
+      </section>
+
+      <!-- ═══ الأسعار والعملة ═══ -->
+      <section class="set-card" id="priceCard">
+        <div class="set-card-head">
+          <div>
+            <h2>💱 الأسعار والعملة</h2>
+            <p>تحديث جماعي لكل أسعار المنيو بنسبة تُحسب تلقائياً من سعر الدولار — مع معاينة قبل التطبيق</p>
+          </div>
+        </div>
+
+        <div class="set-block">
+          <div class="set-rate-now" id="rateNow"></div>
+          <div class="set-add-row">
+            <input type="number" id="newUsdRate" min="1" inputmode="numeric" placeholder="سعر الدولار الجديد (ل.س)">
+            <button class="set-btn" onclick="onRateInput()">احسب النسبة</button>
+          </div>
+          <div class="set-auto-pct" id="autoPctBox" style="display:none"></div>
+
+          <label class="set-toggle">
+            <input type="checkbox" id="manualPct" onchange="onManualToggle()">
+            تعديل النسبة يدوياً (رفع / خفض)
+          </label>
+          <div class="set-add-row" id="manualRow" style="display:none">
+            <select id="manualDir">
+              <option value="up">⬆️ رفع الأسعار</option>
+              <option value="down">⬇️ خفض الأسعار</option>
+            </select>
+            <input type="number" id="manualPctVal" min="0.5" step="0.5" inputmode="numeric" placeholder="النسبة %">
+          </div>
+
+          <div class="set-add-row set-round-row">
+            <label for="priceRoundStep">🎯 تقريب الأسعار الجديدة</label>
+            <select id="priceRoundStep" onchange="saveRoundStep()">
+              <option value="0">بلا تقريب — ليرة صحيحة</option>
+              <option value="500">أقرب 500 ل.س</option>
+              <option value="1000">أقرب 1,000 ل.س</option>
+            </select>
+            <small class="set-round-hint">مثال: ٩,٥٨٣ ← ٩,٥٠٠ أو ١٠,٠٠٠ — تظهر نتيجتها في المعاينة قبل الموافقة</small>
+          </div>
+
+          <div class="set-actions">
+            <button class="set-btn primary" id="previewBtn" onclick="openPricePreview()" disabled>👁️ معاينة التغيير</button>
+            <a class="set-link" href="menu_admin.html">تعديل سعر صنف واحد يدوياً ← شاشة المنيو والأسعار</a>
+          </div>
+        </div>
+      </section>
+
+      <!-- ═══ الطباعة (لاحقاً) ═══ -->
+      <section class="set-card muted-card">
+        <div class="set-card-head">
+          <div>
+            <h2>🖨️ إعدادات الطباعة</h2>
+            <p>الطابعات وعرض الإيصال والمعاينة قبل الطباعة — ستُضاف لاحقاً</p>
+          </div>
+          <span class="mgr-badge">قريباً</span>
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <div class="mgr-nav-scrim" id="mgrNavScrim" onclick="closeNav()"></div>
+  <nav class="mgr-mobile-nav" id="mgrMobileNav">
+    <div class="mgr-mobile-nav-grid" id="mobileNavGrid"></div>
+  </nav>
+
+  <!-- نافذة تأكيد تحديث الأسعار -->
+  <div class="set-modal-scrim" id="priceModalScrim" onclick="closePricePreview()"></div>
+  <div class="set-modal" id="priceModal" role="dialog" aria-label="تأكيد تحديث الأسعار"></div>
+
+  <div class="toast" id="toast"></div>
+
+  <script src="assets/js/config.js"></script>
+  <script src="assets/js/sync/storage.js"></script>
+  <script src="assets/js/sync/queue.js"></script>
+  <script src="assets/js/sync/remote.js"></script>
+  <script src="assets/js/sync/manager.js"></script>
+  <script src="assets/js/utils.js"></script>
+  <script src="assets/js/data.js"></script>
+  <script src="assets/js/db.js"></script>
+  <script src="assets/js/stock.js"></script>
+  <script src="assets/js/nav.js"></script>
+  <script src="assets/js/settings.js"></script>
+</body>
+</html>

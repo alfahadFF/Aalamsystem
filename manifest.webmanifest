@@ -1,0 +1,27 @@
+{
+  "name": "alfaprosys — نظام إدارة المطعم ونقطة البيع",
+  "short_name": "alfaprosys",
+  "description": "نظام إدارة مطعم متكامل: نقطة بيع، مطبخ، مخزون، تقارير وإدارة — يعمل دون اتصال أولاً.",
+  "lang": "ar",
+  "dir": "rtl",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#102A43",
+  "theme_color": "#102A43",
+  "icons": [
+    {
+      "src": "assets/icon/logo.png",
+      "sizes": "any",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "assets/icon/logo.png",
+      "sizes": "any",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}

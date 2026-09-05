@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>الطلبات الأونلاين — alfaprosys</title>
+  <link rel="manifest" href="manifest.webmanifest" />
+  <meta name="theme-color" content="#102A43" />
+  <link rel="icon" href="assets/icon/logo.png" type="image/png" />
+  <link rel="apple-touch-icon" href="assets/icon/logo.png" />
+  <link rel="stylesheet" href="assets/css/style.css" />
+  <link rel="stylesheet" href="assets/css/online.css" />
+</head>
+<body>
+
+  <div class="online-wrap">
+    <header class="online-head">
+      <div class="online-title">🛵 الطلبات الأونلاين الواردة</div>
+      <div id="netSlot"></div>
+      <div class="online-sub">تُحوَّل الطلبات المقبولة إلى فواتير ضمن تسلسل شاشة البيع</div>
+      <div class="online-head-actions">
+        <button class="online-btn" id="soundToggle" onclick="toggleSound()">🔔 الصوت</button>
+        <button class="online-btn" onclick="refreshOrders()">🔄 تحديث</button>
+        <button class="online-btn" onclick="demoIncoming()">🧪 طلب تجريبي</button>
+        <button class="online-btn back" onclick="location.href='pos.html'">→ العودة للبيع</button>
+      </div>
+    </header>
+
+    <div class="online-tabs" id="onlineTabs"></div>
+    <div id="onlineCards"></div>
+  </div>
+
+  <!-- إيصال الطباعة -->
+  <div id="printable"></div>
+  <!-- Toast -->
+  <div class="toast" id="toast"></div>
+
+  <script src="assets/js/config.js"></script>
+  <script src="assets/js/sync/storage.js"></script>
+  <script src="assets/js/sync/queue.js"></script>
+  <script src="assets/js/sync/remote.js"></script>
+  <script src="assets/js/sync/manager.js"></script>
+  <script src="assets/js/utils.js"></script>
+  <script src="assets/js/data.js"></script>
+  <script src="assets/js/db.js"></script>
+  <script src="assets/js/stock.js"></script>
+  <script src="assets/js/thermal.js"></script>
+  <script src="assets/js/notify.js"></script>
+  <script src="assets/js/online_orders.js"></script>
+<script>
+  (function(){
+    if (window.NetBadge) {
+      document.getElementById('netSlot').innerHTML = NetBadge.html();
+      NetBadge.bind();
+    }
+  })();
+</script>
+</body>
+</html>
