@@ -95,13 +95,14 @@
     return ({ cash: 'نقداً', wallet: 'محفظة', partial: 'دفع جزئي', deferred: 'آجل' })[inv.pay_type] || (inv.pay_type || '');
   }
 
-  /* قالب الإيصال — يطابق الفاتورة الحقيقية (عرض 72مم)
+  /* قالب الإيصال — موحّد لكل من الكاشير والمطبخ (نفس المحتوى بالضبط)
+     الفرق الوحيد بين النسختين هو الطابعة الفيزيائية المُرسَل إليها،
+     وليس شكل أو تفاصيل الإيصال.
      الترويسة: الاسم + سطر (العنوان الهاتف) + رقم الطلب + التاريخ + سطر الزبون المدمج
-     الجدول: اسم المادة | الكمية | السعر | إجمالي | ملاحظات  (عمود الملاحظات ظاهر دائماً)
-     الكمية بمنزلتين عشريتين، والتذييل: مجموع الطلب / الحسم / الصافي */
+     الجدول: اسم المادة | الكمية | السعر | إجمالي | ملاحظات
+     التذييل: مجموع الطلب / الحسم / الصافي */
   function receiptHtml(inv, opts = {}) {
     const w = WIDTH();
-    const kitchen = !!opts.kitchen;
     const no = window.invoiceNo ? window.invoiceNo(inv) : String(inv.no != null ? inv.no : (inv.id || ''));
     const items = inv.items || [];
     const sub = items.reduce((s, x) => s + (Number(x.price) || 0) * (Number(x.qty) || 0), 0);
@@ -117,14 +118,8 @@
       + (inv.type === 'delivery' ? ' خارجي' : '')
       + (inv.no != null ? ` [${inv.no}]` : '');
 
-    const rows = items.filter(it => !(kitchen && it.offer_disc)).map(it => kitchen
-      ? `<tr>
-          <td style="border:1px solid #000;padding:3px 2px;text-align:right;font-weight:bold;font-size:12px;">${it.is_free ? '🎁 ' : ''}${esc(it.name)}</td>
-          <td style="border:1px solid #000;padding:3px 2px;text-align:center;font-weight:bold;font-size:12px;">${(Number(it.qty) || 1).toFixed(2)}</td>
-          <td style="border:1px solid #000;padding:3px 2px;text-align:center;font-size:11px;">${esc(it.note || '')}</td>
-         </tr>`
-      : `<tr>
-          <td style="border:1px solid #000;padding:3px 2px;text-align:right;font-weight:bold;font-size:12px;">${it.offer_id ? '🎟️ ' : ''}${esc(it.name)}</td>
+    const rows = items.map(it => `<tr>
+          <td style="border:1px solid #000;padding:3px 2px;text-align:right;font-weight:bold;font-size:12px;">${it.offer_id ? '🎟️ ' : ''}${it.is_free ? '🎁 ' : ''}${esc(it.name)}</td>
           <td style="border:1px solid #000;padding:3px 2px;text-align:center;font-weight:bold;font-size:12px;">${(Number(it.qty) || 1).toFixed(2)}</td>
           <td style="border:1px solid #000;padding:3px 2px;text-align:center;font-weight:bold;font-size:12px;">${fmtN(it.price)}</td>
           <td style="border:1px solid #000;padding:3px 2px;text-align:center;font-weight:bold;font-size:12px;">${fmtN((Number(it.price) || 0) * (Number(it.qty) || 1))}</td>
@@ -132,11 +127,7 @@
          </tr>`
     ).join('');
 
-    const headCols = kitchen
-      ? `<th style="border:1px solid #000;padding:3px 2px;font-size:12.5px;width:52%;">الصنف</th>
-         <th style="border:1px solid #000;padding:3px 2px;font-size:12.5px;width:24%;">الكمية</th>
-         <th style="border:1px solid #000;padding:3px 2px;font-size:12.5px;width:24%;">ملاحظات</th>`
-      : `<th style="border:1px solid #000;padding:3px 2px;font-size:12.5px;width:24%;">اسم المادة</th>
+    const headCols = `<th style="border:1px solid #000;padding:3px 2px;font-size:12.5px;width:24%;">اسم المادة</th>
          <th style="border:1px solid #000;padding:3px 2px;font-size:12.5px;width:16%;">الكمية</th>
          <th style="border:1px solid #000;padding:3px 2px;font-size:12.5px;width:20%;">السعر</th>
          <th style="border:1px solid #000;padding:3px 2px;font-size:12.5px;width:20%;">إجمالي</th>
@@ -146,7 +137,6 @@
       <div style="width:${w}mm;max-width:${w}mm;min-width:${w}mm;margin:0 auto;padding:0;font-family:Tahoma,Arial,sans-serif;color:#000;direction:rtl;text-align:right;box-sizing:border-box;line-height:1.5;background:#fff;">
         <div style="font-size:20px;font-weight:900;text-align:center;margin:6px 0 5px;">${esc(RESTAURANT())}</div>
         ${subLine ? `<div style="font-size:14px;font-weight:bold;text-align:center;margin-bottom:12px;">${esc(subLine)}</div>` : ''}
-        ${kitchen ? `<div style="font-size:16px;font-weight:900;text-align:center;margin-bottom:10px;">نسخة المطبخ — ${esc(typeLabel(inv))}</div>` : ''}
 
         <div style="font-size:15px;font-weight:bold;text-align:center;">رقم الطلب:</div>
         <div style="font-size:28px;font-weight:900;text-align:center;line-height:1.1;margin:0 0 8px;">${esc(no)}</div>
@@ -162,12 +152,11 @@
           <tbody>${rows}</tbody>
         </table>
 
-        ${kitchen ? '' : `
         <table style="width:100%;border-collapse:collapse;border:1px solid #000;margin-bottom:12px;">
           <tr><td style="border:1px solid #000;padding:5px 6px;font-size:13px;font-weight:bold;text-align:right;padding-inline-start:12px;">مجموع الطلب</td><td style="border:1px solid #000;padding:5px 6px;font-size:13px;font-weight:bold;text-align:center;">${fmtN(sub)}</td></tr>
           <tr><td style="border:1px solid #000;padding:5px 6px;font-size:13px;font-weight:bold;text-align:right;padding-inline-start:12px;">الحسم</td><td style="border:1px solid #000;padding:5px 6px;font-size:13px;font-weight:bold;text-align:center;">${fmtN(disc)}</td></tr>
           <tr><td style="border:1px solid #000;padding:5px 6px;font-size:13px;font-weight:bold;text-align:right;padding-inline-start:12px;">الصافي</td><td style="border:1px solid #000;padding:5px 6px;font-size:13px;font-weight:bold;text-align:center;">${fmtN(total)}</td></tr>
-        </table>`}
+        </table>
 
         <div style="font-size:15px;font-weight:bold;text-align:center;padding-bottom:8mm;">شكرا لزيارتكم</div>
       </div>`;
@@ -179,11 +168,14 @@
     return c;
   }
   function fallbackPrint(html) {
-    ensureContainer().innerHTML = html;
-    setTimeout(() => window.print(), 80);
+    return new Promise(resolve => {
+      ensureContainer().innerHTML = html;
+      setTimeout(() => { window.print(); resolve(); }, 80);
+    });
   }
 
-  /* الطباعة: صامتة عبر QZ إن كانت متصلة، وإلا حوار طباعة المتصفح */
+  /* الطباعة: صامتة عبر QZ إن كانت متصلة، وإلا حوار طباعة المتصفح
+     (await كامل قبل الرجوع — منشان طباعتين متتاليتين ما تتضاربوا بنفس الحاوية) */
   async function print(inv, opts = {}) {
     const html = receiptHtml(inv, opts);
     if (isActive()) {
@@ -195,7 +187,7 @@
         return 'qz';
       } catch (err) { console.error('QZ print failed:', err); }
     }
-    fallbackPrint(html);
+    await fallbackPrint(html);
     return 'dialog';
   }
 
