@@ -3741,24 +3741,17 @@ select.cust-field-input { cursor: pointer; }
 .queue-no{ font-size:34px; font-weight:800; }
 .queue-type{ font-size:12.5px; margin-top:4px; opacity:.8; }
 
-/* ── الطباعة الحرارية: إيصال بعرض الطابعة ── */
-#printable-receipt { display: none; }
-@page { size: 72mm auto; margin: 0mm !important; }
-@media print {
-  body > *:not(#printable-receipt) { display: none !important; }
-  html, body {
-    width: 72mm !important; max-width: 72mm !important;
-    margin: 0 !important; padding: 0 !important;
-    background: var(--surface, #fff) !important;
-    height: auto !important; min-height: 0 !important; overflow: visible !important;
-  }
-  #printable-receipt {
-    display: block !important; position: static !important;
-    width: 72mm !important; max-width: 72mm !important;
-    margin: 0 auto !important; padding: 0 !important;
-    color: #000 !important; background: #fff !important;
-    page-break-after: avoid !important; page-break-inside: avoid !important; page-break-before: avoid !important;
-  }
+/* ── الطباعة الحرارية ──
+   الحاوية تبقى مخفية على الشاشة دائماً.
+   أما @page وقواعد @media print فلم تعد هنا عمداً: كانت عامة فتفرض
+   ورقاً حراريًا 72 مم على كل الشاشات (تقارير، Z-Report، كشوف حساب)
+   وتخفي محتواها. الآن يحقنها thermal.js من config.js قبل window.print()
+   مباشرة ويزيلها بعده، محصورةً بـ html.printing-receipt. */
+/* على الشاشة: مخفي بالرؤية لكنه مُخطَّط (حتى نستطيع قياس ارتفاعه قبل الطباعة) */
+#printable-receipt {
+  position: fixed; top: 0; left: -100000px;
+  visibility: hidden; pointer-events: none;
+  width: 79.2mm; overflow: hidden;
 }
 
 /* ── حقل الباركود في ترويسة شاشة البيع ── */
@@ -4731,11 +4724,18 @@ s { color: var(--text-muted); opacity: .75; }
 .stmt-sign { display: flex; justify-content: space-around; margin-top: 34px; gap: 20px; }
 .stmt-sign > div { display: flex; flex-direction: column; gap: 26px; font-size: 12px; font-weight: 800; }
 .stmt-sign span { border-top: 1.5px dashed var(--text-muted); width: 170px; }
+/* ── طباعة كشف الحساب ──
+   كانت هذه القاعدة عامة: `body *:not(.stmt-overlay)…{display:none}`
+   فتُخفي محتوى كل شاشة تُطبع (التقارير، Z-Report، الفواتير) لأن
+   .stmt-overlay غير موجود فيها ⇒ طباعة فارغة.
+   حُصرت الآن بـ html.printing-statement.
+   (ملاحظة: printStatement() في customers.js يفتح نافذة مستقلة أصلاً،
+    و #conStatement في contracts.html لا يُطبع داخل الصفحة.) */
 @media print {
-  body *:not(.stmt-overlay):not(.stmt-overlay *):not(#printable-receipt):not(#printable-receipt *) { display: none !important; }
-  .stmt-overlay { position: static; background: none; padding: 0; display: block !important; overflow: visible; }
-  .stmt-actions { display: none !important; }
-  .stmt-sheet { box-shadow: none; border-radius: 0; max-width: 100%; }
+  html.printing-statement body *:not(.stmt-overlay):not(.stmt-overlay *) { display: none !important; }
+  html.printing-statement .stmt-overlay { position: static; background: none; padding: 0; display: block !important; overflow: visible; }
+  html.printing-statement .stmt-actions { display: none !important; }
+  html.printing-statement .stmt-sheet { box-shadow: none; border-radius: 0; max-width: 100%; }
 }
 
 /* ── 🔒 الوردية العمياء + منع البيع بلا وردية ── */

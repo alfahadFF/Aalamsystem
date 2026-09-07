@@ -66,8 +66,10 @@
 #printable{ display:none; }
 @media print{
   .online-wrap{ display:none !important; }
-  #printable{ display:block; width:72mm; font-size:12px; }
+  #printable{ display:block; width:72mm; margin:0 auto; font-size:12px; }
   #printable .p-row{ display:flex; justify-content:space-between; }
   #printable h3{ text-align:center; }
 }
-@page{ size:72mm auto; margin:0; }
+/* الورق الفيزيائي 79.2 مم والقالب 72 مم متمركز فيه — موافق لـ config.js (thermal.paperWidthMm).
+   عند الطباعة عبر ThermalPrint يحقن thermal.js نفس المقاس من الإعدادات فتتقدم قاعدته. */
+@page{ size:79.2mm auto; margin:0; }
