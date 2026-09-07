@@ -7,7 +7,7 @@
    - أصول أخرى (js/css/أيقونات): كاش أولًا ثم شبكة.
    - خطوط خارجية: كاش أولًا بعد أول تحميل (تعمل أوفلاين لاحقًا).
    ============================================================ */
-const VERSION = 'alfaprosys-v29';
+const VERSION = 'alfaprosys-v30';
 
 /* ملفات تُجلب دائماً من الشبكة أولاً (لا كاش-أولاً أبداً)
    أضف هنا أي ملف إعدادات حسّاس مستقبلاً بنفس الطريقة */
@@ -17,7 +17,7 @@ const NETWORK_FIRST_ASSETS = [
 
 const CORE = [
   'manifest.webmanifest',
-  'assets/icons/logo.png',
+  'assets/icon/logo.png',
   // الصفحات — كاملة
   'index.html','pos.html','dashboard.html','sales.html','invoices.html',
   'open_invoices.html','edit_invoice.html','reports.html','menu_admin.html',
@@ -133,8 +133,8 @@ self.addEventListener('push', function (event) {
   try { data = event.data ? event.data.json() : {}; } catch (e) { data = { body: event.data && event.data.text() }; }
   event.waitUntil(self.registration.showNotification(data.title || '🔔 alfaprosys', {
     body: data.body || '',
-    icon: 'assets/icons/icon.svg',
-    badge: 'assets/icons/icon.svg',
+    icon: 'assets/icon/logo.png',
+    badge: 'assets/icon/logo.png',
     tag: data.tag || 'alfa-push',
     data: { url: data.url || 'dashboard.html' },
     vibrate: [180, 90, 180],
