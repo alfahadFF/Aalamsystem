@@ -175,7 +175,7 @@
     const SUM = `border:1px solid #000;padding:2px 6px;font-size:${F.sum}px;line-height:1.2;font-weight:bold;`;
 
     return `
-      <div style="width:${w}mm;max-width:${w}mm;min-width:${w}mm;margin:0 auto;padding:0;font-family:Tahoma,Arial,sans-serif;color:#000;direction:rtl;text-align:right;box-sizing:border-box;line-height:1.25;background:#fff;">
+      <div style="display:flow-root;width:${w}mm;max-width:${w}mm;min-width:${w}mm;margin:0 auto;padding:0;font-family:Tahoma,Arial,sans-serif;color:#000;direction:rtl;text-align:right;box-sizing:border-box;line-height:1.25;background:#fff;">
         <div style="font-size:${F.title}px;font-weight:900;text-align:center;margin:1mm 0 0.8mm;">${esc(RESTAURANT())}</div>
         ${subLine ? `<div style="font-size:${F.sub}px;font-weight:bold;text-align:center;margin-bottom:1.2mm;">${esc(subLine)}</div>` : ''}
 
@@ -274,8 +274,23 @@
       };
       const c = ensureContainer();
       c.innerHTML = html;
-      /* قياس الارتفاع الحقيقي للإيصال (الحاوية مُخطَّطة وإن كانت مخفية بالرؤية) */
-      const hMm = Math.ceil(c.firstElementChild.getBoundingClientRect().height * 25.4 / 96) + 1;
+      /* قياس المدى الحقيقي للإيصال من أعلى الحاوية إلى أدنى نقطة فعلية:
+         1) كان هامش عنوان المطعم (1مم) ينهار خارج جذر الإيصال (margin collapse)
+            فيدفع الإيصال 1مم داخل الحاوية — عولج بـ display:flow-root في القالب.
+         2) يُؤخذ أدنى نقطة لكل العناصر (لا ارتفاع الجذر وحده) لالتقاط أي تجاوز
+            لصناديق الأسطر تحت آخر سطر.
+         + هامش أمان 0.3مم فقط — بدل +1مم الكاملة سابقاً التي كانت تعوّض
+         الانهيار جزئياً وتترك فراغاً يُسحب ورقاً بكل فاتورة. */
+      const hMm = (function () {
+        const top = c.getBoundingClientRect().top;
+        let bottom = c.getBoundingClientRect().bottom;
+        const walk = document.createTreeWalker(c, NodeFilter.SHOW_ELEMENT);
+        while (walk.nextNode()) {
+          const b = walk.currentNode.getBoundingClientRect().bottom;
+          if (b > bottom) bottom = b;
+        }
+        return Math.ceil(((bottom - top) * 25.4 / 96) * 10) / 10 + 0.3;
+      })();
       ensurePrintCss(hMm);
       document.documentElement.classList.add('printing-receipt');
       window.addEventListener('afterprint', cleanup);
@@ -296,7 +311,11 @@
         const config = qz.configs.create(opts.kitchen ? PRINTER_KITCHEN() : PRINTER_CASHIER(), printOptions);
         await qz.print(config, data);
         return 'qz';
-      } catch (err) { console.error('QZ print failed:', err); }
+      } catch (err) {
+        console.error('QZ print failed:', err);
+        /* ليُدرك الكاشير لماذا فُتح حوار المتصفح بدل الطباعة الصامتة */
+        try { if (window.showToast) showToast('فشلت طباعة QZ (' + String(err && err.message || err).slice(0, 60) + ') — فُتح حوار الطباعة، اختر ورق Roll', '⚠️'); } catch (e2) {}
+      }
     }
     await fallbackPrint(html);
     return 'dialog';
@@ -315,7 +334,7 @@
         return;
       } catch (e) { console.error('[ThermalPrint] فشل الطباعة عبر QZ:', e); }
     }
-    try { if (window.showToast) showToast('QZ Tray غير متصل — فُتح حوار الطباعة بنسخة واحدة', '🖨️'); } catch (e) {}
+    try { if (window.showToast) showToast('QZ Tray غير متصل — فُتح حوار الطباعة بنسخة واحدة · اختر ورق Roll للطابعة', '🖨️'); } catch (e) {}
     await fallbackPrint(receiptHtml(inv, {}));
   }
 
