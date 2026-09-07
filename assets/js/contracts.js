@@ -716,8 +716,11 @@ function openItemPicker() {
 
 function renderItemPicker() {
   const q = itemPickerSearch.toLowerCase();
-  const cats = [...new Set(menuItems.map(m => m.category_name).filter(Boolean))];
-  let list = menuItems.filter(m =>
+  /* الأصناف غير المتوفرة لا تُعرض في منتقي الأصناف،
+     وبذلك تختفي تلقائياً التصنيفات التي لا تملك أصنافاً متاحة */
+  const pool = menuItems.filter(m => m && m.is_available !== false);
+  const cats = [...new Set(pool.map(m => m.category_name).filter(Boolean))];
+  let list = pool.filter(m =>
     !q || m.name?.toLowerCase().includes(q) || m.category_name?.toLowerCase().includes(q)
   );
   return `

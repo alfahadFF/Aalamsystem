@@ -866,6 +866,7 @@ window.submitPrep = function() {
   }
   
   DATA.inventory = inventory;
+  if (window.Stock && Stock.ensureRecipes) Stock.ensureRecipes();  // معادلة السيخ الجديد فوراً
   closeInvModal();
   renderContent();
   showToast(`تم إدخال ${targetItemName} بوزن ${weight} كغ`, '✅');

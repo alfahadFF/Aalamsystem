@@ -2566,11 +2566,11 @@ window.DEMO_DATA.inventory = window.DEMO_DATA.inventory || [
       { item_id: 'item_006', qty: 1.4 },   // صحن 7
       { item_id: 'item_007', qty: 0.2 },   // وجبة عادي
       { item_id: 'item_008', qty: 0.3 },   // وجبة دبل
-      { item_id: 'item_009', qty: 0.2 },   // سندويش كبير
-      { item_id: 'item_010', qty: 0.15 },  // وسط
-      { item_id: 'item_011', qty: 0.12 },  // صغير
+      { item_id: 'item_009', qty: 0.11 },  // سندويش كبير (110 غ)
+      { item_id: 'item_010', qty: 0.08 },  // وسط (80 غ)
+      { item_id: 'item_011', qty: 0.06 },  // صغير (60 غ)
       { item_id: 'item_012', qty: 0.2 },   // سمون
-      { item_id: 'item_013', qty: 0.15 },  // خرطوشة
+      { item_id: 'item_013', qty: 0.05 },  // خرطوشة (50 غ)
       { item_id: 'item_014', qty: 1.0 },   // بالكيلو
     ],
     log: [
@@ -3179,10 +3179,13 @@ window.DEMO_DATA.price_settings = window.DEMO_DATA.price_settings || {
       if (window.AgentSync && AgentSync.pull) first.push(AgentSync.pull());
       if (first.length) {
         const t = setTimeout(done, 10000);
-        Promise.all(first).then(function () {
-          const next = (window.PosSync && PosSync.pull) ? PosSync.pull() : Promise.resolve();
+        /* فشل أي خطوة أولى (زبائن/جلسات/…) كان يوقف السلسلة كلها فلا يُسحب
+           المخزون والطاولات والإعدادات أبداً وتبقى البذرة المحلية.
+           الآن لكل خطوة عزل خطأ مستقل وتكتمل السلسلة دوماً. */
+        Promise.all(first.map(function (p) { return p.catch(function () { return null; }); })).then(function () {
+          const next = (window.PosSync && PosSync.pull) ? PosSync.pull().catch(function () { return null; }) : Promise.resolve();
           return next.then(function () {
-            return (window.ManagerSync && ManagerSync.pull) ? ManagerSync.pull() : null;
+            return (window.ManagerSync && ManagerSync.pull) ? ManagerSync.pull().catch(function () { return null; }) : null;
           });
         }).then(function () {
           clearTimeout(t);

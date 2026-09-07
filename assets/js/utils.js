@@ -34,6 +34,44 @@ Object.defineProperty(window, 'DATA', {
   configurable: true,
 });
 
+/* ================================================================
+   قوائم البيع — إخفاء غير المتوفر
+   ----------------------------------------------------------------
+   availableItems(catId?) : الأصناف المتاحة فقط (is_available !== false)
+   sellableCategories()   : التصنيفات النشطة التي تحتوي صنفاً متاحاً
+                            واحداً على الأقل، مرتّبة حسب sort_order.
+
+   ملاحظة: شاشة «إدارة الأصناف» لا تستخدم هاتين الدالتين عمداً —
+   يجب أن ترى كل الأصناف والتصنيفات لتتمكّن من إعادة تفعيلها.
+   ================================================================ */
+window.availableItems = function (catId) {
+  const list = (window.DEMO_DATA && window.DEMO_DATA.items) || [];
+  return list.filter(function (i) {
+    return i && i.is_available !== false && (catId == null || i.category_id === catId);
+  });
+};
+
+window.sellableCategories = function () {
+  const cats = (window.DEMO_DATA && window.DEMO_DATA.categories) || [];
+  return cats
+    .filter(function (c) { return c && c.is_active && window.availableItems(c.id).length > 0; })
+    .sort(function (a, b) { return (Number(a.sort_order) || 0) - (Number(b.sort_order) || 0); });
+};
+
+/* عدد الأصناف والتصنيفات المخفية (للتشخيص من كونسول المتصفح) */
+window.hiddenMenuStats = function () {
+  const items = (window.DEMO_DATA && window.DEMO_DATA.items) || [];
+  const cats  = (window.DEMO_DATA && window.DEMO_DATA.categories) || [];
+  return {
+    items_total: items.length,
+    items_hidden: items.filter(function (i) { return i && i.is_available === false; }).length,
+    cats_total: cats.filter(function (c) { return c && c.is_active; }).length,
+    cats_hidden: cats.filter(function (c) {
+      return c && c.is_active && window.availableItems(c.id).length === 0;
+    }).map(function (c) { return c.name; }),
+  };
+};
+
 
 
 // إخفاء القائمة الجانبية إذا كان العرض داخل نافذة منبثقة (iframe)

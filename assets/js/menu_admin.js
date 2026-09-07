@@ -359,8 +359,10 @@ function openEditItem(id) {
 
     <!-- اسم الصنف -->
     <div class="mgr-form-group">
-      <label>اسم الصنف الكامل</label>
-      <input type="text" id="editItemName" value="${e(item.name)}">
+      <label>اسم الصنف</label>
+      <!-- إصلاح: كان الحقل يعرض الاسم المؤلَّف («الاسم + الصيغة») فيُدفَع كله إلى
+           عمود name ويتكرر عند كل سحب. الآن يعرض الاسم الأساسي وحده، والصيغة في حقلها. -->
+      <input type="text" id="editItemName" value="${e(item.base_name || (window.AlfaItemBase ? AlfaItemBase(item) : item.name))}">
     </div>
 
     <!-- التصنيف الرئيسي -->
@@ -455,11 +457,22 @@ function saveItem(id) {
   const item = items.find(i => i.id === id);
   if (!item) return;
 
-  item.name          = document.getElementById('editItemName').value.trim()    || item.name;
+  /* إصلاح: الحقل يحمل الآن الاسم الأساسي وحده (بدون الصيغة) */
+  const typedName    = document.getElementById('editItemName').value.trim();
+  item.base_name     = typedName || item.base_name || (window.AlfaItemBase ? AlfaItemBase(item) : item.name);
   item.category_id   = document.getElementById('editItemCat').value;
   item.category_name = categories.find(c => c.id === item.category_id)?.name  || item.category_name;
   item.family        = document.getElementById('editItemFamily').value.trim()  || item.family;
   item.variant_clean = document.getElementById('editItemVariant').value.trim();
+  /* ── إصلاح: هذه الحقول لم تكن تُحدَّث إطلاقاً عند الحفظ من مودال التعديل،
+     فتبقى قيمها القديمة (وأحياناً اسم التصنيف الرئيسي) في أعمدة الجدول ── */
+  item.variant       = item.variant_clean || item.variant || null;
+  /* الاسم المحلي المؤلَّف = الاسم الأساسي + الصيغة (نفس صيغة fromRemote تماماً) */
+  item.name          = item.variant_clean ? (item.base_name + ' ' + item.variant_clean) : item.base_name;
+  /* option_name: name يُصحَّح تلقائياً إن كان يحمل اسم التصنيف الرئيسي (تلويث قديم) */
+  item.option_name   = item.family
+                    || ((item.option_name && item.option_name !== item.category_name) ? item.option_name : null)
+                    || item.base_name;
   item.barcode       = document.getElementById('editItemBarcode')?.value.trim() || null;
   item.image_url     = document.getElementById('editItemImage')?.value.trim() || null;
   item.sort_order    = parseInt(document.getElementById('editItemSort').value) || item.sort_order;
@@ -504,10 +517,12 @@ function saveItem(id) {
     const remoteItem = {
       id: item.id,
       category_id: item.category_id,
-      name: item.name,
+      /* إصلاح: كان يُرسل item.name المؤلَّف («الاسم + الصيغة») في عمود name،
+         ما يسبب تكرار الاسم عند كل سحب. العمود name = الاسم الأساسي فقط. */
+      name: item.base_name || item.name,
       variant: item.variant_clean || item.variant || null,
-      family: item.family || item.name,
-      option_name: item.family || item.name,
+      family: item.family || item.base_name || item.name,
+      option_name: item.option_name || item.family || item.base_name || item.name,
       variant_clean: item.variant_clean || item.variant || null,
       category_name: item.category_name || null,
       barcode: item.barcode || null,
@@ -660,24 +675,39 @@ function saveNewItem() {
     if (!newCatName) { showToast('أدخل اسم التصنيف الجديد', '⚠️'); return; }
     catId   = generateUUID();
     catName = newCatName;
-    const newCat = { id: catId, name: catName, icon: '📦', sort_order: categories.length + 1, is_active: true };
+    const newCat = { id: catId, name: catName, icon: '📦', sort_order: nextCatSort(), is_active: true };
     categories.push(newCat);
     DATA.categories = categories;
   }
+
+  /* الاسم الأساسي = الاسم المُدخل مجرّداً من الصيغة إن كانت مذكورة في آخره
+     (الحقل يطلب «الاسم الكامل» وقد يكتب المستخدم الصيغة ضمنه) */
+  const baseName = (variant && name.length > variant.length && name.slice(-variant.length) === variant)
+    ? name.slice(0, name.length - variant.length).trim()
+    : name;
 
   const newItem = {
     id:             generateUUID(),
     category_id:    catId,
     category_name:  catName,
-    family:         family || catName,
-    option_name:    family || catName,
+    /* إصلاح: كان family/option_name يسقطان على اسم التصنيف الرئيسي عند ترك
+       حقل «التصنيف الفرعي» فارغاً — فيُخزَّن اسم التصنيف في عمود option_name */
+    family:         family || baseName,
+    option_name:    family || baseName,
+    base_name:      baseName,
     variant:        variant,
     variant_clean:  variant,
     barcode:        barcode || null,
-    name:           name,
+    /* نفس صيغة الأصناف المسحوبة من السحابة: «الاسم + الصيغة» */
+    name:           variant ? (baseName + ' ' + variant) : baseName,
     price:          price,
     is_available:   true,
-    sort_order:     items.filter(i => i.category_id === catId).length + 1,
+    /* إصلاح: كان sort_order = (عدد أصناف هذا التصنيف) + 1، بينما الترقيم في
+       المنيو عامٌّ على كل التصنيفات (1..N) — فيسقط الصنف الجديد فوق رقم محجوز.
+       مثال واقعي: «كريسبي برغر» أُضيف و«السندويشات والغربي» فيها 66 صنف ⇒ 67،
+       والرقم 67 كان أصلاً لـ«سكالوب سندويشة - دبل».
+       الآن: أكبر رقم موجود في المنيو كله + 1 ⇒ لا تصادم إطلاقاً. */
+    sort_order:     items.reduce((m, i) => Math.max(m, Number(i.sort_order) || 0), 0) + 1,
     cost_mode:      'manual',
     cost_manual:    cost,
     contract_price: contract ? parseLocalNum(contract) : null,
@@ -815,6 +845,13 @@ function openAddCat() {
   setTimeout(() => document.getElementById('newCatName')?.focus(), 100);
 }
 
+/* ترتيب تصنيف جديد = أكبر ترتيب موجود + 1
+   (سابقاً: categories.length + 1 وكان يصطدم بترتيب تصنيف قائم
+    فيظهر التصنيفان معاً في آخر شريط الأزرار) */
+function nextCatSort() {
+  return categories.reduce((m, c) => Math.max(m, Number(c.sort_order) || 0), 0) + 1;
+}
+
 function saveNewCat() {
   const name = document.getElementById('newCatName').value.trim();
   const icon = document.getElementById('newCatIcon').value.trim() || '📦';
@@ -822,7 +859,7 @@ function saveNewCat() {
   const newCat = {
     id: generateUUID(),
     name, icon,
-    sort_order: categories.length + 1,
+    sort_order: nextCatSort(),
     is_active: true
   };
   categories.push(newCat);

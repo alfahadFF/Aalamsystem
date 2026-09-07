@@ -212,7 +212,7 @@ function renderInvoiceDetail(inv){
    لوحة إضافة الأصناف
    ================================================================ */
 function renderAddPanel(){
-  const cats = DATA.categories.filter(c => c.is_active);
+  const cats = sellableCategories();
   const fams = activeCategoryId ? families() : [];
   const items = finalItems();
 

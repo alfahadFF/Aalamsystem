@@ -310,12 +310,16 @@ function familyLabel(family) {
 }
 function itemButtonParts(item) {
   const variant = (item.variant_clean || String(item.variant || '').replace(/ - |-/g, ' ')).trim();
+  const base = String(item.base_name || '').trim();
   const family = String(item.family || '').trim();
   const option = String(item.option_name || '').trim();
-  let head = family || option;
-  if (option && family && option !== family) head = `${family} ${option}`.trim();
+  /* إصلاح: الأولوية لاسم الصنف نفسه (base_name) لا لاسم «الصنف الأب».
+     سابقاً كان الأب يتصدر التسمية فيظهر «برغر» بدل «كريسبي برغر».
+     لا أثر على بقية الأصناف لأن base_name == family عندها. */
+  let head = base || family || option;
+  if (!base && option && family && option !== family) head = `${family} ${option}`.trim();
   if (!head) head = String(item.category_name || '').trim();
-  const sub = (variant && variant !== head && variant !== family && variant !== option) ? variant : '';
+  const sub = (variant && variant !== head && variant !== base && variant !== family && variant !== option) ? variant : '';
   const title = [head, sub].filter(Boolean).join(' ') || item.name || '';
   return { head: head || title, sub, title };
 }
@@ -324,6 +328,13 @@ function itemButtonTitle(item) {
 }
 
 function renderPOS() {
+  /* إن أصبح التصنيف المختار بلا أصناف متاحة (أو أُوقف) نعود لعرض الكل،
+     وإلا بقي الكاشير عالقاً على تصنيف فارغ */
+  if (activeCategoryId && !sellableCategories().some(c => c.id === activeCategoryId)) {
+    activeCategoryId = null;
+    activeFamily = null;
+  }
+
   const total = cart.reduce((s, x) => s + x.price * x.qty, 0);
   const count = cart.reduce((s, x) => s + x.qty, 0);
   const items = finalItems();
@@ -425,7 +436,7 @@ function renderPOS() {
    واختيار الأصناف تحته + عمود أيمن: التصنيفات ولوحة إدخال كالحاسبة
    ================================================================ */
 function renderDirectPOS(total, count) {
-  const cats = DATA.categories.filter(c => c.is_active);
+  const cats = sellableCategories();
   const items = finalItems();
   document.getElementById('posApp').innerHTML = `
     <div class="pos-shell">
@@ -456,7 +467,6 @@ function renderDirectPOS(total, count) {
               <button class="ot-btn online-ot-btn" type="button" data-action="online-orders">🛵 أونلاين${onlinePendingCount() ? ` <span class="online-pending-badge">${onlinePendingCount()}</span>` : ''}</button>
             </div>
             <div class="d-cats" aria-label="التصنيفات الرئيسية">
-              <button class="d-cat ${!activeCategoryId?'active':''}" type="button" data-action="back-step"><span>🍽️</span>كل الأصناف</button>
               ${cats.map(c => `<button class="d-cat ${activeCategoryId===c.id?'active':''}" type="button" data-action="category" data-value="${escapeHtml(c.id)}"><span>${c.icon}</span>${escapeHtml(c.name)}</button>`).join('')}
             </div>
           </aside>
@@ -1319,7 +1329,7 @@ function renderSelectionBar() {
 }
 
 function renderMainCategoryGrid() {
-  const cats = DATA.categories.filter(c => c.is_active);
+  const cats = sellableCategories();
   return `<div class="single-stage"><div class="main-category-grid primary-only-grid">${cats.map(c => `<button class="main-category-card" type="button" data-action="category" data-value="${escapeHtml(c.id)}"><span>${c.icon}</span><strong>${escapeHtml(c.name)}</strong></button>`).join('')}<button class="main-category-card search-category-card" type="button" data-action="toggle-search"><span>🔎</span><strong>بحث</strong></button></div></div>`;
 }
 
@@ -1350,7 +1360,7 @@ function renderDirectFlow() {
 }
 
 function renderDropdownFlow(items) {
-  const cats = DATA.categories.filter(c => c.is_active);
+  const cats = sellableCategories();
   const fams = activeCategoryId ? families() : [];
   return `
     <div class="dynamic-picker-card compact-picker">
