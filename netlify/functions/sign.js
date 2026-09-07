@@ -8,6 +8,7 @@
 
    متغيرات البيئة المطلوبة على Netlify:
      QZ_PRIVATE_KEY  — المفتاح الخاص PEM (-----BEGIN PRIVATE KEY-----)
+                       أو (-----BEGIN RSA PRIVATE KEY-----)
      QZ_SIGN_SECRET  — سر مشترك اختياري للتحقق من المُرسِل
                        (يُرسَل من thermal.js كـ header: x-qz-secret)
 
@@ -22,6 +23,27 @@
    ================================================================ */
 
 const crypto = require('crypto');
+
+/* تنظيف PEM القادم من متغير البيئة:
+   - يستبدل «\n» الحرفية (تظهر مع بعض طرق اللصق)
+   - يعيد بناء الأسطر إذا ضاعت كلها وأصبح الملف سطراً واحداً
+     (يحدث كثيراً عند لصق PEM في خانات Netlify) */
+function normalizePem(raw) {
+  let k = String(raw || '').trim();
+  if (!k) return '';
+  k = k.replace(/\\r\\n|\\n|\\r/g, '\n');          // \n حرفية → أسطر حقيقية
+  k = k.replace(/\r\n?/g, '\n');
+  if (!k.includes('\n')) {
+    // سطر واحد: أعد ترتيب الرأس والذيل ولفّ base64 على 64 محرفاً
+    const m = k.match(/^-----BEGIN ([A-Z0-9 ]+)-----(.+)-----END \1-----\s*$/);
+    if (m) {
+      const b64 = m[2].replace(/\s+/g, '');
+      const lines = b64.match(/.{1,64}/g) || [];
+      k = '-----BEGIN ' + m[1] + '-----\n' + lines.join('\n') + '\n-----END ' + m[1] + '-----\n';
+    }
+  }
+  return k;
+}
 
 exports.handler = async (event) => {
   /* 1. طريقة الطلب */
@@ -44,12 +66,30 @@ exports.handler = async (event) => {
      ملاحظة: الحماية الحقيقية تبقى المفتاح الخاص QZ_PRIVATE_KEY — لا يغادر
      السيرفر أبداً، والشهادة العامة وحدها في config.js. */
 
-  /* 3. المفتاح الخاص */
-  const privateKey = process.env.QZ_PRIVATE_KEY;
+  /* 3. المفتاح الخاص — تنظيف وفحص برسائل واضحة */
+  const privateKey = normalizePem(process.env.QZ_PRIVATE_KEY);
   if (!privateKey) {
     return {
       statusCode: 503,
       body: JSON.stringify({ error: 'QZ_PRIVATE_KEY not configured — add it to Netlify environment variables' }),
+    };
+  }
+  if (/-----BEGIN CERTIFICATE-----/.test(privateKey)) {
+    return {
+      statusCode: 500,
+      body: JSON.stringify({ error: 'QZ_PRIVATE_KEY يحتوي شهادة (CERTIFICATE) وليس مفتاحاً خاصاً — الصق محتوى private-key.pem وليس public-cert.pem' }),
+    };
+  }
+  let keyObj;
+  try {
+    keyObj = crypto.createPrivateKey(privateKey);
+  } catch (e) {
+    return {
+      statusCode: 500,
+      body: JSON.stringify({
+        error: 'QZ_PRIVATE_KEY غير مقروء (' + String(e.code || e.message).slice(0, 80) +
+               ') — الصق محتوى private-key.pem كاملاً من سطر -----BEGIN PRIVATE KEY----- حتى -----END PRIVATE KEY-----',
+      }),
     };
   }
 
@@ -68,7 +108,7 @@ exports.handler = async (event) => {
     const sign = crypto.createSign('SHA512');
     sign.update(toSign);
     sign.end();
-    const signature = sign.sign(privateKey, 'base64');
+    const signature = sign.sign(keyObj, 'base64');
     return {
       statusCode: 200,
       headers: { 'Content-Type': 'application/json' },
