@@ -4,85 +4,24 @@
 window.ALFA_CONFIG = {
   // trial  = نسخة تجريبية (ما قبل الربط)
   // prod   = عميل حقيقي
-  mode: 'prod',
-
+  mode: 'trial',
   // فعّلها عند ربط Supabase لتبدأ المزامنة
-  syncEnabled: true,
-
+  syncEnabled: false,
   // تُعبَّأ لاحقًا عند الربط بقواعد البيانات
-  // 1) url + anonKey من لوحة Supabase → Project Settings → API
-  // 2) mode: 'prod'
-  // 3) syncEnabled: true
-  // راجع DATA_MODEL.md لأسماء المجموعات والحقول كما هي في التطبيق
-  supabase: {
-    url: 'https://xqsbyosxzfqqzzgwppyk.supabase.co',
-    anonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inhxc2J5b3N4emZxcXp6Z3dwcHlrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODcxNzc3OTgsImV4cCI6MjEwMjc1Mzc5OH0.mlsG5y0W2ZVVL0TxviMr0dCXJBh0KDz1W8tIZMcdQXk',
-  },
-
+  supabase: { url: '', anonKey: '' },
   // مصدر الطلبات الأونلاين:
   //  - اترك endpoint فارغًا للوضع التجريبي (بيانات محلية).
   //  - أو ضع رابط دالة orders.js (Netlify) لسحب الطلبات من Google Sheet،
   //    أو لاحقًا اجعل remote.js يسحبها من جدول DB مخصص.
   onlineOrders: { endpoint: '', pin: '' },
-
   // الطباعة الحرارية عبر QZ Tray
   // ثبّت QZ Tray على جهاز الكاشير واترك أسماء الطابعات كما هي إن كانت نفس الأجهزة
-  /* ── معادلات الاستهلاك التلقائي (ينفّذها assets/js/stock.js) ──
-     كل صنف شاورما مُعبَّر بعدد السندويشات وحجمها، فيُخصم لحم السيخ
-     والخبز تلقائياً عند كل بيع، ذاتي الشفاء على كل الأجهزة.
-     عدّل الأرقام هنا فقط ولا تلمس المعادلات يدوياً. */
-  stock: {
-    category: 'الشاورما',          // تصنيف الأصناف التي تنطبق عليها القواعد
-    skewerMaterial: 'سيخ شاورما',  // المادة التي يُخصم وزنها (يخلقها زر «تجهيز سيخ»)
-    /* غرام السيخ لكل سندويشة حسب حجمها */
-    sizes: { خرطوشة: 50, صغير: 60, وسط: 80, كبير: 110 },  // كبير = وسط 100–120
-    /* كل صنف مباع = كم سندويشة وبأي حجم، وأي خبز يستهلك:
-       bread 'عادي' = شراك + سياحي عن كل سندويشة
-       bread 'سمون' = رغيف سمون فقط (لا شراك ولا سياحي)
-       sandwiches 'fromVariant' = العدد يُقرأ من اسم التشكيلة (صحن - 3سندويشات ⇒ 3) */
-    rules: [
-      { variant: 'خرطوشة',      sandwiches: 1,            size: 'خرطوشة', bread: 'عادي' },
-      { variant: 'صغير',        sandwiches: 1,            size: 'صغير',   bread: 'عادي' },
-      { variant: 'وسط',         sandwiches: 1,            size: 'وسط',    bread: 'عادي' },
-      { variant: 'كبير',        sandwiches: 1,            size: 'كبير',   bread: 'عادي' },
-      { variant: 'صحن',         sandwiches: 'fromVariant', size: 'وسط',   bread: 'عادي' },
-      { variant: 'وجبة - عادي', sandwiches: 1,            size: 'كبير',   bread: 'عادي' },
-      { variant: 'وجبة - دبل',  sandwiches: 2,            size: 'كبير',   bread: 'عادي' },
-      { variant: 'سمون',        sandwiches: 1,            size: 'وسط',    bread: 'سمون' },
-    ],
-    breads: [                      /* خبز السندويشات العادية */
-      { name: 'خبز صاج / شراك', loaves: 1 },              // وحدتها «عدد» ⇒ رغيف كامل
-      { name: 'خبز سياحي',      loaves: 1, bundle: 12 },  // 12 رغيفاً في الربطة
-    ],
-    samounBread: { name: 'سمون شاورما', loaves: 1, bundle: 4 },  // 4 أرغفة في ربطة السمون
-    burgerBread: { name: 'خبز برغر', loaves: 1, bundle: 6, matchName: 'برغر' }, // رغيف لكل صنف اسمه يحوي «برغر»
-    drumsticks: { material: 'دبوس دجاج', category: 'البروستد', matchVariant: 'دبوس', qty: 5 }, // وجبة دبوس = 5 دبابيس
-  },
-
   thermal: {
     printerCashier: 'RONGTA 80mm 2',              // طابعة الكاشير
     printerKitchen: 'RONGTA 80mm Series Printer', // طابعة المطبخ
-
-    /* ── المقاسات ──
-       widthMm      = عرض قالب الفاتورة نفسه (محتوى الإيصال)
-       paperWidthMm = عرض الورق الفيزيائي الذي تُطبع عليه
-       ⇒ القالب 72 مم يتمركز داخل ورق 79.2 مم (هامش ~3.6 مم لكل طرف)
-       إن كانت طابعتك تقصّ الأطراف اجعل paperWidthMm = 72 */
-    widthMm: 72,
-    paperWidthMm: 79.2,
-
-    /* خطوط الإيصال — مقاسات الفاتورة المعتمدة (صورة 9/3/2026) كما هي.
-       عدّل أي رقم هنا إن أراد صاحب المطعم تغييراً:
-       title اسم المطعم · sub العنوان/الهاتف · noLabel «رقم الطلب:» · no الرقم
-       date سطر التاريخ · cust سطر الزبون · th رؤوس الأعمدة · td خلايا الجدول
-       note الملاحظات · sum المجاميع · thanks سطر الشكر */
-    fonts: { title: 20, sub: 12.5, noLabel: 15, no: 28, date: 12, cust: 12.5,
-             th: 12.5, td: 12, note: 11, sum: 13, thanks: 15 },
-    feedMm: 3,           // مساحة السحب بعد آخر سطر (كانت 8 مم)
-
+    widthMm: 72,         // عرض قالب الفاتورة (72 يناسب طابعات 80مم)
     autoAfterSale: true, // طباعة تلقائية بعد كل عملية بيع (كاشير + مطبخ)
-    kitchenCopy: true,   // إرسال نسخة للمطبخ تلقائياً (عبر QZ فقط — انظر thermal.js)
-
+    kitchenCopy: true,   // إرسال نسخة للمطبخ تلقائياً
     // ── أمان QZ Tray ──
     // qzCert: الشهادة العامة فقط (Public Certificate) — آمن وضعه هنا
     qzCert: `-----BEGIN CERTIFICATE-----
@@ -104,15 +43,13 @@ gYV/klMzloxkWCwXHu4ChtusgR4AHoMTsBQBraBsvS4wjJAEu2UprdW5bk4Eo4gg
 +5bzw7NmC6A1yGReQYw0IifADMwNGXEnkEpcBjleol16/pK7Rnb/HaStDslxx27m
 ct0NdzgIQRWJFfJ77QECqub1eU4S
 -----END CERTIFICATE-----`,
-
     // qzSecret: سر مشترك يُرسَل لـ Netlify Function sign.js للتحقق من المُرسِل
-    //   ضع نفس القيمة في متغير بيئة Netlify: QZ_SIGN_SECRET
+    //   نفس القيمة لازم موجودة بمتغير بيئة Netlify باسم QZ_SIGN_SECRET
     //   تحذير: هذا ليس سراً حقيقياً (مرئي بالمتصفح) — هو حاجز بسيط فقط
     //   الحماية الحقيقية = المفتاح الخاص على Netlify (QZ_PRIVATE_KEY)
-    qzSecret: '', // ← ضع نفس القيمة يلي حطيتها بمتغير QZ_SIGN_SECRET على Netlify
+    qzSecret: 'b3c243502f040dd24503dc190ca9132a3c290a4caed4b2ce925e53d70beeadd4', // ← لازم نفس القيمة بالضبط بمتغير QZ_SIGN_SECRET على Netlify
   },
 };
-
 /* هوية المطعم — تُحرر من الإعدادات وتُطبق هنا على كل الشاشات والإيصالات */
 try {
   const __b = JSON.parse(localStorage.getItem('alfaprosys_branding') || 'null');
@@ -122,47 +59,3 @@ try {
   }
   if (__b) window.ALFA_CONFIG.branding = __b;
 } catch (e) {}
-
-
-// ── نظام الحماية والصلاحيات ──
-(function() {
-  const role = sessionStorage.getItem('alfaprosys_role');
-  const path = window.location.pathname.split('/').pop() || 'index.html';
-
-  // إذا كنا في شاشة الدخول (index.html) والمستخدم مسجل دخوله بالفعل
-  if (path === 'index.html' || path === '') {
-    if (role === 'manager') {
-      window.location.replace('dashboard.html');
-    } else if (role === 'cashier') {
-      window.location.replace('pos.html');
-    }
-    return;
-  }
-
-  // إذا لم يكن مسجل دخوله، يطرد إلى شاشة الدخول
-  if (!role) {
-    window.location.replace('index.html');
-    return;
-  }
-
-  // الصفحات المسموحة للكاشير
-  const cashierAllowed = [
-    'pos.html',
-    'invoices.html',
-    'cashier_session.html',
-    'kitchen.html',
-    'queue.html',
-    'tables.html',
-    'online_orders.html',
-    'delivery.html',
-    'edit_invoice.html'
-  ];
-
-  // التحقق من الصلاحيات
-  if (role === 'cashier') {
-    if (!cashierAllowed.includes(path)) {
-      alert('ليس لديك صلاحية للوصول إلى هذه الشاشة');
-      window.location.replace('pos.html');
-    }
-  }
-})();
