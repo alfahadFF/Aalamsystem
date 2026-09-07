@@ -29,11 +29,20 @@ exports.handler = async (event) => {
     return { statusCode: 405, body: 'Method Not Allowed' };
   }
 
-  /* 2. تحقق من السر المشترك (اختياري — يُفعَّل بوجود QZ_SIGN_SECRET) */
-  const expected = process.env.QZ_SIGN_SECRET;
-  if (expected && event.headers['x-qz-secret'] !== expected) {
-    return { statusCode: 401, body: JSON.stringify({ error: 'unauthorized' }) };
-  }
+  /* 2. فحص السر المشترك — معطَّل مؤقتاً (2026-09-08)
+     السبب: qzSecret كان فارغاً في config.js بينما QZ_SIGN_SECRET مضبوط على
+     Netlify، فكانت كل طباعة QZ تفشل بـ 401 unauthorized، ويسقط النظام إلى
+     حوار طباعة المتصفح (سحب ورق زائد + أخطاء كونسول عند كل بيع).
+
+     لإعادة التفعيل لاحقاً:
+       1) ضع نفس قيمة QZ_SIGN_SECRET في config.js ← thermal.qzSecret
+       2) أعد الفحص في أول الدالة:
+          const expected = process.env.QZ_SIGN_SECRET;
+          if (expected && event.headers['x-qz-secret'] !== expected) {
+            return { statusCode: 401, body: JSON.stringify({ error: 'unauthorized' }) };
+          }
+     ملاحظة: الحماية الحقيقية تبقى المفتاح الخاص QZ_PRIVATE_KEY — لا يغادر
+     السيرفر أبداً، والشهادة العامة وحدها في config.js. */
 
   /* 3. المفتاح الخاص */
   const privateKey = process.env.QZ_PRIVATE_KEY;
