@@ -131,6 +131,31 @@ window.MenuSync = (function () {
   const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   function isUuid(id) { return UUID.test(String(id || '')); }
 
+  /* ────────────────────────────────────────────────────────────
+     baseName — الاسم الأساسي للصنف (محتوى العمود name في السحابة)
+
+     محلياً:  it.name = «الاسم + الصيغة» (مؤلَّف في fromRemote)
+     سحابياً:  العمود name = الاسم وحده، والعمود variant = الصيغة
+
+     لذلك عند الدفع نحو السحابة يجب تجريد الاسم من الصيغة، وإلا
+     تكرّر الاسم عند كل سحب («برغر سندويش عادي سندويش عادي»).
+     ──────────────────────────────────────────────────────────── */
+  function baseName(it) {
+    const full = String((it && it.name) || '').trim();
+    if (!full) return '';
+    const raw = String((it && (it.variant_clean || it.variant)) || '').trim();
+    if (!raw) return full;
+    const cands = [raw, raw.replace(/\s*-\s*/g, ' '), raw.replace(/\s+/g, ' ')];
+    for (let k = 0; k < cands.length; k++) {
+      const v = String(cands[k] || '').trim();
+      if (v && full.length > v.length && full.slice(-v.length) === v) {
+        return full.slice(0, full.length - v.length).trim();
+      }
+    }
+    return full;
+  }
+  window.AlfaItemBase = baseName;
+
   function fromRemote(i, cats) {
     const cid = i.category_id != null ? String(i.category_id) : '';
     const cat = (cats || []).find(function (c) { return String(c.id) === cid; });
@@ -140,6 +165,8 @@ window.MenuSync = (function () {
       id: String(i.id),
       category_id: cid,
       category_name: cat ? cat.name : '',
+      /* الاسم كما في العمود name — يُستخدم لتسمية زر البيع وللدفع بلا تكرار */
+      base_name: base,
       family: i.family || base,
       option_name: i.option_name || base,
       variant: variant || null,
@@ -166,13 +193,25 @@ window.MenuSync = (function () {
     if (!isUuid(it.id) || !isUuid(it.category_id)) return null;
     const family = String(it.family || it.option_name || '').trim();
     const variant = String(it.variant || it.variant_clean || '').trim();
+
+    /* ── إصلاح: العمود name يجب أن يحمل اسم الصنف نفسه، لا اسم «الصنف الأب».
+       سابقاً كانت تُكتب family فوق الاسم فيضيع الاسم الذي أدخله المستخدم
+       (مثال: كُتب «برغر» بدل «كريسبي برغر»). ── */
+    const base = String(it.base_name || baseName(it) || it.name || family || '').trim();
+
+    /* ── إصلاح: option_name كان يتجمّد على اسم التصنيف الرئيسي عندما يُترك
+       حقل «التصنيف الفرعي» فارغاً عند الإنشاء. نُصحّحه هنا تلقائياً. ── */
+    const catName = String(it.category_name || '').trim();
+    const optRaw  = String(it.option_name || '').trim();
+    const optName = (!optRaw || optRaw === catName) ? (family || base) : optRaw;
+
     return {
       id: it.id,
       category_id: it.category_id,
-      name: family || it.name || '',
+      name: base,
       variant: variant || null,
       family: family || null,
-      option_name: it.option_name || family || null,
+      option_name: optName || null,
       variant_clean: it.variant_clean || variant || null,
       category_name: it.category_name || null,
       barcode: it.barcode || null,
@@ -198,7 +237,7 @@ window.MenuSync = (function () {
     }
     return Promise.all([
       sb.get('categories', '?select=id,name,icon,sort_order,is_active&order=sort_order.asc'),
-      sb.get('items', '?select=id,category_id,name,price,cost_mode,cost_manual,is_available,sort_order,order_count,is_pinned_popular,image_url,variant,price_new,price_usd,discount_pct&order=sort_order.asc'),
+      sb.get('items', '?select=id,category_id,name,price,cost_mode,cost_manual,is_available,sort_order,order_count,is_pinned_popular,image_url,variant,variant_clean,family,option_name,barcode,category_name,price_new,price_usd,discount_pct,online_discount_pct&order=sort_order.asc'),
     ]).then(function (pair) {
       const cats = pair[0] || [];
       const remote = pair[1] || [];
