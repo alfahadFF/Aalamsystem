@@ -2,14 +2,22 @@
    sw.js — Service Worker: العمل دون اتصال (Offline-first)
    - تثبيت: تخزين مسبق لكل ملفات التطبيق.
    - تصفح (HTML): شبكة أولًا ثم الكاش (لتلقي التحديثات، ويعمل أوفلاين).
-   - أصول (js/css/أيقونات): كاش أولًا ثم شبكة.
+   - ملفات الإعداد الحساسة (config.js): شبكة أولًا دائماً — لا يجوز
+     تجميدها بالكاش، لأنها تحمل مفاتيح/إعدادات تتغيّر بدون نشر كامل.
+   - أصول أخرى (js/css/أيقونات): كاش أولًا ثم شبكة.
    - خطوط خارجية: كاش أولًا بعد أول تحميل (تعمل أوفلاين لاحقًا).
    ============================================================ */
-const VERSION = 'alfaprosys-v63';
+const VERSION = 'alfaprosys-v29';
+
+/* ملفات تُجلب دائماً من الشبكة أولاً (لا كاش-أولاً أبداً)
+   أضف هنا أي ملف إعدادات حسّاس مستقبلاً بنفس الطريقة */
+const NETWORK_FIRST_ASSETS = [
+  'assets/js/config.js',
+];
 
 const CORE = [
   'manifest.webmanifest',
-  'assets/icon/logo.png',
+  'assets/icons/logo.png',
   // الصفحات — كاملة
   'index.html','pos.html','dashboard.html','sales.html','invoices.html',
   'open_invoices.html','edit_invoice.html','reports.html','menu_admin.html',
@@ -19,7 +27,7 @@ const CORE = [
   'audit_log.html','delivery.html','owner_shield.html','settings.html',
   'suppliers.html','track.html',
   // السكربتات المشتركة
-  'assets/js/config.js','assets/js/utils.js','assets/js/data.js','assets/js/db.js','assets/js/stock.js','assets/js/app.js',
+  'assets/js/config.js','assets/js/utils.js','assets/js/data.js','assets/js/app.js',
   'assets/js/nav.js','assets/js/notify.js','assets/js/alerts.js','assets/js/thermal.js',
   'assets/js/sync/storage.js','assets/js/sync/queue.js','assets/js/sync/remote.js',
   // السكربتات — كل صفحة
@@ -65,8 +73,6 @@ self.addEventListener('fetch', (event) => {
 
   const url = new URL(req.url);
 
-  if (url.pathname.indexOf('/rest/v1/') === 0) return;
-
   // تصفح الصفحات: شبكة أولًا ثم الكاش (يعمل أوفلاين)
   if (req.mode === 'navigate') {
     event.respondWith(
@@ -75,8 +81,21 @@ self.addEventListener('fetch', (event) => {
         caches.open(VERSION).then((c) => c.put(req, copy));
         return res;
       }).catch(() =>
-        caches.match(req, { ignoreSearch: true }).then((hit) => hit || caches.match('index.html'))
+        caches.match(req).then((hit) => hit || caches.match('index.html'))
       )
+    );
+    return;
+  }
+
+  // ملفات إعداد حساسة: شبكة أولًا دائماً (config.js وما شابهه)
+  if (url.origin === self.location.origin &&
+      NETWORK_FIRST_ASSETS.some((p) => url.pathname.endsWith('/' + p) || url.pathname.endsWith(p))) {
+    event.respondWith(
+      fetch(req).then((res) => {
+        const copy = res.clone();
+        caches.open(VERSION).then((c) => c.put(req, copy));
+        return res;
+      }).catch(() => caches.match(req))
     );
     return;
   }
@@ -114,8 +133,8 @@ self.addEventListener('push', function (event) {
   try { data = event.data ? event.data.json() : {}; } catch (e) { data = { body: event.data && event.data.text() }; }
   event.waitUntil(self.registration.showNotification(data.title || '🔔 alfaprosys', {
     body: data.body || '',
-    icon: 'assets/icon/logo.png',
-    badge: 'assets/icon/logo.png',
+    icon: 'assets/icons/icon.svg',
+    badge: 'assets/icons/icon.svg',
     tag: data.tag || 'alfa-push',
     data: { url: data.url || 'dashboard.html' },
     vibrate: [180, 90, 180],
