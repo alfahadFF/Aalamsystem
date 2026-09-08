@@ -29,7 +29,7 @@
 
   /* أحجام السندويشات (غرام) + قواعد الأصناف من config.js */
   function sizes() {
-    return Object.assign({ "خرطوشة": 50, "صغير": 60, "وسط": 80, "كبير": 110 }, stockCfg().sizes || {});
+    return Object.assign({ "خرطوشة": 50, "صغير": 60, "وسط": 80, "كبير": 120 }, stockCfg().sizes || {});
   }
   /* عدد السندويشات من اسم التشكيلة: «صحن - 3سندويشات» ⇒ 3 ، «سندويشتين» ⇒ 2 */
   function variantCount(v) {
