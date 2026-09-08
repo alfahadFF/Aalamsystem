@@ -164,6 +164,20 @@
   function isActive() { return state === 'connected' && window.qz && qz.websocket.isActive(); }
 
   function esc(v) { return String(v ?? '').replace(/[&<>"]/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[ch])); }
+
+  /* حذف كلمة «سندويش» بكل صيغها من أسماء الأصناف في الفاتورة (طلب صاحب المطعم):
+     بطاطا سندويشة عادي ← بطاطا عادي · شاورما سندويش كبير ← شاورما كبير
+     صحن سندويشتين ← صحن 2 · صحن 3سندويشات ← صحن 3 · صحن 4 سندويشات ← صحن 4 */
+  function cleanItemName(n) {
+    return String(n ?? '')
+      .split(/\s+/)
+      .map(w => w === 'سندويشتين' ? '2'
+        : w.replace(/سندويشات$/, '').replace(/سندويشة$/, '').replace(/سندويش$/, ''))
+      .filter(Boolean)
+      .join(' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
   function fmtN(n) { return Number(n || 0).toLocaleString('en-US'); }
 
   /* تسمية نوع الطلب كما تُخزَّن في الفاتورة (dinein/takeaway/delivery/contract/أونلاين) */
@@ -205,9 +219,10 @@
     const cust = [inv.customer_name, inv.phone, inv.customer_address].filter(Boolean).join(' ')
       + (inv.type === 'delivery' ? ' خارجي' : '');
 
-    /* خلايا بحدود كاملة كالصورة */
-    const TD = `border:1px solid #000;padding:1.5px 1px;font-size:${F.td}px;line-height:1.2;font-weight:bold;`;
-    const TH = `border:1px solid #000;padding:1.5px 1px;font-size:${F.th}px;line-height:1.2;font-weight:900;`;
+    /* خلايا بحدود كاملة كالصورة + التفاف النص داخل الخلايا حتى لا تتمدد
+       الأسماء والملاحظات الطويلة خارج الجدول */
+    const TD = `border:1px solid #000;padding:1.5px 1px;font-size:${F.td}px;line-height:1.2;font-weight:bold;overflow-wrap:break-word;word-break:break-word;`;
+    const TH = `border:1px solid #000;padding:1.5px 1px;font-size:${F.th}px;line-height:1.2;font-weight:900;overflow-wrap:break-word;word-break:break-word;`;
 
     /* الملاحظات: القصيرة (≤10 محارف) داخل عمودها كالصورة؛ والطويلة
        سطراً مستقلاً بعرض الجدول حتى لا تلتفّ في عمود ضيق وتمدّ الإيصال */
@@ -215,7 +230,7 @@
       const note = String(it.note || '').trim();
       const inline = note.length <= 10 ? note : '';
       let h = `<tr>
-          <td style="${TD}text-align:right;">${it.offer_id ? '🎟️ ' : ''}${it.is_free ? '🎁 ' : ''}${esc(it.name)}</td>
+          <td style="${TD}text-align:right;">${it.offer_id ? '🎟️ ' : ''}${it.is_free ? '🎁 ' : ''}${esc(cleanItemName(it.name))}</td>
           <td style="${TD}text-align:center;">${(Number(it.qty) || 1).toFixed(2)}</td>
           <td style="${TD}text-align:center;">${fmtN(it.price)}</td>
           <td style="${TD}text-align:center;">${fmtN((Number(it.price) || 0) * (Number(it.qty) || 1))}</td>
@@ -236,16 +251,17 @@
 
     return `
       <div style="display:flow-root;${MINH() && !opts.kitchen ? `min-height:${MINH()}mm;` : ''}width:${w}mm;max-width:${w}mm;min-width:${w}mm;margin:0 auto;padding:0;font-family:Tahoma,Arial,sans-serif;color:#000;direction:rtl;text-align:right;box-sizing:border-box;line-height:1.25;background:#fff;">
-        <div style="font-size:${F.title}px;font-weight:900;text-align:center;margin:1mm 0 0.8mm;">${esc(RESTAURANT())}</div>
-        ${subLine ? `<div style="font-size:${F.sub}px;font-weight:bold;text-align:center;margin-bottom:1.2mm;">${esc(subLine)}</div>` : ''}
+        /* الترويسة (~7سم): الأسطر موزعة بتساوٍ عبر عمود مرن —
+           الاسم · الاسم والهاتف · رقم الطلب كبير + نوع الطلب · التاريخ والوقت · الزبون */
+        <div style="min-height:64mm;display:flex;flex-direction:column;justify-content:space-evenly;margin:1mm 0 2mm;">
+          <div style="font-size:${F.title}px;font-weight:900;text-align:center;">${esc(RESTAURANT())}</div>
+          ${subLine ? `<div style="font-size:${F.sub}px;font-weight:bold;text-align:center;">${esc(subLine)}</div>` : ''}
+          <div style="font-size:${F.noLabel}px;font-weight:900;text-align:center;">رقم الطلب: <span style="font-size:${F.no}px;line-height:1.1;">${esc(no)}</span> — ${esc(typeLabel(inv))}</div>
+          <div style="font-size:${F.date}px;font-weight:bold;text-align:center;">تاريخ الطلب: ${esc(inv.date || '')} ${esc(inv.time || '')}</div>
+          ${cust ? `<div style="font-size:${F.cust}px;font-weight:bold;text-align:center;">${esc(cust)}</div>` : ''}
+        </div>
 
-        <div style="font-size:${F.noLabel}px;font-weight:900;text-align:center;margin-bottom:0.8mm;">رقم الطلب: <span style="font-size:${F.no}px;line-height:1.1;">${esc(no)}</span></div>
-
-        <div style="font-size:${F.date}px;font-weight:bold;text-align:center;margin-bottom:0.8mm;">تاريخ الطلب: ${esc(inv.date || '')} ${esc(inv.time || '')}</div>
-
-        ${cust ? `<div style="font-size:${F.cust}px;font-weight:bold;text-align:center;margin-bottom:1.2mm;">${esc(cust)}</div>` : ''}
-
-        <table style="width:100%;border-collapse:collapse;border:1px solid #000;margin-bottom:1.5mm;table-layout:fixed;">
+        <table style="width:100%;border-collapse:collapse;border:1px solid #000;margin-bottom:10mm;table-layout:fixed;">
           <thead><tr>${headCols}</tr></thead>
           <tbody>${rows}</tbody>
         </table>
@@ -365,8 +381,21 @@
     const html = receiptHtml(inv, opts);
     if (isActive()) {
       try {
-        /* size.width = عرض الورق الفيزيائي؛ القالب نفسه عرضه widthMm ويتمركز داخله */
-        const printOptions = { size: { width: PAPER() }, units: 'mm', margins: 0, rasterize: false, colorType: 'monochrome' };
+        /* size.width = عرض الورق الفيزيائي؛ القالب نفسه عرضه widthMm ويتمركز داخله.
+           size.height = الطول المقيس فعلياً (يشمل الطول الأدنى minHeightMm):
+           بدونه كانت QZ تطبع طول المحتوى المرئي فقط فتُقصّ الفواتير القصيرة
+           قبل الطول الثابت. +3مم هامش أمان لفروق عرض الخطوط بين المتصفح وQZ. */
+        let size = { width: PAPER() };
+        try {
+          const c = ensureContainer();
+          c.innerHTML = html;
+          const el = c.firstElementChild;
+          if (el) {
+            const mm = el.getBoundingClientRect().height * 25.4 / 96;
+            if (mm > 10) size.height = Math.ceil(mm) + 3;
+          }
+        } catch (e) { console.warn('[ThermalPrint] تعذر قياس الطول — طباعة بطول تلقائي:', e); }
+        const printOptions = { size, units: 'mm', margins: 0, rasterize: false, colorType: 'monochrome' };
         const data = [{ type: 'pixel', format: 'html', flavor: 'plain', data: html }];
         const config = qz.configs.create(opts.kitchen ? PRINTER_KITCHEN() : PRINTER_CASHIER(), printOptions);
         await qz.print(config, data);
