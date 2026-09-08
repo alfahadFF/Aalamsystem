@@ -101,8 +101,8 @@ window.ALFA_CONFIG = {
        title اسم المطعم · sub العنوان/الهاتف · noLabel «رقم الطلب:» · no الرقم
        date سطر التاريخ · cust سطر الزبون · th رؤوس الأعمدة · td خلايا الجدول
        note الملاحظات · sum المجاميع · thanks سطر الشكر */
-    fonts: { title: 20, sub: 11.5, noLabel: 14, no: 26, date: 11, cust: 11.5,
-             th: 10.5, td: 10.5, note: 10, sum: 11.5, thanks: 13 },
+    fonts: { title: 20, sub: 14, noLabel: 14, no: 26, date: 14, cust: 12.5,
+             th: 9.5, td: 12, note: 11, sum: 12.5, thanks: 16 },
     feedMm: 3,           // مساحة السحب بعد آخر سطر (كانت 8 مم)
 
     autoAfterSale: true, // طباعة تلقائية بعد كل عملية بيع (كاشير + مطبخ)

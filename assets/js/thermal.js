@@ -163,6 +163,15 @@
 
   function isActive() { return state === 'connected' && window.qz && qz.websocket.isActive(); }
 
+  /* الوقت بنظام 12 ساعة كالفاتورة المعتمدة: 14:32 ← 2:32 PM */
+  function to12h(t) {
+    const m = String(t || '').trim().match(/^(\d{1,2}):(\d{2})/);
+    if (!m) return String(t || '');
+    let h = +m[1]; const ap = h >= 12 ? 'PM' : 'AM';
+    h = h % 12 || 12;
+    return h + ':' + m[2] + ' ' + ap;
+  }
+
   function esc(v) { return String(v ?? '').replace(/[&<>"]/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[ch])); }
 
   /* حذف كلمة «سندويش» بكل صيغها من أسماء الأصناف في الفاتورة (طلب صاحب المطعم):
@@ -204,7 +213,9 @@
   function receiptHtml(inv, opts = {}) {
     const w = WIDTH();
     const F = FONTS();
-    const no = window.invoiceNo ? window.invoiceNo(inv) : String(inv.no != null ? inv.no : (inv.id || ''));
+    /* رقم الفاتورة بلا أصفار بادئة (طلب صاحب المطعم): 001 ← 1 */
+    const no = String(window.invoiceNo ? window.invoiceNo(inv) : (inv.no != null ? inv.no : (inv.id || '')))
+      .replace(/^0+(?=\d)/, '');
     const items = inv.items || [];
     const sub = items.reduce((s, x) => s + (Number(x.price) || 0) * (Number(x.qty) || 0), 0);
     const disc = Number(inv.discount) || 0;
@@ -221,8 +232,11 @@
 
     /* خلايا بحدود كاملة كالصورة + التفاف النص داخل الخلايا حتى لا تتمدد
        الأسماء والملاحظات الطويلة خارج الجدول */
-    const TD = `border:1px solid #000;padding:1.5px 1px;font-size:${F.td}px;line-height:1.2;font-weight:bold;overflow-wrap:break-word;word-break:break-word;`;
-    const TH = `border:1px solid #000;padding:1.5px 1px;font-size:${F.th}px;line-height:1.2;font-weight:900;overflow-wrap:break-word;word-break:break-word;`;
+    /* التفاف النص: الخواص الثلاث معاً — القديمة (word-wrap) لمحرك QZ/JavaFX
+       القديم الذي لا يعرف overflow-wrap الحديثة، وwhite-space:normal صراحةً */
+    const WRAP = 'white-space:normal;word-wrap:break-word;word-break:break-word;overflow-wrap:break-word;';
+    const TD = `border:1px solid #000;padding:1.5px 1px;font-size:${F.td}px;line-height:1.2;font-weight:bold;${WRAP}`;
+    const TH = `border:1px solid #000;padding:1.5px 1px;font-size:${F.th}px;line-height:1.2;font-weight:900;${WRAP}`;
 
     /* عمود الملاحظات موجود في النسختين — كاشير ومطبخ بنفس الشكل تماماً */
     const rows = items.map(it => {
@@ -241,11 +255,13 @@
 
     /* رؤوس الأعمدة: خط أصغر وخط فاصل أسفلها أثقل لشكل أنظف — 5 أعمدة دائماً */
     const HB = 'border-bottom:2px solid #000;';
-    const headCols = `<th style="${TH}${HB}text-align:center;width:38%;">اسم المادة</th>
-         <th style="${TH}${HB}text-align:center;width:12%;">الكمية</th>
-         <th style="${TH}${HB}text-align:center;width:19%;">السعر</th>
-         <th style="${TH}${HB}text-align:center;width:20%;">إجمالي</th>
-         <th style="${TH}${HB}text-align:center;width:11%;">ملاحظات</th>`;
+    /* عروض الأعمدة مقيسة من فاتورة العميل نفسها (مواضع الأرقام): اسم المادة ≈
+       الإجمالي ≈ الملاحظات ≈ 22.7% لكل منها، الكمية 15%، السعر 17% */
+    const headCols = `<th style="${TH}${HB}text-align:center;width:22%;">اسم المادة</th>
+         <th style="${TH}${HB}text-align:center;width:15%;">الكمية</th>
+         <th style="${TH}${HB}text-align:center;width:18%;">السعر</th>
+         <th style="${TH}${HB}text-align:center;width:22.5%;">إجمالي</th>
+         <th style="${TH}${HB}text-align:center;width:22.5%;">ملاحظات</th>`;
 
     /* الترويسة (~7سم): الأسطر موزعة بتساوٍ عبر عمود مرن —
        الاسم · الاسم والهاتف · رقم الطلب كبير + نوع الطلب · التاريخ والوقت · الزبون */
@@ -257,7 +273,7 @@
           <div style="font-size:${F.title}px;font-weight:900;text-align:center;">${esc(RESTAURANT())}</div>
           ${subLine ? `<div style="font-size:${F.sub}px;font-weight:bold;text-align:center;">${esc(subLine)}</div>` : ''}
           <div style="font-size:${F.noLabel}px;font-weight:900;text-align:center;">رقم الطلب: <span style="font-size:${F.no}px;line-height:1.1;">${esc(no)}</span> — ${esc(typeLabel(inv))}</div>
-          <div style="font-size:${F.date}px;font-weight:bold;text-align:center;">تاريخ الطلب: ${esc(inv.date || '')} ${esc(inv.time || '')}</div>
+          <div style="font-size:${F.date}px;font-weight:bold;text-align:center;">تاريخ الطلب: ${esc(inv.date || '')} ${esc(to12h(inv.time))}</div>
           ${cust ? `<div style="font-size:${F.cust}px;font-weight:bold;text-align:center;">${esc(cust)}</div>` : ''}
         </div>
 
@@ -301,7 +317,8 @@
      ⇒ صفحة واحدة بطول الفاتورة تماماً. */
   function ensurePrintCss(heightMm) {
     const w = WIDTH(), paper = PAPER();
-    const sizeCss = heightMm ? `size: ${paper}mm ${heightMm}mm;` : `size: ${paper}mm;`;
+    /* حجم الطباعة حصراً 72مم — الورق الفيزيائي 79.2مم والباقي هامش */
+    const sizeCss = heightMm ? `size: ${w}mm ${heightMm}mm;` : `size: ${w}mm;`;
     let st = document.getElementById('thermal-print-css');
     if (!st) { st = document.createElement('style'); st.id = 'thermal-print-css'; document.head.appendChild(st); }
     st.textContent = `
@@ -310,7 +327,7 @@
 @media print {
   html.printing-receipt,
   html.printing-receipt body {
-    width: ${paper}mm !important; max-width: ${paper}mm !important;
+    width: ${w}mm !important; max-width: ${w}mm !important;
     margin: 0 !important; padding: 0 !important; background: #fff !important;
     height: auto !important; min-height: 0 !important; overflow: visible !important;
   }
@@ -385,7 +402,7 @@
            size.height = الطول المقيس فعلياً (يشمل الطول الأدنى minHeightMm):
            بدونه كانت QZ تطبع طول المحتوى المرئي فقط فتُقصّ الفواتير القصيرة
            قبل الطول الثابت. +3مم هامش أمان لفروق عرض الخطوط بين المتصفح وQZ. */
-        let size = { width: PAPER() };
+        let size = { width: WIDTH() };  // عرض الطباعة 72مم حصراً على ورق 79.2مم
         try {
           const c = ensureContainer();
           c.innerHTML = html;
