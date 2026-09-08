@@ -139,8 +139,14 @@
     try {
       setState('connecting');
       if (!window.qz) {
-        // محلي (أوفلاين) — نفس النسخة التي كانت على CDN، مضمنة في المشروع
-        await loadScript('assets/js/qz-tray.min.js');
+        // محلي أولاً (أوفلاين) — نفس نسخة CDN مضمّنة في المشروع.
+        // لو غاب الملف عن السيرفر نرجع للـCDN كي لا تتعطل الطباعة الإلكترونية
+        try {
+          await loadScript('assets/js/qz-tray.min.js');
+        } catch (e) {
+          console.warn('[ThermalPrint] المكتبة المحلية غير متوفرة — نستخدم CDN:', e.message);
+          await loadScript('https://cdn.jsdelivr.net/npm/qz-tray@2.2.6/qz-tray.min.js');
+        }
       }
       setupSecurity();
       if (!qz.websocket.isActive()) await qz.websocket.connect(force === true ? { retries: 3, delay: 2 } : { retries: 1, delay: 1 });
