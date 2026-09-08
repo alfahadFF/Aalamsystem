@@ -3751,7 +3751,7 @@ select.cust-field-input { cursor: pointer; }
 #printable-receipt {
   position: fixed; top: 0; left: -100000px;
   visibility: hidden; pointer-events: none;
-  width: 79.2mm; overflow: hidden;
+  width: 72mm; overflow: hidden;   /* عرض الطباعة الفعلي */
 }
 
 /* ── حقل الباركود في ترويسة شاشة البيع ── */
