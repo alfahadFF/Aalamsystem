@@ -25,10 +25,14 @@
   const FEED = () => Number(CFG().feedMm) || 3;
   const RESTAURANT = () => CFG().restaurantName || 'alfaprosys';
 
-  /* ── الشهادة العامة فقط — تُوضع في config.js أو متغير بيئة
-     المفتاح الخاص لا يُوضع هنا أبداً — التوقيع يتم سيرفرياً
-     عبر netlify/functions/sign.js ── */
+  /* ── الشهادة العامة فقط — تُوضع في config.js
+     المفتاح الخاص لا يُوضع في الموقع أبداً. خياران للتوقيع:
+     1) محلي (أوفلاين): يُدخَل المفتاح الخاص مرة واحدة لكل جهاز عبر
+        صفحة qz-key.html ويُحفظ في localStorage — التوقيع يتم بالمتصفح.
+     2) سيرفري: عبر netlify/functions/sign.js إن لم يوجد مفتاح محلي ── */
   const CERT = () => (window.ALFA_CONFIG && window.ALFA_CONFIG.thermal && window.ALFA_CONFIG.thermal.qzCert) || '';
+  const KEY_STORE = 'alfaprosys_qz_private_key';
+  const localKeyPem = () => { try { return (localStorage.getItem(KEY_STORE) || '').trim(); } catch (e) { return ''; } };
 
   let state = 'idle'; // idle | connecting | connected | offline
   const handlers = [];
@@ -44,7 +48,8 @@
     });
   }
 
-  /* التوقيع سيرفرياً عبر Netlify Function — المفتاح الخاص لا يغادر السيرفر */
+  /* التوقيع سيرفرياً عبر Netlify Function — المفتاح الخاص لا يغادر السيرفر
+     (احتياط عند غياب المفتاح المحلي، ويحتاج إنترنت) */
   async function serverSign(toSign) {
     const secret = window.ALFA_CONFIG && window.ALFA_CONFIG.thermal && window.ALFA_CONFIG.thermal.qzSecret;
     const headers = { 'Content-Type': 'application/json' };
@@ -62,6 +67,51 @@
     return signature;
   }
 
+  /* ── التوقيع محلياً بلا إنترنت (WebCrypto) ──
+     نفس ما تفعله دالة Netlify تماماً: RSA-SHA512 فوق النص المُمرَّر،
+     لكن داخل متصفح الجهاز. المفتاح الخاص يُقرأ من localStorage
+     (أُدخِل عبر qz-key.html) ولا يغادر الجهاز أبداً. */
+  function b64ToBuf(b64) {
+    const bin = atob(b64.replace(/\s+/g, ''));
+    const buf = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) buf[i] = bin.charCodeAt(i);
+    return buf;
+  }
+  function bufToB64(buf) {
+    let s = '';
+    const u = new Uint8Array(buf);
+    for (let i = 0; i < u.length; i += 0x8000) s += String.fromCharCode.apply(null, u.subarray(i, i + 0x8000));
+    return btoa(s);
+  }
+  /* PKCS#1 (BEGIN RSA PRIVATE KEY) → PKCS#8: WebCrypto لا يستورد PKCS#1 مباشرة */
+  function derLen(n) {
+    if (n < 128) return [n];
+    if (n < 256) return [0x81, n];
+    return [0x82, (n >> 8) & 0xff, n & 0xff]; // مفاتيح 2048-بت وأكبر (~1190+ بايت)
+  }
+  function pkcs1ToPkcs8(der) {
+    const alg = [0x30, 0x0d, 0x06, 0x09, 0x2a, 0x86, 0x48, 0x86, 0xf7,
+                 0x0d, 0x01, 0x01, 0x01, 0x05, 0x00]; // SEQ{OID rsaEncryption, NULL}
+    const inner = [0x02, 0x01, 0x00, ...alg, 0x04, ...derLen(der.length), ...der];
+    return new Uint8Array([0x30, ...derLen(inner.length), ...inner]);
+  }
+  async function importLocalKey(pem) {
+    const m = pem.match(/-----BEGIN ([A-Z ]+)-----([^-]+)-----END \1-----/);
+    if (!m) throw new Error('صيغة PEM غير مفهومة');
+    let der = b64ToBuf(m[2]);
+    if (m[1] === 'RSA PRIVATE KEY') der = pkcs1ToPkcs8(der); // PKCS#1 → PKCS#8
+    else if (m[1] !== 'PRIVATE KEY') throw new Error('هذا ليس مفتاحاً خاصاً (وجدنا: ' + m[1] + ')');
+    return crypto.subtle.importKey('pkcs8', der,
+      { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-512' }, false, ['sign']);
+  }
+  async function localSign(toSign) {
+    const pem = localKeyPem();
+    if (!pem) throw new Error('لا يوجد مفتاح محلي');
+    const key = await importLocalKey(pem);
+    const sig = await crypto.subtle.sign('RSASSA-PKCS1-v1_5', key, new TextEncoder().encode(toSign));
+    return bufToB64(sig);
+  }
+
   function setupSecurity() {
     const cert = CERT();
     if (!cert) {
@@ -69,9 +119,9 @@
     }
     qz.security.setCertificatePromise(resolve => resolve(cert));
     qz.security.setSignatureAlgorithm('SHA512');
-    /* التوقيع يُرسَل لـ Netlify Function ولا يتم محلياً أبداً */
+    /* الأولوية للتوقيع المحلي (أوفلاين)، وإلا فسيرفري عبر Netlify */
     qz.security.setSignaturePromise(toSign => (resolve, reject) => {
-      serverSign(toSign).then(resolve).catch(reject);
+      (localKeyPem() ? localSign(toSign) : serverSign(toSign)).then(resolve).catch(reject);
     });
   }
 
@@ -89,8 +139,8 @@
     try {
       setState('connecting');
       if (!window.qz) {
-        // jsrsasign لم تعد مطلوبة (التوقيع سيرفري) — نحمّل qz-tray فقط
-        await loadScript('https://cdn.jsdelivr.net/npm/qz-tray@2.2.6/qz-tray.min.js');
+        // محلي (أوفلاين) — نفس النسخة التي كانت على CDN، مضمنة في المشروع
+        await loadScript('assets/js/qz-tray.min.js');
       }
       setupSecurity();
       if (!qz.websocket.isActive()) await qz.websocket.connect(force === true ? { retries: 3, delay: 2 } : { retries: 1, delay: 1 });
@@ -353,5 +403,8 @@
     state: () => state,
     printers: () => ({ cashier: PRINTER_CASHIER(), kitchen: PRINTER_KITCHEN(), widthMm: WIDTH(), paperWidthMm: PAPER(), fonts: FONTS(), feedMm: FEED() }),
     sizes: () => ({ contentMm: WIDTH(), paperMm: PAPER(), feedMm: FEED() }),
+    /* التوقيع المحلي (أوفلاين) — تستخدمه صفحة qz-key.html للاختبار */
+    hasLocalKey: () => !!localKeyPem(),
+    localSign,
   };
 })();
