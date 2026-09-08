@@ -224,8 +224,7 @@
     const TD = `border:1px solid #000;padding:1.5px 1px;font-size:${F.td}px;line-height:1.2;font-weight:bold;overflow-wrap:break-word;word-break:break-word;`;
     const TH = `border:1px solid #000;padding:1.5px 1px;font-size:${F.th}px;line-height:1.2;font-weight:900;overflow-wrap:break-word;word-break:break-word;`;
 
-    /* الملاحظات: القصيرة (≤10 محارف) داخل عمودها كالصورة؛ والطويلة
-       سطراً مستقلاً بعرض الجدول حتى لا تلتفّ في عمود ضيق وتمدّ الإيصال */
+    /* عمود الملاحظات موجود في النسختين — كاشير ومطبخ بنفس الشكل تماماً */
     const rows = items.map(it => {
       const note = String(it.note || '').trim();
       const inline = note.length <= 10 ? note : '';
@@ -233,26 +232,27 @@
           <td style="${TD}text-align:right;">${it.offer_id ? '🎟️ ' : ''}${it.is_free ? '🎁 ' : ''}${esc(cleanItemName(it.name))}</td>
           <td style="${TD}text-align:center;">${(Number(it.qty) || 1).toFixed(2)}</td>
           <td style="${TD}text-align:center;">${fmtN(it.price)}</td>
-          <td style="${TD}text-align:center;">${fmtN((Number(it.price) || 0) * (Number(it.qty) || 1))}</td>
-          <td style="${TD}text-align:center;font-weight:normal;font-size:${F.note}px;">${esc(inline)}</td>
-         </tr>`;
+          <td style="${TD}text-align:center;">${fmtN((Number(it.price) || 0) * (Number(it.qty) || 1))}</td>`
+        + `\n          <td style="${TD}text-align:center;font-weight:normal;font-size:${F.note}px;">${esc(inline)}</td>`
+        + `\n         </tr>`;
       if (note.length > 10) h += `<tr><td colspan="5" style="${TD}text-align:right;font-weight:normal;font-size:${F.note}px;">▸ ${esc(note)}</td></tr>`;
       return h;
     }).join('');
 
-    /* نسب الأعمدة مضبوطة لتتسع الأرقام السباعية بخط 12px (كالصورة) */
-    const headCols = `<th style="${TH}text-align:center;width:36%;">اسم المادة</th>
-         <th style="${TH}text-align:center;width:12%;">الكمية</th>
-         <th style="${TH}text-align:center;width:19%;">السعر</th>
-         <th style="${TH}text-align:center;width:20%;">إجمالي</th>
-         <th style="${TH}text-align:center;width:13%;">ملاحظات</th>`;
+    /* رؤوس الأعمدة: خط أصغر وخط فاصل أسفلها أثقل لشكل أنظف — 5 أعمدة دائماً */
+    const HB = 'border-bottom:2px solid #000;';
+    const headCols = `<th style="${TH}${HB}text-align:center;width:38%;">اسم المادة</th>
+         <th style="${TH}${HB}text-align:center;width:12%;">الكمية</th>
+         <th style="${TH}${HB}text-align:center;width:19%;">السعر</th>
+         <th style="${TH}${HB}text-align:center;width:20%;">إجمالي</th>
+         <th style="${TH}${HB}text-align:center;width:11%;">ملاحظات</th>`;
 
+    /* الترويسة (~7سم): الأسطر موزعة بتساوٍ عبر عمود مرن —
+       الاسم · الاسم والهاتف · رقم الطلب كبير + نوع الطلب · التاريخ والوقت · الزبون */
     const SUM = `border:1px solid #000;padding:2px 6px;font-size:${F.sum}px;line-height:1.2;font-weight:bold;`;
 
     return `
       <div style="display:flow-root;${MINH() && !opts.kitchen ? `min-height:${MINH()}mm;` : ''}width:${w}mm;max-width:${w}mm;min-width:${w}mm;margin:0 auto;padding:0;font-family:Tahoma,Arial,sans-serif;color:#000;direction:rtl;text-align:right;box-sizing:border-box;line-height:1.25;background:#fff;">
-        /* الترويسة (~7سم): الأسطر موزعة بتساوٍ عبر عمود مرن —
-           الاسم · الاسم والهاتف · رقم الطلب كبير + نوع الطلب · التاريخ والوقت · الزبون */
         <div style="min-height:64mm;display:flex;flex-direction:column;justify-content:space-evenly;margin:1mm 0 2mm;">
           <div style="font-size:${F.title}px;font-weight:900;text-align:center;">${esc(RESTAURANT())}</div>
           ${subLine ? `<div style="font-size:${F.sub}px;font-weight:bold;text-align:center;">${esc(subLine)}</div>` : ''}

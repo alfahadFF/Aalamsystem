@@ -6,6 +6,13 @@ window.ALFA_CONFIG = {
   // prod   = عميل حقيقي
   mode: 'prod',
 
+  /* ── هوية المطعم (الترويسة على الفواتير) ──
+     هذه القيم الافتراضية تظهر على كل جهاز بلا أي إعداد.
+     ملاحظة: إن ضُبطت الهوية من صفحة الإعدادات على جهازٍ ما (localStorage
+     باسم alfaprosys_branding) فإنها تتقدم على هذه الافتراضيات على ذلك الجهاز. */
+  restaurantName: 'عالم الفواكه',
+  branding: { name: 'عالم الفواكه', address: 'قسيم الحريري', phone: '0983831671' },
+
   // فعّلها عند ربط Supabase لتبدأ المزامنة
   syncEnabled: true,
 
@@ -81,19 +88,21 @@ window.ALFA_CONFIG = {
      widthMm: 72,
      paperWidthMm: 79.2,
 
-     /* الطول الثابت للفاتورة (مم) — قياس الفاتورة المعتمدة (صورة 3/9):
-        الورقة 79.2مم عرضاً × ~170مم طولاً بغض النظر عن المحتوى.
-        كل فاتورة تطبع بهذا الطول كحد أدنى، فإن تجاوزه المحتوى (فاتورة
-        طويلة جداً) تتمدد تلقائياً. اجعله 0 لإلغاء الطول الثابت. */
-     minHeightMm: 170,
+  /* الاسم في ترويسة الإيصال — الافتراضي من الجذر أعلاه، والإعدادات المحلية تتقدم عليه */
+  restaurantName: 'عالم الفواكه',
+
+     /* الطول الثابت للفاتورة (مم) — الفاتورة المعتمدة طولها 15سم (150مم)
+        مهما كان المحتوى؛ فإن تجاوزه المحتوى (فاتورة طويلة) تتمدد تلقائياً.
+        اجعله 0 لإلغاء الطول الثابت. */
+     minHeightMm: 150,
 
     /* خطوط الإيصال — مقاسات الفاتورة المعتمدة (صورة 9/3/2026) كما هي.
        عدّل أي رقم هنا إن أراد صاحب المطعم تغييراً:
        title اسم المطعم · sub العنوان/الهاتف · noLabel «رقم الطلب:» · no الرقم
        date سطر التاريخ · cust سطر الزبون · th رؤوس الأعمدة · td خلايا الجدول
        note الملاحظات · sum المجاميع · thanks سطر الشكر */
-    fonts: { title: 20, sub: 12.5, noLabel: 15, no: 28, date: 12, cust: 12.5,
-             th: 12.5, td: 12, note: 11, sum: 13, thanks: 15 },
+    fonts: { title: 20, sub: 11.5, noLabel: 14, no: 26, date: 11, cust: 11.5,
+             th: 10.5, td: 10.5, note: 10, sum: 11.5, thanks: 13 },
     feedMm: 3,           // مساحة السحب بعد آخر سطر (كانت 8 مم)
 
     autoAfterSale: true, // طباعة تلقائية بعد كل عملية بيع (كاشير + مطبخ)
@@ -131,12 +140,19 @@ ct0NdzgIQRWJFfJ77QECqub1eU4S
 
 /* هوية المطعم — تُحرر من الإعدادات وتُطبق هنا على كل الشاشات والإيصالات */
 try {
-  const __b = JSON.parse(localStorage.getItem('alfaprosys_branding') || 'null');
-  if (__b && __b.name) {
+  const __b = JSON.parse(localStorage.getItem('alfaprosys_branding') || 'null') || {};
+  const __d = window.ALFA_CONFIG.branding || {};
+  /* دمج لا استبدال: كل حقل يأخذ قيمة الإعدادات إن وُجدت، وإلا فالافتراضي —
+     فلا تُفرَّغ الترويسة بهوية قديمة ناقصة محفوظة على جهاز ما */
+  window.ALFA_CONFIG.branding = {
+    name: __b.name || __d.name,
+    address: __b.address || __d.address,
+    phone: __b.phone || __d.phone,
+  };
+  if (__b.name) {
     window.ALFA_CONFIG.restaurantName = __b.name;
     window.ALFA_CONFIG.thermal.restaurantName = __b.name;
   }
-  if (__b) window.ALFA_CONFIG.branding = __b;
 } catch (e) {}
 
 
