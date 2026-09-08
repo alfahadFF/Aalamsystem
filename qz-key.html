@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>إعداد الطباعة أوفلاين — المفتاح الخاص</title>
+<style>
+  body{font-family:Tahoma,Arial,sans-serif;background:#f4f6f9;color:#1a2333;margin:0;padding:24px;}
+  .card{max-width:640px;margin:0 auto;background:#fff;border-radius:14px;box-shadow:0 4px 18px rgba(20,40,80,.12);padding:26px 28px;}
+  h1{font-size:20px;margin:0 0 6px;}
+  p.sub{color:#5a6b85;font-size:13px;margin:0 0 18px;line-height:1.7;}
+  ol{font-size:13.5px;line-height:2;color:#2a3555;padding-right:20px;margin:0 0 18px;}
+  textarea{width:100%;box-sizing:border-box;height:150px;direction:ltr;text-align:left;font-family:Consolas,monospace;
+    font-size:11.5px;border:1.5px solid #cdd7e5;border-radius:10px;padding:10px;resize:vertical;background:#fafbfd;}
+  textarea:focus{outline:none;border-color:#2563eb;}
+  .row{display:flex;gap:10px;margin-top:14px;flex-wrap:wrap;}
+  button{border:0;border-radius:10px;padding:11px 22px;font-family:inherit;font-size:14px;font-weight:bold;cursor:pointer;}
+  .save{background:#2563eb;color:#fff;} .save:hover{background:#1d4ed8;}
+  .test{background:#eef4ff;color:#2563eb;border:1.5px solid #bcd2ff!important;}
+  .del{background:#fff0f0;color:#c0392b;border:1.5px solid #ffd2d2!important;margin-right:auto;}
+  .status{margin-top:16px;padding:12px 16px;border-radius:10px;font-size:13.5px;line-height:1.8;display:none;white-space:pre-wrap;}
+  .ok{background:#eafaf0;color:#14713c;border:1px solid #bfe8cf;display:block!important;}
+  .err{background:#fdf0ef;color:#a93226;border:1px solid #f5cdca;display:block!important;}
+  .info{background:#f0f6ff;color:#1f4e8c;border:1px solid #cfe0fb;display:block!important;}
+  .lock{font-size:34px;text-align:center;margin-bottom:6px;}
+  .hint{font-size:12px;color:#7787a0;margin-top:16px;line-height:1.8;border-top:1px dashed #dde5f0;padding-top:12px;}
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="lock">🔐</div>
+  <h1>إعداد الطباعة الصامتة أوفلاين</h1>
+  <p class="sub">
+    إدخال المفتاح الخاص هنا يجعل التوقيع يتم <b>داخل هذا الجهاز</b> —
+    فتعمل الطباعة عبر QZ Tray <b>بدون إنترنت نهائياً</b>.
+    الخطوة هذه <b>مرة واحدة لكل جهاز كاشير</b> (مثل خطوة override.crt).
+  </p>
+  <ol>
+    <li>افتح ملف <b dir="ltr">private-key.pem</b> على جهازك (المولَّد وقت إنشاء الشهادة)</li>
+    <li>انسخ محتواه كاملاً — من سطر <b dir="ltr">-----BEGIN...</b> إلى <b dir="ltr">...END-----</b></li>
+    <li>الصقه هنا واضغط <b>حفظ واختبار</b></li>
+  </ol>
+  <textarea id="pem" spellcheck="false" placeholder="-----BEGIN PRIVATE KEY-----&#10;MIIEvQIBADANBgkqhkiG9w0BAQEFAASC...&#10;-----END PRIVATE KEY-----"></textarea>
+  <div class="row">
+    <button class="save" onclick="saveKey()">💾 حفظ واختبار</button>
+    <button class="test" onclick="testKey()">🧪 اختبار</button>
+    <button class="del" onclick="delKey()">🗑 حذف المفتاح</button>
+  </div>
+  <div id="status" class="status"></div>
+  <div class="hint">
+    ⚠️ المفتاح يُحفظ في هذا المتصفح فقط (localStorage) ولا يُرسل لأي مكان، ولا يظهر لمستخدمي الموقع الآخرين.<br>
+    📌 يجب أن يكون هذا المفتاح <b>نفس الزوج</b> الموجود في شهادة config.js وملف override.crt — وإلا سترفضه QZ Tray.<br>
+    📌 قبل الحذف أو تغيير الجهاز: تأكد أن Netlify يملك نسخة من المفتاح (QZ_PRIVATE_KEY) حتى لا تفقد التوقيع السيرفري.
+  </div>
+</div>
+<script>
+var K = 'alfaprosys_qz_private_key';
+function el(id){ return document.getElementById(id); }
+function show(msg, cls){ var s = el('status'); s.textContent = msg; s.className = 'status ' + cls; }
+function loadKey(){ try { return (localStorage.getItem(K) || '').trim(); } catch(e){ return ''; } }
+
+window.addEventListener('DOMContentLoaded', function(){
+  if (loadKey()) { el('pem').value = loadKey(); show('✓ يوجد مفتاح محفوظ في هذا الجهاز — الطباعة تعمل أوفلاين.\nاضغط «اختبار» للتأكد من سلامته.', 'info'); }
+});
+
+function saveKey(){
+  var v = el('pem').value.trim();
+  if (!v) { show('الصق محتوى المفتاح أولاً.', 'err'); return; }
+  if (v.indexOf('BEGIN') < 0) { show('هذا لا يبدو ملف PEM — يجب أن يبدأ بسطر BEGIN.', 'err'); return; }
+  try { localStorage.setItem(K, v); } catch(e){ show('تعذر الحفظ: ' + e.message, 'err'); return; }
+  testKey();
+}
+
+function testKey(){
+  if (!loadKey()) { show('لا يوجد مفتاح محفوظ — الصقه واضغط «حفظ واختبار» أولاً.', 'err'); return; }
+  var s = document.createElement('script');
+  s.src = 'assets/js/thermal.js';
+  s.onload = function(){
+    if (!window.ThermalPrint || !window.ThermalPrint.localSign) { show('تعذر تحميل وحدة الطباعة (thermal.js).', 'err'); return; }
+    window.ThermalPrint.localSign('اختبار-التوقيع-المحلي-123456').then(function(sig){
+      if (sig && sig.length > 100) show('✓ المفتاح سليم والتوقيع المحلي يعمل.\n\nالطباعة الصامتة أصبحت تعمل بدون إنترنت على هذا الجهاز.\nجرّب الآن: افصل الإنترنت واطبع فاتورة.', 'ok');
+      else show('التوقيع رجع فارغاً — المفتاح غير سليم.', 'err');
+    }).catch(function(e){ show('✗ فشل استيراد المفتاح: ' + e.message + '\nتأكد أنك نسخت الملف كاملاً (private-key.pem) وليس الشهادة (public-cert.pem).', 'err'); });
+  };
+  s.onerror = function(){ show('تعذر تحميل thermal.js — افتح الصفحة من نفس مجلد النظام.', 'err'); };
+  document.head.appendChild(s);
+}
+
+function delKey(){
+  if (!loadKey()) { show('لا يوجد مفتاح أصلاً.', 'info'); return; }
+  if (!confirm('حذف المفتاح من هذا الجهاز؟\nستعود الطباعة للتوقيع السيرفري (تحتاج إنترنت).')) return;
+  localStorage.removeItem(K); el('pem').value = '';
+  show('حُذف المفتاح. التوقيع سيرفري الآن عبر Netlify.', 'info');
+}
+</script>
+<script type="module" src="https://static.cloudflareinsights.com/beacon.min.js/v31edd6df95cf4e85bb4c19e7a9bdbcba1788362987495" integrity="sha512-iIg7k2xntmwu6/uSb5tpc/hySgZc4eoL31yB29W6tJFo2akwjPWcEqnCEdJvGexCL0KEQwVYv5BlowfhVz26hg==" data-cf-beacon='{"version":"2024.11.0","token":"1954b47c125f43f8b4338b3c4f804e4f","spa":2}' crossorigin="anonymous"></script>
+</body>
+</html>
