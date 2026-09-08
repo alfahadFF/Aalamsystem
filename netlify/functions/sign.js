@@ -1,27 +1,3 @@
-/* ================================================================
-   sign.js — توقيع طلبات QZ Tray سيرفرياً (Netlify Function)
-   ================================================================
-
-   يستقبل النص المراد توقيعه من thermal.js في المتصفح،
-   يوقّعه بالمفتاح الخاص المخزَّن كمتغير بيئة سري على Netlify،
-   ويُرجع التوقيع فقط — المفتاح الخاص لا يغادر السيرفر أبداً.
-
-   متغيرات البيئة المطلوبة على Netlify:
-     QZ_PRIVATE_KEY  — المفتاح الخاص PEM (-----BEGIN PRIVATE KEY-----)
-                       أو (-----BEGIN RSA PRIVATE KEY-----)
-     QZ_SIGN_SECRET  — سر مشترك اختياري للتحقق من المُرسِل
-                       (يُرسَل من thermal.js كـ header: x-qz-secret)
-
-   توليد الشهادة والمفتاح الخاص (مرة واحدة):
-     1. حمّل أداة QZ Tray Certificate Tool:
-        https://qz.io/wiki/app-certification
-     2. نفّذ: keytool -genkey -alias qztray -keyalg RSA -keysize 2048
-              -keystore keystore.jks -validity 3650
-     3. صدّر PEM: openssl pkcs12 ... (انظر docs QZ)
-     4. QZ_PRIVATE_KEY = محتوى private-key.pem
-     5. QZ_PUBLIC_CERT = محتوى public-cert.pem (ضعه في config.js فقط)
-   ================================================================ */
-
 const crypto = require('crypto');
 
 /* تنظيف PEM القادم من متغير البيئة:
