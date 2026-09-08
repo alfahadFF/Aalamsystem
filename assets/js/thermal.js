@@ -12,6 +12,10 @@
   const PRINTER_KITCHEN = () => CFG().printerKitchen || 'RONGTA 80mm Series Printer';
   const WIDTH = () => Number(CFG().widthMm) || 72;            // عرض قالب الإيصال
   const PAPER = () => Number(CFG().paperWidthMm) || WIDTH();  // عرض الورق الفيزيائي
+  /* الحد الأدنى لطول الإيصال (مم) — من config.js ← thermal.minHeightMm
+     فاتورة صاحب المطعم المعتمدة طولها ثابت 128مم (12.8سم) بغض النظر عن
+     المحتوى؛ فإن تجاوزه المحتوى يتمدد الإيصال تلقائياً. صفر = بلا حد أدنى. */
+  const MINH = () => Number(CFG().minHeightMm) || 0;
   /* أحجام الخطوط = مقاسات الفاتورة المعتمدة لدى المطعم (صورة 9/3/2026).
      عدّلها من config.js → thermal.fonts إن أراد صاحب المطعم تغييراً. */
   const FONTS = () => Object.assign({
@@ -140,10 +144,10 @@
     const brand = (window.ALFA_CONFIG && ALFA_CONFIG.branding) || {};
     const subLine = [brand.address, brand.phone].filter(Boolean).join(' ');
 
-    // سطر الزبون المدمج: الاسم الهاتف العنوان خارجي [الرقم]
+    // سطر الزبون المدمج: الاسم الهاتف العنوان خارجي
+    // (حُذف [الرقم] — كان تكراراً لرقم الطلب الظاهر أعلاه)
     const cust = [inv.customer_name, inv.phone, inv.customer_address].filter(Boolean).join(' ')
-      + (inv.type === 'delivery' ? ' خارجي' : '')
-      + (inv.no != null ? ` [${inv.no}]` : '');
+      + (inv.type === 'delivery' ? ' خارجي' : '');
 
     /* خلايا بحدود كاملة كالصورة */
     const TD = `border:1px solid #000;padding:1.5px 1px;font-size:${F.td}px;line-height:1.2;font-weight:bold;`;
@@ -175,7 +179,7 @@
     const SUM = `border:1px solid #000;padding:2px 6px;font-size:${F.sum}px;line-height:1.2;font-weight:bold;`;
 
     return `
-      <div style="display:flow-root;width:${w}mm;max-width:${w}mm;min-width:${w}mm;margin:0 auto;padding:0;font-family:Tahoma,Arial,sans-serif;color:#000;direction:rtl;text-align:right;box-sizing:border-box;line-height:1.25;background:#fff;">
+      <div style="display:flow-root;${MINH() && !opts.kitchen ? `min-height:${MINH()}mm;` : ''}width:${w}mm;max-width:${w}mm;min-width:${w}mm;margin:0 auto;padding:0;font-family:Tahoma,Arial,sans-serif;color:#000;direction:rtl;text-align:right;box-sizing:border-box;line-height:1.25;background:#fff;">
         <div style="font-size:${F.title}px;font-weight:900;text-align:center;margin:1mm 0 0.8mm;">${esc(RESTAURANT())}</div>
         ${subLine ? `<div style="font-size:${F.sub}px;font-weight:bold;text-align:center;margin-bottom:1.2mm;">${esc(subLine)}</div>` : ''}
 
