@@ -165,8 +165,11 @@
 
   /* الوقت بنظام 12 ساعة كالفاتورة المعتمدة: 14:32 ← 2:32 PM */
   function to12h(t) {
-    const m = String(t || '').trim().match(/^(\d{1,2}):(\d{2})/);
-    if (!m) return String(t || '');
+    /* يقبل 24 ساعة (20:32 — صيغة pos.js) أو 12 ساعة مع لاحقة (8:32 PM) */
+    const s = String(t || '').trim();
+    const m = s.match(/^(\d{1,2}):(\d{2})/);
+    if (!m) return s;
+    if (/\s*[AP]M\s*$/i.test(s)) return (+m[1] % 12 || 12) + ':' + m[2] + ' ' + (/PM/i.test(s) ? 'PM' : 'AM');
     let h = +m[1]; const ap = h >= 12 ? 'PM' : 'AM';
     h = h % 12 || 12;
     return h + ':' + m[2] + ' ' + ap;
@@ -239,11 +242,23 @@
     const TH = `border:1px solid #000;padding:1.5px 1px;font-size:${F.th}px;line-height:1.2;font-weight:900;${WRAP}`;
 
     /* عمود الملاحظات موجود في النسختين — كاشير ومطبخ بنفس الشكل تماماً */
+    /* صف الخدمة الأخير: التوصيل أو الطاولة — ينتقل إليه نوع الطلب بدل سطر
+       الرقم. القيمة الافتراضية 0، ويحدد المطعم سعرها لاحقاً (inv.service_fee) */
+    const fee = Number(inv.service_fee) || 0;
+    const svcRow = (inv.type === 'delivery' || inv.type === 'table' || inv.type === 'dinein')
+      ? `\n        <tr>
+          <td style="${TD}text-align:right;font-size:${F.name || F.td}px;">${inv.type === 'delivery' ? 'خدمة توصيل' : 'خدمة طاولة'}</td>
+          <td style="${TD}text-align:center;">1.00</td>
+          <td style="${TD}text-align:center;">${fmtN(fee)}</td>
+          <td style="${TD}text-align:center;">${fmtN(fee)}</td>
+          <td style="${TD}text-align:center;font-weight:normal;font-size:${F.note}px;"></td>
+        </tr>` : '';
+
     const rows = items.map(it => {
       const note = String(it.note || '').trim();
       const inline = note.length <= 10 ? note : '';
       let h = `<tr>
-          <td style="${TD}text-align:right;">${it.offer_id ? '🎟️ ' : ''}${it.is_free ? '🎁 ' : ''}${esc(cleanItemName(it.name))}</td>
+          <td style="${TD}text-align:right;font-size:${F.name || F.td}px;">${it.offer_id ? '🎟️ ' : ''}${it.is_free ? '🎁 ' : ''}${esc(cleanItemName(it.name))}</td>
           <td style="${TD}text-align:center;">${(Number(it.qty) || 1).toFixed(2)}</td>
           <td style="${TD}text-align:center;">${fmtN(it.price)}</td>
           <td style="${TD}text-align:center;">${fmtN((Number(it.price) || 0) * (Number(it.qty) || 1))}</td>`
@@ -272,17 +287,17 @@
         <div style="min-height:64mm;display:flex;flex-direction:column;justify-content:space-evenly;margin:1mm 0 2mm;">
           <div style="font-size:${F.title}px;font-weight:900;text-align:center;">${esc(RESTAURANT())}</div>
           ${subLine ? `<div style="font-size:${F.sub}px;font-weight:bold;text-align:center;">${esc(subLine)}</div>` : ''}
-          <div style="font-size:${F.noLabel}px;font-weight:900;text-align:center;">رقم الطلب: <span style="font-size:${F.no}px;line-height:1.1;">${esc(no)}</span> — ${esc(typeLabel(inv))}</div>
+          <div style="font-size:${F.noLabel}px;font-weight:900;text-align:center;">رقم الطلب: <span style="font-size:${F.no}px;line-height:1.1;">${esc(no)}</span></div>
           <div style="font-size:${F.date}px;font-weight:bold;text-align:center;">تاريخ الطلب: ${esc(inv.date || '')} ${esc(to12h(inv.time))}</div>
           ${cust ? `<div style="font-size:${F.cust}px;font-weight:bold;text-align:center;">${esc(cust)}</div>` : ''}
         </div>
 
-        <table style="width:100%;border-collapse:collapse;border:1px solid #000;margin-bottom:10mm;table-layout:fixed;">
+        <table style="width:calc(100% - 1mm);border-collapse:collapse;border:1px solid #000;margin:0 auto 10mm;table-layout:fixed;">
           <thead><tr>${headCols}</tr></thead>
-          <tbody>${rows}</tbody>
+          <tbody>${rows}${svcRow}</tbody>
         </table>
 
-        <table style="width:100%;border-collapse:collapse;border:1px solid #000;margin-bottom:1mm;">
+        <table style="width:calc(100% - 1mm);border-collapse:collapse;border:1px solid #000;margin:0 auto 1mm;">
           <tr><td style="${SUM}text-align:right;padding-inline-start:12px;">مجموع الطلب</td><td style="${SUM}text-align:center;">${fmtN(sub)}</td></tr>
           <tr><td style="${SUM}text-align:right;padding-inline-start:12px;">الحسم</td><td style="${SUM}text-align:center;">${fmtN(disc)}</td></tr>
           <tr><td style="${SUM}text-align:right;padding-inline-start:12px;">الصافي</td><td style="${SUM}text-align:center;">${fmtN(total)}</td></tr>
@@ -413,7 +428,13 @@
           }
         } catch (e) { console.warn('[ThermalPrint] تعذر قياس الطول — طباعة بطول تلقائي:', e); }
         const printOptions = { size, units: 'mm', margins: 0, rasterize: false, colorType: 'monochrome' };
-        const data = [{ type: 'pixel', format: 'html', flavor: 'plain', data: html }];
+        /* وثيقة كاملة بلا هوامش: متصفح QZ الداخلي يضيف هامش body 8px افتراضياً
+           فيتجاوز المحتوى 72مم وتُقصّ حدود الجدول من الأطراف */
+        const doc = `<!DOCTYPE html><html><head><meta charset="utf-8"><style>
+@page { size: ${WIDTH()}mm auto; margin: 0; }
+html, body { margin: 0 !important; padding: 0 !important; background: #fff; }
+</style></head><body>${html}</body></html>`;
+        const data = [{ type: 'pixel', format: 'html', flavor: 'plain', data: doc }];
         const config = qz.configs.create(opts.kitchen ? PRINTER_KITCHEN() : PRINTER_CASHIER(), printOptions);
         await qz.print(config, data);
         return 'qz';

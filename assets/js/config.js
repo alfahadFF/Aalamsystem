@@ -102,7 +102,7 @@ window.ALFA_CONFIG = {
        date سطر التاريخ · cust سطر الزبون · th رؤوس الأعمدة · td خلايا الجدول
        note الملاحظات · sum المجاميع · thanks سطر الشكر */
     fonts: { title: 20, sub: 14, noLabel: 14, no: 26, date: 14, cust: 12.5,
-             th: 9.5, td: 12, note: 11, sum: 12.5, thanks: 16 },
+             th: 9.5, td: 12, name: 11, note: 11, sum: 12.5, thanks: 16 },
     feedMm: 3,           // مساحة السحب بعد آخر سطر (كانت 8 مم)
 
     autoAfterSale: true, // طباعة تلقائية بعد كل عملية بيع (كاشير + مطبخ)
