@@ -1,9 +1,19 @@
-const VERSION = 'alfaprosys-v31';
+/* ============================================================
+   sw.js — Service Worker: العمل دون اتصال (Offline-first)
+   - تثبيت: تخزين مسبق لكل ملفات التطبيق.
+   - تصفح (HTML): شبكة أولًا ثم الكاش (لتلقي التحديثات، ويعمل أوفلاين).
+   - ملفات الإعداد الحساسة (config.js): شبكة أولًا دائماً — لا يجوز
+     تجميدها بالكاش، لأنها تحمل مفاتيح/إعدادات تتغيّر بدون نشر كامل.
+   - أصول أخرى (js/css/أيقونات): كاش أولًا ثم شبكة.
+   - خطوط خارجية: كاش أولًا بعد أول تحميل (تعمل أوفلاين لاحقًا).
+   ============================================================ */
+const VERSION = 'alfaprosys-v32';
 
 /* ملفات تُجلب دائماً من الشبكة أولاً (لا كاش-أولاً أبداً)
    أضف هنا أي ملف إعدادات حسّاس مستقبلاً بنفس الطريقة */
 const NETWORK_FIRST_ASSETS = [
   'assets/js/config.js',
+  'assets/js/qz-tray.min.js',   // مكتبة QZ — محلية الآن (كانت CDN) لطباعة أوفلاين
 ];
 
 const CORE = [
@@ -18,8 +28,10 @@ const CORE = [
   'audit_log.html','delivery.html','owner_shield.html','settings.html',
   'suppliers.html','track.html',
   // السكربتات المشتركة
+  'qz-key.html',
   'assets/js/config.js','assets/js/utils.js','assets/js/data.js','assets/js/app.js',
   'assets/js/nav.js','assets/js/notify.js','assets/js/alerts.js','assets/js/thermal.js',
+  'assets/js/qz-tray.min.js',
   'assets/js/sync/storage.js','assets/js/sync/queue.js','assets/js/sync/remote.js',
   // السكربتات — كل صفحة
   'assets/js/pos.js','assets/js/manager.js','assets/js/sales.js','assets/js/invoices.js',
