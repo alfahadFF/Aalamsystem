@@ -69,6 +69,11 @@ window.SyncStorage = (function () {
   return {
     engine: 'indexeddb',
 
+    /* مفاتيح عامة (صناديق الصادرة المعلقة وغيرها) */
+    getKey: function (key) { return idbGet(key).catch(function () { return null; }); },
+    setKey: function (key, val) { return idbSet(key, val).catch(function () { return false; }); },
+    delKey: function (key) { return idbDel(key).catch(function () { return false; }); },
+
     load: function () {
       return idbGet(DATA_KEY).then(function (data) {
         if (data) return data;

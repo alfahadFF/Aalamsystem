@@ -34,6 +34,15 @@
       return sb.delFilter(table, '?id=in.(' + list + ')');
     });
   }
+  /* حذف دفعي آمن رقمياً/نصياً — يُستخدم من صناديق المحرك العام */
+  function delIds(table, ids) {
+    if (!on()) return Promise.reject(new Error('offline'));
+    ids = (ids || []).map(function (id) { return String(id); });
+    if (!ids.length) return Promise.resolve();
+    const num = ids.every(function (id) { return /^[0-9]+$/.test(id); });
+    const list = ids.map(function (id) { return num ? id : '"' + id.replace(/"/g, '') + '"'; }).join(',');
+    return sb.delFilter(table, '?id=in.(' + list + ')');
+  }
 
   /* ---------- موظفون ---------- */
   window.EmployeeSync = (function () {
@@ -70,10 +79,40 @@
         .then(function () { return delExtra('employees', list); })
         .then(function () { return { pushed: true, n: list.length }; });
     }
+    /* ── صندوق صادر الموظفين ── */
+    function pushRows(rows) {
+      if (!on()) return Promise.reject(new Error('offline'));
+      const list = (rows || []).map(row);
+      if (!list.length) return Promise.resolve({ pushed: true, n: 0 });
+      return sb.upsert('employees', list, 'id').then(function () { return { pushed: true, n: list.length }; });
+    }
+    function delRows(ids) { return delIds('employees', ids); }
+    function applyBox(b) {
+      if (!window.AlfaOutbox) return;
+      D().employees = AlfaOutbox.mergeLists(D().employees, b);
+      try { if (window.alfaPersist) window.alfaPersist(); } catch (e) {}
+    }
+    if (window.AlfaOutbox) AlfaOutbox.register('employees', { pushRows: pushRows, delRows: delRows });
+    function commitAll() {
+      if (window.AlfaOutbox) AlfaOutbox.commitRows('employees', D().employees || []);
+    }
+    function pushCommitted() {
+      if (!window.AlfaOutbox) return push();
+      commitAll();
+      return AlfaOutbox.flush('employees');
+    }
+    function pullGuarded() {
+      if (!window.AlfaOutbox) return pull();
+      return AlfaOutbox.guarded('employees', pull, applyBox)();
+    }
     return {
-      pull: pull, push: push,
-      pushSoon: function () { timerSoon(hold, push); },
-      remove: function (id) { return (!on() || !id) ? Promise.resolve() : sb.del('employees', [id]).catch(function () {}); },
+      pull: pullGuarded, push: pushCommitted,
+      pushSoon: function () { if (!window.AlfaOutbox) { timerSoon(hold, push); return; } commitAll(); },
+      remove: function (id) {
+        if (!on() || !id) return Promise.resolve({ skipped: true });
+        if (window.AlfaOutbox) return AlfaOutbox.commitDelete('employees', id);
+        return sb.del('employees', [id]).catch(function () {});
+      },
     };
   })();
 
@@ -103,10 +142,40 @@
         .then(function () { return delExtra('suppliers', list); })
         .then(function () { return { pushed: true, n: list.length }; });
     }
+    /* ── صندوق صادر المورّدين ── */
+    function pushRows(rows) {
+      if (!on()) return Promise.reject(new Error('offline'));
+      const list = (rows || []).map(row);
+      if (!list.length) return Promise.resolve({ pushed: true, n: 0 });
+      return sb.upsert('suppliers', list, 'id').then(function () { return { pushed: true, n: list.length }; });
+    }
+    function delRows(ids) { return delIds('suppliers', ids); }
+    function applyBox(b) {
+      if (!window.AlfaOutbox) return;
+      D().suppliers = AlfaOutbox.mergeLists(D().suppliers, b);
+      try { if (window.alfaPersist) window.alfaPersist(); } catch (e) {}
+    }
+    if (window.AlfaOutbox) AlfaOutbox.register('suppliers', { pushRows: pushRows, delRows: delRows });
+    function commitAll() {
+      if (window.AlfaOutbox) AlfaOutbox.commitRows('suppliers', D().suppliers || []);
+    }
+    function pushCommitted() {
+      if (!window.AlfaOutbox) return push();
+      commitAll();
+      return AlfaOutbox.flush('suppliers');
+    }
+    function pullGuarded() {
+      if (!window.AlfaOutbox) return pull();
+      return AlfaOutbox.guarded('suppliers', pull, applyBox)();
+    }
     return {
-      pull: pull, push: push,
-      pushSoon: function () { timerSoon(hold, push); },
-      remove: function (id) { return (!on() || !id) ? Promise.resolve() : sb.del('suppliers', [id]).catch(function () {}); },
+      pull: pullGuarded, push: pushCommitted,
+      pushSoon: function () { if (!window.AlfaOutbox) { timerSoon(hold, push); return; } commitAll(); },
+      remove: function (id) {
+        if (!on() || !id) return Promise.resolve({ skipped: true });
+        if (window.AlfaOutbox) return AlfaOutbox.commitDelete('suppliers', id);
+        return sb.del('suppliers', [id]).catch(function () {});
+      },
     };
   })();
 
@@ -205,13 +274,51 @@
         .then(function () { return delExtra('inventory_materials', list); })
         .then(function () { return { pushed: true, n: list.length }; });
     }
-    function remove(id) {
-      if (!on() || !id) return Promise.resolve();
+    function removeRaw(id) {
       return sb.delFilter('inventory_log', '?material_id=eq.' + encodeURIComponent(id))
-        .then(function () { return sb.del('inventory_materials', [id]); })
-        .catch(function () {});
+        .then(function () { return sb.del('inventory_materials', [id]); });
     }
-    return { pull: pull, push: push, pushOne: pushOne, pushSoon: function () { timerSoon(hold, push, 900); }, remove: remove };
+    function remove(id) {
+      if (!on() || !id) return Promise.resolve({ skipped: true });
+      if (window.AlfaOutbox) return AlfaOutbox.commitDelete('inventory', id);
+      return removeRaw(id).catch(function () {});
+    }
+    /* التزام مواد محددة فقط (تستخدمه stock.js بعد كل بيع بدل الرفع الكامل) */
+    function commitMats(mats) {
+      if (!window.AlfaOutbox) { timerSoon(hold, push, 900); return Promise.resolve({ legacy: true }); }
+      return AlfaOutbox.commitRows('inventory', mats || []);
+    }
+    /* ── صندوق صادر المخزون ── */
+    function pushRows(rows) {
+      if (!on()) return Promise.reject(new Error('offline'));
+      return (rows || []).reduce(function (p, m) { return p.then(function () { return pushOne(m); }); }, Promise.resolve())
+        .then(function () { return { pushed: true, n: (rows || []).length }; });
+    }
+    function delRows(ids) {
+      if (!on()) return Promise.reject(new Error('offline'));
+      return (ids || []).reduce(function (p, id) { return p.then(function () { return removeRaw(id); }); }, Promise.resolve());
+    }
+    function applyBox(b) {
+      if (!window.AlfaOutbox) return;
+      D().inventory = AlfaOutbox.mergeLists(D().inventory, b);
+      try { if (window.alfaPersist) window.alfaPersist(); } catch (e) {}
+    }
+    if (window.AlfaOutbox) AlfaOutbox.register('inventory', { pushRows: pushRows, delRows: delRows });
+    function commitAll() {
+      if (window.AlfaOutbox) AlfaOutbox.commitRows('inventory', D().inventory || []);
+    }
+    function pushCommitted() {
+      if (!window.AlfaOutbox) return push();
+      commitAll();
+      return AlfaOutbox.flush('inventory');
+    }
+    function pullGuarded() {
+      if (!window.AlfaOutbox) return pull();
+      return AlfaOutbox.guarded('inventory', pull, applyBox)();
+    }
+    return { pull: pullGuarded, push: pushCommitted, pushOne: pushOne, commitMats: commitMats,
+      pushSoon: function () { if (!window.AlfaOutbox) { timerSoon(hold, push, 900); return; } commitAll(); },
+      remove: remove };
   })();
 
   /* ---------- عقود (الرفع؛ السحب عبر PosSync) ---------- */
@@ -260,13 +367,37 @@
         .then(function () { return delExtra('contracts', list); })
         .then(function () { return { pushed: true, n: list.length }; });
     }
-    function remove(id) {
-      if (!on() || !id) return Promise.resolve();
+    function removeRaw(id) {
       return sb.delFilter('contract_installments', '?contract_id=eq.' + encodeURIComponent(id))
-        .then(function () { return sb.del('contracts', [id]); })
-        .catch(function () {});
+        .then(function () { return sb.del('contracts', [id]); });
     }
-    return { push: push, pushOne: pushOne, pushSoon: function () { timerSoon(hold, push); }, remove: remove };
+    function remove(id) {
+      if (!on() || !id) return Promise.resolve({ skipped: true });
+      if (window.AlfaOutbox) return AlfaOutbox.commitDelete('contracts', id);
+      return removeRaw(id).catch(function () {});
+    }
+    /* ── صندوق صادر العقود (السحب عبر PosSync — محروس هناك) ── */
+    function pushRows(rows) {
+      if (!on()) return Promise.reject(new Error('offline'));
+      return (rows || []).reduce(function (p, c) { return p.then(function () { return pushOne(c); }); }, Promise.resolve())
+        .then(function () { return { pushed: true, n: (rows || []).length }; });
+    }
+    function delRows(ids) {
+      if (!on()) return Promise.reject(new Error('offline'));
+      return (ids || []).reduce(function (p, id) { return p.then(function () { return removeRaw(id); }); }, Promise.resolve());
+    }
+    if (window.AlfaOutbox) AlfaOutbox.register('contracts', { pushRows: pushRows, delRows: delRows });
+    function commitAll() {
+      if (window.AlfaOutbox) AlfaOutbox.commitRows('contracts', D().contracts || []);
+    }
+    function pushCommitted() {
+      if (!window.AlfaOutbox) return push();
+      commitAll();
+      return AlfaOutbox.flush('contracts');
+    }
+    return { push: pushCommitted, pushOne: pushOne,
+      pushSoon: function () { if (!window.AlfaOutbox) { timerSoon(hold, push); return; } commitAll(); },
+      remove: remove };
   })();
 
   /* ---------- مصاريف + مشتريات مواد ---------- */
@@ -340,7 +471,60 @@
         .then(function () { return delExtra('material_purchases', purs); })
         .then(function () { return { pushed: true, exp: exps.length, pur: purs.length }; });
     }
-    return { pull: pull, push: push, pushSoon: function () { timerSoon(hold, push); } };
+    /* ── صندوقا المصاريف ومشتريات المواد ── */
+    function pushExpRows(rows) {
+      if (!on()) return Promise.reject(new Error('offline'));
+      const list = (rows || []).map(toExp);
+      if (!list.length) return Promise.resolve({ pushed: true, n: 0 });
+      return sb.upsert('expenditures', list, 'id').then(function () { return { pushed: true, n: list.length }; });
+    }
+    function pushPurRows(rows) {
+      if (!on()) return Promise.reject(new Error('offline'));
+      const list = (rows || []).map(toPur);
+      if (!list.length) return Promise.resolve({ pushed: true, n: 0 });
+      return sb.upsert('material_purchases', list, 'id').then(function () { return { pushed: true, n: list.length }; });
+    }
+    function applyExpBox(b) {
+      if (!window.AlfaOutbox) return;
+      D().expenditures = AlfaOutbox.mergeLists(D().expenditures, b);
+      D().expenditures_list = D().expenditures;
+      try { if (window.alfaPersist) window.alfaPersist(); } catch (e) {}
+    }
+    function applyPurBox(b) {
+      if (!window.AlfaOutbox) return;
+      D().material_purchases = AlfaOutbox.mergeLists(D().material_purchases, b);
+      try { if (window.alfaPersist) window.alfaPersist(); } catch (e) {}
+    }
+    if (window.AlfaOutbox) {
+      AlfaOutbox.register('expenditures', { pushRows: pushExpRows, delRows: function (ids) { return delIds('expenditures', ids); } });
+      AlfaOutbox.register('purchases', { pushRows: pushPurRows, delRows: function (ids) { return delIds('material_purchases', ids); } });
+    }
+    function commitAll() {
+      if (!window.AlfaOutbox) return;
+      AlfaOutbox.commitRows('expenditures', D().expenditures || []);
+      AlfaOutbox.commitRows('purchases', D().material_purchases || []);
+    }
+    function pushCommitted() {
+      if (!window.AlfaOutbox) return push();
+      commitAll();
+      return Promise.all([AlfaOutbox.flush('expenditures'), AlfaOutbox.flush('purchases')]);
+    }
+    function pullGuarded() {
+      if (!window.AlfaOutbox) return pull();
+      return AlfaOutbox.guarded('purchases', AlfaOutbox.guarded('expenditures', pull, applyExpBox), applyPurBox)();
+    }
+    return { pull: pullGuarded, push: pushCommitted,
+      pushSoon: function () { if (!window.AlfaOutbox) { timerSoon(hold, push); return; } commitAll(); },
+      removeExp: function (id) {
+        if (!on() || id == null) return Promise.resolve({ skipped: true });
+        if (window.AlfaOutbox) return AlfaOutbox.commitDelete('expenditures', id);
+        return delIds('expenditures', [id]).catch(function () {});
+      },
+      removePur: function (id) {
+        if (!on() || id == null) return Promise.resolve({ skipped: true });
+        if (window.AlfaOutbox) return AlfaOutbox.commitDelete('purchases', id);
+        return delIds('material_purchases', [id]).catch(function () {});
+      } };
   })();
 
   /* ---------- سجل التدقيق ---------- */
@@ -367,7 +551,9 @@
       }).catch(function (e) { return { skipped: true, error: String(e && e.message || e) }; });
     }
     function pushOne(l) {
-      if (!on() || !l) return Promise.resolve();
+      if (!on() || !l) return Promise.resolve({ skipped: true });
+      /* كان يبتلع كل الأخطاء بصمت — الآن التزام مضمون */
+      if (window.AlfaOutbox) return AlfaOutbox.commitOne('audit', l);
       return sb.upsert('audit_log', [row(l)], 'id').catch(function () {});
     }
     function push() {
@@ -376,7 +562,36 @@
       if (!list.length) return Promise.resolve({ skipped: true });
       return sb.upsert('audit_log', list, 'id').then(function () { return { pushed: true, n: list.length }; });
     }
-    return { pull: pull, push: push, pushOne: pushOne, pushSoon: function () { timerSoon(hold, push, 400); } };
+    /* ── صندوق صادر التدقيق ── */
+    function pushRows(rows) {
+      if (!on()) return Promise.reject(new Error('offline'));
+      const list = (rows || []).map(row);
+      if (!list.length) return Promise.resolve({ pushed: true, n: 0 });
+      return sb.upsert('audit_log', list, 'id').then(function () { return { pushed: true, n: list.length }; });
+    }
+    function applyBox(b) {
+      if (!window.AlfaOutbox) return;
+      D().audit_log = AlfaOutbox.mergeLists(D().audit_log, b);
+      var max = 0;
+      (D().audit_log || []).forEach(function (r) { if (Number(r.id) > max) max = Number(r.id); });
+      window.__auditSeq = max + 1;
+      try { if (window.alfaPersist) window.alfaPersist(); } catch (e) {}
+    }
+    if (window.AlfaOutbox) AlfaOutbox.register('audit', { pushRows: pushRows, delRows: function () { return Promise.resolve(); } });
+    function commitAll() {
+      if (window.AlfaOutbox) AlfaOutbox.commitRows('audit', D().audit_log || []);
+    }
+    function pushCommitted() {
+      if (!window.AlfaOutbox) return push();
+      commitAll();
+      return AlfaOutbox.flush('audit');
+    }
+    function pullGuarded() {
+      if (!window.AlfaOutbox) return pull();
+      return AlfaOutbox.guarded('audit', pull, applyBox)();
+    }
+    return { pull: pullGuarded, push: pushCommitted, pushOne: pushOne,
+      pushSoon: function () { if (!window.AlfaOutbox) { timerSoon(hold, push, 400); return; } commitAll(); } };
   })();
 
   /* ---------- إعدادات + عروض + ولاء ---------- */
@@ -452,13 +667,98 @@
         .then(function () { return pushOffers(); })
         .then(function () { return { pushed: true }; });
     }
-    return { pull: pull, push: push, pushSoon: function () { timerSoon(hold, push); } };
+    /* رفع عرض واحد (رأس + سطور) — تُستخدم من الصندوق */
+    function pushOffer(o) {
+      if (!o || !o.id) return Promise.resolve();
+      const head = {
+        id: String(o.id),
+        title: o.title || '',
+        price: Number(o.price) || 0,
+        active: o.active !== false,
+        expires_at: o.expires_at || null,
+      };
+      const lines = (o.items || []).filter(function (it) { return it && it.item_id; }).map(function (it) {
+        return { offer_id: String(o.id), item_id: it.item_id, qty: Number(it.qty) || 1, free: !!it.free };
+      });
+      return sb.upsert('offers', [head], 'id')
+        .then(function () { return sb.delFilter('offer_items', '?offer_id=eq.' + encodeURIComponent(o.id)); })
+        .then(function () { return sb.insert('offer_items', lines).catch(function () {}); });
+    }
+    function delOfferRaw(id) {
+      return sb.delFilter('offer_items', '?offer_id=eq.' + encodeURIComponent(id))
+        .then(function () { return sb.del('offers', [id]); });
+    }
+    /* ── صندوقا مفاتيح الإعدادات والعروض ── */
+    function pushKeyRows(rows) {
+      if (!on()) return Promise.reject(new Error('offline'));
+      const list = (rows || []).filter(function (r) { return r && r.key; });
+      if (!list.length) return Promise.resolve({ pushed: true, n: 0 });
+      return sb.upsert('settings', list, 'key').then(function () { return { pushed: true, n: list.length }; });
+    }
+    function pushOfferRows(rows) {
+      if (!on()) return Promise.reject(new Error('offline'));
+      return (rows || []).reduce(function (p, o) { return p.then(function () { return pushOffer(o); }); }, Promise.resolve())
+        .then(function () { return { pushed: true, n: (rows || []).length }; });
+    }
+    function delOfferRows(ids) {
+      if (!on()) return Promise.reject(new Error('offline'));
+      return (ids || []).reduce(function (p, id) { return p.then(function () { return delOfferRaw(id); }); }, Promise.resolve());
+    }
+    function applySettingsBox(b) {
+      const rows = (b && b.rows) || {};
+      if (rows['discount']) D().discount_settings = rows['discount'].value;
+      if (rows['price']) D().price_settings = rows['price'].value;
+      if (rows['loyalty']) D().loyalty = rows['loyalty'].value;
+      try { if (window.alfaPersist) window.alfaPersist(); } catch (e) {}
+    }
+    function applyOffersBox(b) {
+      if (!window.AlfaOutbox) return;
+      D().offers = AlfaOutbox.mergeLists(D().offers, b);
+      try { if (window.alfaPersist) window.alfaPersist(); } catch (e) {}
+    }
+    function applyLedgerBox(b) {
+      if (!window.AlfaOutbox) return;
+      D().loyalty_ledger = AlfaOutbox.mergeLists(D().loyalty_ledger, b);
+      var max = 0;
+      (D().loyalty_ledger || []).forEach(function (r) { if (Number(r.id) > max) max = Number(r.id); });
+      window.__loySeq = max + 1;
+      try { if (window.alfaPersist) window.alfaPersist(); } catch (e) {}
+    }
+    if (window.AlfaOutbox) {
+      AlfaOutbox.register('settings', { pushRows: pushKeyRows, delRows: function () { return Promise.resolve(); } });
+      AlfaOutbox.register('offers', { pushRows: pushOfferRows, delRows: delOfferRows });
+    }
+    function commitAll() {
+      if (!window.AlfaOutbox) return;
+      AlfaOutbox.commitRows('settings', [
+        { key: 'discount', value: D().discount_settings || { invoice_pct: 0, items: [] } },
+        { key: 'price', value: D().price_settings || {} },
+        { key: 'loyalty', value: D().loyalty || {} },
+      ]);
+      AlfaOutbox.commitRows('offers', D().offers || []);
+    }
+    function pushCommitted() {
+      if (!window.AlfaOutbox) return push();
+      commitAll();
+      return Promise.all([AlfaOutbox.flush('settings'), AlfaOutbox.flush('offers')]);
+    }
+    function pullGuarded() {
+      if (!window.AlfaOutbox) return pull();
+      const g = window.AlfaOutbox.guarded;
+      return g('loyalty_ledger', g('settings', pull, applySettingsBox), applyLedgerBox)();
+    }
+    return { pull: pullGuarded, push: pushCommitted,
+      pushSoon: function () { if (!window.AlfaOutbox) { timerSoon(hold, push); return; } commitAll(); },
+      removeOffer: function (id) {
+        if (!on() || !id) return Promise.resolve({ skipped: true });
+        if (window.AlfaOutbox) return AlfaOutbox.commitDelete('offers', id);
+        return delOfferRaw(id).catch(function () {});
+      } };
   })();
 
   window.LoyaltySync = (function () {
-    function pushOne(l) {
-      if (!on() || !l) return Promise.resolve();
-      return sb.upsert('loyalty_ledger', [{
+    function row(l) {
+      return {
         id: Number(l.id),
         customer_id: l.customer_id || null,
         at: l.at || null,
@@ -466,8 +766,22 @@
         pts: Number(l.pts) || 0,
         note: l.note || null,
         by: l.by || null,
-      }], 'id').catch(function () {});
+      };
     }
+    function pushOne(l) {
+      if (!on() || !l) return Promise.resolve({ skipped: true });
+      /* كان يبتلع كل الأخطاء بصمت — الآن التزام مضمون */
+      if (window.AlfaOutbox) return AlfaOutbox.commitOne('loyalty_ledger', l);
+      return sb.upsert('loyalty_ledger', [row(l)], 'id').catch(function () {});
+    }
+    /* ── صندوق صادر دفتر الولاء ── */
+    function pushRows(rows) {
+      if (!on()) return Promise.reject(new Error('offline'));
+      const list = (rows || []).map(row);
+      if (!list.length) return Promise.resolve({ pushed: true, n: 0 });
+      return sb.upsert('loyalty_ledger', list, 'id').then(function () { return { pushed: true, n: list.length }; });
+    }
+    if (window.AlfaOutbox) AlfaOutbox.register('loyalty_ledger', { pushRows: pushRows, delRows: function () { return Promise.resolve(); } });
     return { pushOne: pushOne };
   })();
 
