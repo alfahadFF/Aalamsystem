@@ -5026,3 +5026,71 @@ d); font-weight:700; }
 .pin-pad button:active { background: #CBD5E1; transform: scale(0.95); }
 .pin-pad .pin-clear { background: #EF4444; color: #fff; font-size: 20px; }
 .pin-pad .pin-cancel { background: #94A3B8; color: #fff; font-size: 16px; }
+
+/* ═══════════ خدمات الطلب + ألوان عائلات الغربي (تعديل العميل 1) ═══════════ */
+.family-card { position: relative; }
+.svc-badge {
+  background: #B45309; color: #fff; border-radius: 999px;
+  padding: 2px 9px; font-size: 11px; font-weight: 800; white-space: nowrap;
+}
+.services-category-card { border-style: dashed; border-color: #B45309; }
+.svc-mini-btn {
+  margin-top: 8px; width: 100%; border: 1.5px dashed #B45309; border-radius: 10px;
+  background: #FFFBEB; color: #92400E; font-weight: 800; font-size: 13px;
+  padding: 8px 10px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 7px;
+}
+.d-cat.svc-dcat { border-style: dashed; border-color: #B45309; color: #92400E; }
+.svc-scrim { position: fixed; inset: 0; background: rgba(16,42,67,.45); z-index: 90; }
+.svc-modal {
+  position: fixed; z-index: 91; left: 50%; top: 50%; transform: translate(-50%,-50%);
+  width: min(94vw, 420px); background: var(--surface); border: 1px solid var(--line-strong);
+  border-radius: 14px; padding: 16px; box-shadow: 0 18px 50px rgba(0,0,0,.25);
+}
+.svc-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; }
+.svc-head strong { font-size: 15px; }
+.svc-head button { border: 0; background: #F1F5F9; border-radius: 8px; width: 30px; height: 30px; cursor: pointer; font-weight: 800; }
+.svc-hint { font-size: 12px; color: var(--text-muted); margin-bottom: 12px; }
+.svc-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 10px; }
+.svc-row span { font-size: 13.5px; font-weight: 800; white-space: nowrap; }
+.svc-row input {
+  flex: 1; max-width: 170px; border: 1.5px solid var(--line-strong); border-radius: 10px;
+  padding: 9px 10px; font-size: 15px; font-weight: 800; text-align: center;
+}
+.svc-actions { display: flex; gap: 8px; margin-top: 6px; }
+.svc-save { flex: 2; background: var(--fahad-blue); color: #fff; border: 0; border-radius: 10px; padding: 10px; font-size: 14px; font-weight: 800; cursor: pointer; }
+.svc-clear { flex: 1; background: #F1F5F9; color: #475569; border: 0; border-radius: 10px; padding: 10px; font-size: 14px; font-weight: 800; cursor: pointer; }
+.bill-services-line { background: #FFFBEB; color: #92400E; border: 1px dashed #D97706; border-radius: 8px; padding: 7px 10px; font-size: 12.5px; font-weight: 700; margin: 6px 0; }
+.dinv-svc-strip { background: #FFFBEB; color: #92400E; border: 1px dashed #D97706; border-radius: 8px; padding: 5px 10px; font-size: 12px; font-weight: 700; margin: 4px 0; text-align: center; }
+.inv-svc-lines { margin: 8px 0; display: flex; flex-direction: column; gap: 6px; }
+.inv-svc-row { display: flex; align-items: center; justify-content: space-between; background: #FFFBEB; border: 1px dashed #D97706; border-radius: 8px; padding: 7px 12px; font-size: 13px; font-weight: 700; color: #92400E; }
+
+/* ═══════════ تعديل الكمية بالنقر على خانة العدد ═══════════ */
+.qty-tap { cursor: pointer; text-decoration: underline dotted; text-underline-offset: 3px; touch-action: manipulation; -webkit-tap-highlight-color: rgba(2,132,199,.25); }
+.qty-tap:active { transform: scale(.94); }
+.qedit-scrim { position: fixed; inset: 0; background: rgba(16,42,67,.45); z-index: 92; }
+.qedit-modal {
+  position: fixed; z-index: 93; left: 50%; top: 50%; transform: translate(-50%,-50%);
+  width: min(94vw, 340px); background: var(--surface); border: 1px solid var(--line-strong);
+  border-radius: 14px; padding: 16px; box-shadow: 0 18px 50px rgba(0,0,0,.25);
+}
+.qedit-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+.qedit-head strong { font-size: 15px; }
+.qedit-head button { border: 0; background: #F1F5F9; border-radius: 8px; width: 30px; height: 30px; cursor: pointer; font-weight: 800; }
+.qedit-item { font-size: 13px; font-weight: 800; color: var(--text-muted); margin-bottom: 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.qedit-display {
+  display: flex; align-items: center; justify-content: space-between;
+  background: #F8FAFC; border: 1.5px solid var(--line-strong); border-radius: 10px;
+  padding: 8px 12px; margin-bottom: 10px;
+}
+.qedit-display small { font-size: 12px; color: var(--text-muted); font-weight: 700; }
+.qedit-display b { font-size: 24px; color: var(--fahad-navy); min-width: 44px; text-align: center; }
+.qedit-keys { display: grid; grid-template-columns: repeat(3, 1fr); gap: 7px; margin-bottom: 8px; }
+.qedit-key {
+  border: 1px solid var(--line-strong); background: #fff; border-radius: 10px;
+  font-size: 19px; font-weight: 800; padding: 9px 0; cursor: pointer; color: var(--fahad-navy);
+  touch-action: manipulation; user-select: none; -webkit-user-select: none;
+}
+.qedit-key:active { background: var(--fahad-blue-bg); }
+.qedit-key.danger { background: #FEF2F2; color: #DC2626; border-color: #FECACA; }
+.qedit-hint { font-size: 11.5px; color: var(--text-muted); text-align: center; margin-bottom: 10px; }
+.build-chip { font-size: 10px; color: var(--text-muted); background: #F1F5F9; border-radius: 6px; padding: 2px 7px; font-weight: 700; white-space: nowrap; }

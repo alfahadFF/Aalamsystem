@@ -380,3 +380,27 @@
   gap: 8px; padding-top: 12px;
   border-top: 1px solid var(--line); margin-top: 4px;
 }
+
+/* ═══════════ إعادة الترتيب بالسحب والإفلات ═══════════ */
+.drag-handle {
+  cursor: grab; user-select: none; -webkit-user-select: none;
+  color: #94A3B8; font-size: 17px; letter-spacing: -2px; line-height: 1;
+  padding: 6px 4px; flex-shrink: 0; touch-action: none;
+}
+.drag-handle:active { cursor: grabbing; color: var(--fahad-blue, #0284C7); }
+.menu-item-row[draggable="true"] { cursor: default; }
+.menu-item-row.dragging { opacity: .45; background: #F1F5F9; }
+.menu-item-row.drop-before { box-shadow: inset 0 3px 0 var(--fahad-blue, #0284C7); }
+.menu-item-row.drop-after { box-shadow: inset 0 -3px 0 var(--fahad-blue, #0284C7); }
+.menu-item-row.drop-deny { box-shadow: inset 0 0 0 2px #EF4444; opacity: .6; }
+.move-btns { display: inline-flex; flex-direction: column; gap: 2px; }
+.move-btn {
+  border: 1px solid var(--line, #E2E8F0); background: #F8FAFC; color: #64748B;
+  border-radius: 6px; width: 24px; height: 20px; font-size: 11px; line-height: 1;
+  cursor: pointer; padding: 0;
+}
+.move-btn:active { background: var(--fahad-blue-bg, #E0F2FE); color: var(--fahad-blue, #0284C7); }
+.auto-sort-note {
+  background: #F0FDF4; border: 1px dashed #86EFAC; color: #15803D;
+  border-radius: 8px; padding: 9px 10px; font-size: 12.5px; font-weight: 700; line-height: 1.6;
+}
