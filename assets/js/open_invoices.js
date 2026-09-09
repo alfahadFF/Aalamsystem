@@ -34,7 +34,7 @@ function itemTitle(item){
   if(item.option_name && item.option_name!==item.family) return `${item.option_name} ${variant}`.trim();
   return variant || item.name;
 }
-function recalc(inv){ inv.total=(inv.items||[]).reduce((s,x)=>s+Number(x.total||0),0); }
+function recalc(inv){ inv.total=(inv.items||[]).reduce((s,x)=>s+Number(x.total||0),0)+(Number(inv.service_table)||0)+(Number(inv.service_delivery)||0); }
 
 /* ── شارة الحالة ── */
 function statusBadge(status){
@@ -189,6 +189,7 @@ function renderInvoiceDetail(inv){
         </div>`).join('') || `<div class="empty-customers">لا توجد أصناف</div>`}
     </div>
 
+    ${((Number(inv.service_table) || 0) + (Number(inv.service_delivery) || 0) > 0) ? `<div class="inv-svc-lines">${(Number(inv.service_table) || 0) ? `<div class="inv-svc-row"><span>🍽️ خدمة طاولة</span><strong>${fmtNum(inv.service_table)} ل.س</strong></div>` : ''}${(Number(inv.service_delivery) || 0) ? `<div class="inv-svc-row"><span>🛵 خدمة توصيل</span><strong>${fmtNum(inv.service_delivery)} ل.س</strong></div>` : ''}</div>` : ''}
     <div class="bill-total-box">
       <span>إجمالي الفاتورة</span>
       <strong>${fmtNum(inv.total)} ل.س</strong>

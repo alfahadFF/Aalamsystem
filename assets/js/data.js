@@ -3099,13 +3099,19 @@ window.DEMO_DATA.price_settings = window.DEMO_DATA.price_settings || {
     refresh() {
       document.querySelectorAll('.net-badge').forEach(el => {
         const on = navigator.onLine !== false;
-        const pend = window.SyncQueue ? SyncQueue.count() : 0;
+        /* تعديلات المنيو المعلقة (الصندوق الصادر) تُحتسب ضمن المنتظر —
+           سابقاً كان المؤشر أخضر «كل العمليات متزامنة» بينما تعديلات
+           المنيو لم تُرفع بعد، لأنها لا تمر عبر SyncQueue. */
+        const menuPend = (window.MenuOutbox && MenuOutbox.hasPending) ? (MenuOutbox.hasPending() ? 1 : 0) : 0;
+        const outboxPend = (window.AlfaOutbox && AlfaOutbox.pendingCount) ? AlfaOutbox.pendingCount() : 0;
+        const pend = (window.SyncQueue ? SyncQueue.count() : 0) + menuPend + outboxPend;
         el.className = 'net-badge ' + (on ? 'net-on' : 'net-off');
         el.innerHTML = `<span class="net-dot"></span><span>${on ? 'متصل' : 'دون اتصال'}</span>` +
           (pend ? `<span class="net-pend">${pend}⏳</span>` : '');
         el.title = on
-          ? (pend ? `${pend} عملية بانتظار المزامنة — سترفع تلقائياً عند الربط` : 'متصل — كل العمليات متزامنة')
-          : `العمل دون اتصال شغّال${pend ? ` · ${pend} عملية في الطابور` : ''}`;
+          ? ((menuPend || outboxPend) ? 'تعديلات معلقة — ستُرفع تلقائياً'
+              : (pend ? `${pend} عملية بانتظار المزامنة — سترفع تلقائياً عند الربط` : 'متصل — كل العمليات متزامنة'))
+          : `العمل دون اتصال شغّال${(menuPend || outboxPend) ? ' · تعديلات معلقة' : ''}${pend ? ` · ${pend} عملية في الطابور` : ''}`;
       });
     },
     bind() {
@@ -3156,20 +3162,31 @@ window.DEMO_DATA.price_settings = window.DEMO_DATA.price_settings || {
   function finish(saved, queue) {
     if (finished) return;
     finished = true;
+    if (window.__splash) window.__splash.set(45, 'جاري تحميل البيانات...');
     window.__ALFA_MERGING = true;
     if (saved && typeof saved === 'object') {
-      const cloud = !!(window.ALFA_CONFIG && ALFA_CONFIG.supabase && ALFA_CONFIG.supabase.url && ALFA_CONFIG.supabase.anonKey);
-      const posKeys = { items: 1, categories: 1, offers: 1, discount_settings: 1, invoices: 1, contracts: 1, online_orders: 1,
-        employees: 1, suppliers: 1, inventory: 1, audit_log: 1, delivery_agents: 1,
-        loyalty: 1, loyalty_ledger: 1, price_settings: 1, expenditures: 1, material_purchases: 1 };
+      /* الرسم الفوري يعرض اللقطة المحلية أولاً (أحدث من البذرة دائماً) —
+         السحب الخلفي يستبدلها بالطازج خلال ثوانٍ. (سابقاً: تُتجاهل مع السحابة
+         فيُعرض seed ثم يُستبدل — وكان الحفظ السريع/الأوفلاين يدفع البذرة!) */
       for (const k of Object.keys(saved)) {
-        if (cloud && posKeys[k]) continue;
         base[k] = saved[k];
       }
     }
     if (window.SyncQueue && window.SyncQueue.hydrate) window.SyncQueue.hydrate(queue || []);
+    /* تهيئة صناديق المحرك العام قبل السحب (التفريغ يتم داخل كل سحب محروس) */
+    if (window.AlfaOutbox && AlfaOutbox.hydrateAll) AlfaOutbox.hydrateAll();
     window.__ALFA_MERGING = false;
     const done = function () { readyResolve(); };
+    /* الإقلاع الفوري: الرسم أولاً بالبيانات المحلية، والسحب خلفاً بعد أول رسم —
+       الشاشة لا تنتظر الشبكة أبداً. عند اكتمال السحب: حفظ + حدث alfa:cloud-ready */
+    let __bgResolve = function () {};
+    window.__ALFA_BG_P = new Promise(function (r) { __bgResolve = r; });
+    const bgDone = function () {
+      __bgResolve();
+      try { window.dispatchEvent(new Event('alfa:cloud-ready')); } catch (e) {}
+    };
+    done();
+    setTimeout(function () {
     if (navigator.onLine !== false) {
       const first = [];
       if (window.MenuSync && MenuSync.pull) first.push(MenuSync.pull());
@@ -3178,7 +3195,7 @@ window.DEMO_DATA.price_settings = window.DEMO_DATA.price_settings || {
       if (window.SessionSync && SessionSync.pull) first.push(SessionSync.pull());
       if (window.AgentSync && AgentSync.pull) first.push(AgentSync.pull());
       if (first.length) {
-        const t = setTimeout(done, 10000);
+        const t = setTimeout(bgDone, 10000);
         /* فشل أي خطوة أولى (زبائن/جلسات/…) كان يوقف السلسلة كلها فلا يُسحب
            المخزون والطاولات والإعدادات أبداً وتبقى البذرة المحلية.
            الآن لكل خطوة عزل خطأ مستقل وتكتمل السلسلة دوماً. */
@@ -3190,13 +3207,14 @@ window.DEMO_DATA.price_settings = window.DEMO_DATA.price_settings || {
         }).then(function () {
           clearTimeout(t);
           try { if (window.alfaPersist) window.alfaPersist(); } catch (e) {}
-          done();
-        }).catch(function () { clearTimeout(t); done(); });
-      } else done();
+          bgDone();
+        }).catch(function () { clearTimeout(t); bgDone(); });
+      } else bgDone();
     } else {
       if (window.AlfaCloud) window.AlfaCloud.menu = { state: 'offline', error: 'بدون إنترنت' };
-      done();
+      bgDone();
     }
+    }, 0);
   }
 
   const loadData = (window.SyncStorage && window.SyncStorage.load)

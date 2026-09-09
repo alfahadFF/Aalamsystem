@@ -19,7 +19,7 @@
   /* أحجام الخطوط = مقاسات الفاتورة المعتمدة لدى المطعم (صورة 9/3/2026).
      عدّلها من config.js → thermal.fonts إن أراد صاحب المطعم تغييراً. */
   const FONTS = () => Object.assign({
-    title: 20, sub: 12.5, noLabel: 15, no: 28, date: 12, cust: 12.5,
+    title: 20, sub: 12.5, noLabel: 26, no: 26, date: 12, cust: 12.5,
     th: 12.5, td: 12, note: 11, sum: 13, thanks: 15,
   }, CFG().fonts || {});
   const FEED = () => Number(CFG().feedMm) || 3;
@@ -54,17 +54,24 @@
     const secret = window.ALFA_CONFIG && window.ALFA_CONFIG.thermal && window.ALFA_CONFIG.thermal.qzSecret;
     const headers = { 'Content-Type': 'application/json' };
     if (secret) headers['x-qz-secret'] = secret;
+    /* مهلة 8ث: الطباعة لا تعلق على توقيع سيرفري (وضع سوريا) */
+    const ctrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
+    const st = ctrl ? setTimeout(function () { try { ctrl.abort(); } catch (e) {} }, 8000) : null;
+    try {
     const res = await fetch('/.netlify/functions/sign', {
       method: 'POST',
       headers,
       body: JSON.stringify({ request: toSign }),
+      signal: ctrl ? ctrl.signal : undefined,
     });
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
       throw new Error('sign failed: ' + (err.error || res.status));
     }
     const { signature } = await res.json();
+    if (st) clearTimeout(st);
     return signature;
+    } finally { if (st) clearTimeout(st); }
   }
 
   /* ── التوقيع محلياً بلا إنترنت (WebCrypto) ──
@@ -177,18 +184,26 @@
 
   function esc(v) { return String(v ?? '').replace(/[&<>"]/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[ch])); }
 
-  /* حذف كلمة «سندويش» بكل صيغها من أسماء الأصناف في الفاتورة (طلب صاحب المطعم):
-     بطاطا سندويشة عادي ← بطاطا عادي · شاورما سندويش كبير ← شاورما كبير
-     صحن سندويشتين ← صحن 2 · صحن 3سندويشات ← صحن 3 · صحن 4 سندويشات ← صحن 4 */
+  /* أسماء الأصناف تُطبع كما هي في البيانات (اسم + متغير) بلا أي حذف —
+     قاعدة حذف «سندويش» أُلغيت لأن المسميات نُظّفت مباشرة في المنيو */
   function cleanItemName(n) {
-    return String(n ?? '')
-      .split(/\s+/)
-      .map(w => w === 'سندويشتين' ? '2'
-        : w.replace(/سندويشات$/, '').replace(/سندويشة$/, '').replace(/سندويش$/, ''))
-      .filter(Boolean)
-      .join(' ')
-      .replace(/\s+/g, ' ')
-      .trim();
+    return String(n ?? '').replace(/\s+/g, ' ').trim();
+  }
+  /* سطور اسم المادة: الأسماء الطويلة (>12 حرفاً) تُقسَّم (نوع / عائلة / متغير) —
+     «صحن شاورما عربي 3سندويشات» ← 3 سطور موسّطة. القصيرة والمجهولة: سطر واحد */
+  function nameLines(it) {
+    const full = cleanItemName(it.name);
+    const all = (window.DEMO_DATA && DEMO_DATA.items) || [];
+    const item = all.find(i => i.id === it.id);
+    const variant = item ? String(item.variant_clean || item.variant || '').trim() : '';
+    if (!item || !variant || full.length <= 12 || !full.endsWith(variant)) return [full];
+    const head = full.slice(0, -variant.length).replace(/[-–—]\s*$/, '').trim();
+    const fam = String(item.family || '').trim();
+    if (fam && head !== fam && head.endsWith(fam)) {
+      const type = head.slice(0, -fam.length).trim();
+      return type ? [type, fam, variant] : [fam, variant];
+    }
+    return head ? [head, variant] : [variant];
   }
   function fmtN(n) { return Number(n || 0).toLocaleString('en-US'); }
 
@@ -205,7 +220,7 @@
      قالب الإيصال — بنفس تنسيق الفاتورة المعتمدة (صورة عالم الفواكه)
      وبأحجام الخطوط نفسها تماماً (thermal.fonts في config.js):
 
-       الاسم 20 · العنوان/الهاتف 14 · «رقم الطلب:» 15 والرقم 28
+       الاسم 20 · العنوان/الهاتف 14 · «رقم الطلب:» 26 = الرقم 26
        التاريخ 13 · الزبون 14 · رؤوس الأعمدة 12.5 · الخلايا 12
        الملاحظات 11 · المجاميع 13 · شكراً 15
 
@@ -230,8 +245,15 @@
 
     // سطر الزبون المدمج: الاسم الهاتف العنوان خارجي
     // (حُذف [الرقم] — كان تكراراً لرقم الطلب الظاهر أعلاه)
+    const isDlv = inv.type === 'delivery';
     const cust = [inv.customer_name, inv.phone, inv.customer_address].filter(Boolean).join(' ')
-      + (inv.type === 'delivery' ? ' خارجي' : '');
+      + (isDlv ? ' خارجي' : '');
+    /* التوصيل: سطر الاسم والهاتف + سطر العنوان (بقية الأنواع: سطر واحد كما هو) */
+    const cust1 = [inv.customer_name, inv.phone].filter(Boolean).join(' ');
+    const cust2 = ([inv.customer_address].filter(Boolean).join(' ') + (isDlv ? ' خارجي' : '')).trim();
+    /* نوع الطلب قبل الجدول: كلمة عارية بلا عنوان (طاولة/سفري/خارجي/أونلاين) */
+    const TYPE_AR = { dinein: 'طاولة', table: 'طاولة', takeaway: 'سفري', delivery: 'خارجي', online: 'أونلاين', contract: 'عقد' };
+    const typeAr = inv.source === 'online' ? 'أونلاين' : (TYPE_AR[inv.type] || '');
 
     /* خلايا بحدود كاملة كالصورة + التفاف النص داخل الخلايا حتى لا تتمدد
        الأسماء والملاحظات الطويلة خارج الجدول */
@@ -242,23 +264,36 @@
     const TH = `border:1px solid #000;padding:1.5px 1px;font-size:${F.th}px;line-height:1.2;font-weight:900;${WRAP}`;
 
     /* عمود الملاحظات موجود في النسختين — كاشير ومطبخ بنفس الشكل تماماً */
-    /* صف الخدمة الأخير: التوصيل أو الطاولة — ينتقل إليه نوع الطلب بدل سطر
-       الرقم. القيمة الافتراضية 0، ويحدد المطعم سعرها لاحقاً (inv.service_fee) */
-    const fee = Number(inv.service_fee) || 0;
-    const svcRow = (inv.type === 'delivery' || inv.type === 'table' || inv.type === 'dinein')
-      ? `\n        <tr>
-          <td style="${TD}text-align:right;font-size:${F.name || F.td}px;">${inv.type === 'delivery' ? 'خدمة توصيل' : 'خدمة طاولة'}</td>
+    /* صفوف الخدمات: طاولة / توصيل — تُطبع فقط عند وجود قيمة (> 0)،
+       وتُستثنى من نسخة المطبخ. التوافق القديم: service_fee وحيد حسب النوع */
+    const svcT = Number(inv.service_table != null ? inv.service_table : (inv.discount_detail || {}).service_table) || 0;
+    const svcD = Number(inv.service_delivery != null ? inv.service_delivery : (inv.discount_detail || {}).service_delivery) || 0;
+    const svcRowFor = (label, amt) => `\n        <tr>
+          <td style="${TD}text-align:center;font-size:${F.name || F.td}px;">${label}</td>
           <td style="${TD}text-align:center;">1.00</td>
-          <td style="${TD}text-align:center;">${fmtN(fee)}</td>
-          <td style="${TD}text-align:center;">${fmtN(fee)}</td>
+          <td style="${TD}text-align:center;">${fmtN(amt)}</td>
+          <td style="${TD}text-align:center;">${fmtN(amt)}</td>
           <td style="${TD}text-align:center;font-weight:normal;font-size:${F.note}px;"></td>
-        </tr>` : '';
+        </tr>`;
+    let svcRows = '';
+    if (!opts.kitchen) {
+      if (svcT > 0) svcRows += svcRowFor('خدمة طاولة', svcT);
+      if (svcD > 0) svcRows += svcRowFor('خدمة توصيل', svcD);
+      if (!svcRows) {
+        const fee = Number(inv.service_fee) || 0;
+        if (fee > 0 && (inv.type === 'delivery' || inv.type === 'table' || inv.type === 'dinein'))
+          svcRows = svcRowFor(inv.type === 'delivery' ? 'خدمة توصيل' : 'خدمة طاولة', fee);
+      }
+    }
+    const svcTotal = svcT + svcD;
 
     const rows = items.map(it => {
       const note = String(it.note || '').trim();
       const inline = note.length <= 10 ? note : '';
+      const nm = nameLines(it);
+      const nameCell = nm.map((ln, ix) => `${ix === 0 && it.offer_id ? '🎟️ ' : ''}${ix === 0 && it.is_free ? '🎁 ' : ''}${esc(ln)}`).join('<br>');
       let h = `<tr>
-          <td style="${TD}text-align:right;font-size:${F.name || F.td}px;">${it.offer_id ? '🎟️ ' : ''}${it.is_free ? '🎁 ' : ''}${esc(cleanItemName(it.name))}</td>
+          <td style="${TD}text-align:center;font-size:${F.name || F.td}px;">${nameCell}</td>
           <td style="${TD}text-align:center;">${(Number(it.qty) || 1).toFixed(2)}</td>
           <td style="${TD}text-align:center;">${fmtN(it.price)}</td>
           <td style="${TD}text-align:center;">${fmtN((Number(it.price) || 0) * (Number(it.qty) || 1))}</td>`
@@ -271,10 +306,10 @@
     /* رؤوس الأعمدة: خط أصغر وخط فاصل أسفلها أثقل لشكل أنظف — 5 أعمدة دائماً */
     const HB = 'border-bottom:2px solid #000;';
     /* عروض الأعمدة مقيسة من فاتورة العميل نفسها (مواضع الأرقام): اسم المادة ≈
-       الإجمالي ≈ الملاحظات ≈ 22.7% لكل منها، الكمية 15%، السعر 17% */
+       الإجمالي ≈ الملاحظات ≈ 22.7% لكل منها، الكمية 13%، السعر 20% */
     const headCols = `<th style="${TH}${HB}text-align:center;width:22%;">اسم المادة</th>
-         <th style="${TH}${HB}text-align:center;width:15%;">الكمية</th>
-         <th style="${TH}${HB}text-align:center;width:18%;">السعر</th>
+         <th style="${TH}${HB}text-align:center;width:13%;">الكمية</th>
+         <th style="${TH}${HB}text-align:center;width:20%;">السعر</th>
          <th style="${TH}${HB}text-align:center;width:22.5%;">إجمالي</th>
          <th style="${TH}${HB}text-align:center;width:22.5%;">ملاحظات</th>`;
 
@@ -284,22 +319,26 @@
 
     return `
       <div style="display:flow-root;${MINH() && !opts.kitchen ? `min-height:${MINH()}mm;` : ''}width:${w}mm;max-width:${w}mm;min-width:${w}mm;margin:0 auto;padding:0;font-family:Tahoma,Arial,sans-serif;color:#000;direction:rtl;text-align:right;box-sizing:border-box;line-height:1.25;background:#fff;">
-        <div style="min-height:64mm;display:flex;flex-direction:column;justify-content:space-evenly;margin:1mm 0 2mm;">
+        <div style="min-height:${isDlv ? 60 : 64}mm;display:flex;flex-direction:column;justify-content:space-evenly;margin:1mm 0 2mm;">
           <div style="font-size:${F.title}px;font-weight:900;text-align:center;">${esc(RESTAURANT())}</div>
           ${subLine ? `<div style="font-size:${F.sub}px;font-weight:bold;text-align:center;">${esc(subLine)}</div>` : ''}
           <div style="font-size:${F.noLabel}px;font-weight:900;text-align:center;">رقم الطلب: <span style="font-size:${F.no}px;line-height:1.1;">${esc(no)}</span></div>
           <div style="font-size:${F.date}px;font-weight:bold;text-align:center;">تاريخ الطلب: ${esc(inv.date || '')} ${esc(to12h(inv.time))}</div>
-          ${cust ? `<div style="font-size:${F.cust}px;font-weight:bold;text-align:center;">${esc(cust)}</div>` : ''}
+          ${isDlv
+            ? `${cust1 ? `<div style="font-size:${F.cust}px;font-weight:bold;text-align:center;">${esc(cust1)}</div>` : ''}${cust2 ? `<div style="font-size:${F.cust}px;font-weight:bold;text-align:center;">${esc(cust2)}</div>` : ''}`
+            : `${cust ? `<div style="font-size:${F.cust}px;font-weight:bold;text-align:center;">${esc(cust)}</div>` : ''}`}
+          ${typeAr ? `<div style="font-size:${F.date}px;font-weight:900;text-align:center;">${esc(typeAr)}</div>` : ''}
         </div>
 
         <table style="width:calc(100% - 1mm);border-collapse:collapse;border:1px solid #000;margin:0 auto 10mm;table-layout:fixed;">
           <thead><tr>${headCols}</tr></thead>
-          <tbody>${rows}${svcRow}</tbody>
+          <tbody>${rows}${svcRows}</tbody>
         </table>
 
         <table style="width:calc(100% - 1mm);border-collapse:collapse;border:1px solid #000;margin:0 auto 1mm;">
           <tr><td style="${SUM}text-align:right;padding-inline-start:12px;">مجموع الطلب</td><td style="${SUM}text-align:center;">${fmtN(sub)}</td></tr>
           <tr><td style="${SUM}text-align:right;padding-inline-start:12px;">الحسم</td><td style="${SUM}text-align:center;">${fmtN(disc)}</td></tr>
+          ${svcTotal > 0 ? `<tr><td style="${SUM}text-align:right;padding-inline-start:12px;">الخدمات</td><td style="${SUM}text-align:center;">${fmtN(svcTotal)}</td></tr>` : ''}
           <tr><td style="${SUM}text-align:right;padding-inline-start:12px;">الصافي</td><td style="${SUM}text-align:center;">${fmtN(total)}</td></tr>
         </table>
 

@@ -67,8 +67,9 @@
     const normal = rules.filter(function (r) { return r.bread !== "سمون"; });
     const samoun = rules.filter(function (r) { return r.bread === "سمون"; });
     let changed = false;
+    const changedMats = [];
     function setRec(m, rec) {
-      if (JSON.stringify(rec) !== JSON.stringify(m.recipe || [])) { m.recipe = rec; changed = true; }
+      if (JSON.stringify(rec) !== JSON.stringify(m.recipe || [])) { m.recipe = rec; changed = true; changedMats.push(m); }
       m.trackable = true;
     }
     inv.forEach(function (m) {
@@ -117,7 +118,11 @@
         setRec(m, match.map(function (it) { return { item_id: it.id, qty: dk.qty || 5 }; }));
       }
     });
-    if (changed && window.InventorySync && InventorySync.pushSoon) InventorySync.pushSoon();
+    /* التزام المواد المتغيرة فقط (بدل الرفع الكامل المؤجَّل الذي كان يضيع) */
+    if (changedMats.length && window.InventorySync) {
+      if (InventorySync.commitMats) InventorySync.commitMats(changedMats);
+      else if (InventorySync.pushSoon) InventorySync.pushSoon();
+    }
     return changed;
   }
 

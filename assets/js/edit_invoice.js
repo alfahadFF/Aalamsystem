@@ -31,7 +31,7 @@ function isOnlineInv(inv){
   if (inv.source === 'online' || inv.online_order_id) return true;
   return ((window.DEMO_DATA && DEMO_DATA.online_orders) || []).some(o => o.invoice_id === inv.id);
 }
-function recalc(inv){ inv.total = (inv.items||[]).reduce((s,x)=>s+Number(x.total||0),0); }
+function recalc(inv){ inv.total = (inv.items||[]).reduce((s,x)=>s+Number(x.total||0),0)+(Number(inv.service_table)||0)+(Number(inv.service_delivery)||0); }
 function commitInv(inv){
   if (!inv) return;
   if (window.AlfaDB && AlfaDB.upsert) {
@@ -263,6 +263,7 @@ function renderInvoiceEditor(inv){
         </div>`).join('') || `<div class="empty-customers">لا توجد أصناف</div>`}
     </div>
 
+    ${((Number(inv.service_table) || 0) + (Number(inv.service_delivery) || 0) > 0) ? `<div class="inv-svc-lines">${(Number(inv.service_table) || 0) ? `<div class="inv-svc-row"><span>🍽️ خدمة طاولة</span><strong>${fmtNum(inv.service_table)} ل.س</strong></div>` : ''}${(Number(inv.service_delivery) || 0) ? `<div class="inv-svc-row"><span>🛵 خدمة توصيل</span><strong>${fmtNum(inv.service_delivery)} ل.س</strong></div>` : ''}</div>` : ''}
     <div class="bill-total-box">
       <span>إجمالي الفاتورة</span>
       <strong>${fmtNum(inv.total)} ل.س</strong>

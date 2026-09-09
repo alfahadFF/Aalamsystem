@@ -54,6 +54,27 @@ const navLink = window.AlfaNav.linker(CURRENT);
 let categories = JSON.parse(JSON.stringify(DATA.categories || []));
 let items      = JSON.parse(JSON.stringify(DATA.items      || []));
 
+/* ── حفظ مباشر في قاعدة البيانات ──────────────────────────────
+   كل حفظ صريح يُقيَّد فوراً في الصندوق الصادر ثم يُرفع مباشرة
+   (pushNow) بدل التأجيل 700ms الذي كان يضيع عند التنقل السريع.
+   أي فشل يُعاد تلقائياً: عند عودة الإنترنت وعند كل إقلاع. */
+function commitMenu() {
+  /* زامِن نسخة الصفحة مع DATA قبل الالتزام */
+  try { DATA.items = items; DATA.categories = categories; } catch (e) {}
+  if (window.commitMenuNow) return commitMenuNow(items, categories);
+  if (window.MenuSync) MenuSync.pushSoon();
+  return Promise.resolve({ legacy: true });
+}
+function commitDelete(kind, id, deletedItemIds) {
+  try { DATA.items = items; DATA.categories = categories; } catch (e) {}
+  if (window.commitMenuDelete) return commitMenuDelete(kind, id, items, categories, deletedItemIds);
+  if (window.MenuSync) {
+    if (kind === 'cat') MenuSync.removeCat(id); else MenuSync.removeItem(id);
+    MenuSync.pushSoon();
+  }
+  return Promise.resolve({ legacy: true });
+}
+
 /* ── حالة UI ── */
 let navOpen       = false;
 let activeCatId   = null;   // null = عرض كل التصنيفات
@@ -242,6 +263,7 @@ function renderAllCats() {
                 ${catItems.length} صنف
                 ${activeCount ? `<span class="mgr-badge green">${activeCount} متوفر</span>` : ''}
                 ${inactiveCount ? `<span class="mgr-badge red">${inactiveCount} غير متوفر</span>` : ''}
+                <span class="mgr-badge blue">⠿ اسحب للترتيب</span>
               </div>
             </div>
           </div>
@@ -251,7 +273,7 @@ function renderAllCats() {
         <div class="mgr-card" style="padding:0;overflow:hidden;margin-bottom:0;">
           ${catItems.length === 0
             ? `<div class="mgr-empty" style="padding:16px;">لا توجد أصناف في هذا التصنيف</div>`
-            : catItems.map(item => renderItemRow(item)).join('')}
+            : catItems.map(item => renderItemRow(item, true)).join('')}
         </div>
       </div>
     `;
@@ -271,7 +293,7 @@ function renderCatItems(catId) {
           <span class="menu-cat-icon">${cat?.icon || '📦'}</span>
           <div>
             <div class="menu-cat-name">${e(cat?.name || '')}</div>
-            <div class="menu-cat-meta">${catItems.length} صنف</div>
+            <div class="menu-cat-meta">${catItems.length} صنف <span class="mgr-badge blue">⠿ اسحب للترتيب</span></div>
           </div>
         </div>
         <button class="menu-edit-cat-btn" onclick="openEditCat('${e(catId)}')">✏️ تعديل التصنيف</button>
@@ -289,17 +311,19 @@ function renderCatItems(catId) {
       <div class="mgr-card" style="padding:0;overflow:hidden;">
         ${catItems.length === 0
           ? `<div class="mgr-empty">لا توجد أصناف</div>`
-          : catItems.map(item => renderItemRow(item)).join('')}
+          : catItems.map(item => renderItemRow(item, true)).join('')}
       </div>
     </div>
   `;
 }
 
-/* ── صف الصنف الواحد ── */
-function renderItemRow(item) {
+/* ── صف الصنف الواحد (drag = سحب وإفلات مفعّل في عرض التصنيف فقط) ── */
+function renderItemRow(item, drag) {
   const available = item.is_available !== false;
+  const dnd = drag ? ` draggable="true" data-item-id="${e(item.id)}" data-cat-id="${e(item.category_id || '')}" ondragstart="menuDragStart(event)" ondragover="menuDragOver(event)" ondragleave="menuDragLeave(event)" ondrop="menuDrop(event)" ondragend="menuDragEnd(event)"` : '';
   return `
-    <div class="menu-item-row ${available ? '' : 'unavailable'}">
+    <div class="menu-item-row ${available ? '' : 'unavailable'}"${dnd}>
+      ${drag ? `<span class="drag-handle" title="اسحب لإعادة الترتيب">⠿</span>` : ''}
       <div class="menu-item-main">
         <div class="menu-item-name">${e(item.name)}</div>
         <div class="menu-item-meta">
@@ -319,6 +343,7 @@ function renderItemRow(item) {
           onclick="toggleAvailability('${e(item.id)}')">
           ${available ? '✅' : '🚫'}
         </button>
+        ${drag ? `<span class="move-btns"><button class="move-btn" onclick="moveItem('${e(item.id)}',-1)" title="تحريك لأعلى">↑</button><button class="move-btn" onclick="moveItem('${e(item.id)}',1)" title="تحريك لأسفل">↓</button></span>` : ''}
         <button class="menu-item-edit-btn" onclick="openEditItem('${e(item.id)}')">✏️</button>
       </div>
     </div>
@@ -340,7 +365,86 @@ function toggleAvailability(id) {
     `${item.name}: ${item.is_available ? 'أصبح متوفراً' : 'أصبح غير متوفر'}`,
     item.is_available ? '✅' : '🚫'
   );
-  if (window.MenuSync) MenuSync.pushSoon();
+  commitMenu();
+}
+
+/* ================================================================
+   إعادة الترتيب بالسحب والإفلات — الترقيم آلي (1..ن داخل التصنيف)
+   ================================================================ */
+let dragItemId = null;
+let dragCatId  = null;
+
+function catOrderedIds(catId) {
+  return items.filter(i => i.category_id === catId).sort(bySort).map(i => i.id);
+}
+function applyCatOrder(catId, orderedIds) {
+  orderedIds.forEach((id, idx) => {
+    const it = items.find(i => i.id === id);
+    if (it) it.sort_order = idx + 1;
+    const orig = DATA.items.find(i => i.id === id);
+    if (orig) orig.sort_order = idx + 1;
+  });
+  renderContent();
+  commitMenu();
+}
+/* أسهم ↑↓ — بديل اللمس والتحريك الدقيق */
+function moveItem(id, dir) {
+  const item = items.find(i => i.id === id);
+  if (!item) return;
+  const ids = catOrderedIds(item.category_id);
+  const from = ids.indexOf(id);
+  const to = from + dir;
+  if (from < 0 || to < 0 || to >= ids.length) return;
+  ids.splice(from, 1);
+  ids.splice(to, 0, id);
+  applyCatOrder(item.category_id, ids);
+  showToast('تمت إعادة الترتيب', '✅');
+}
+function menuDragStart(ev) {
+  const row = ev.target.closest('.menu-item-row');
+  if (!row) return;
+  dragItemId = row.dataset.itemId;
+  dragCatId  = row.dataset.catId;
+  ev.dataTransfer.effectAllowed = 'move';
+  try { ev.dataTransfer.setData('text/plain', dragItemId); } catch (e) {}
+  row.classList.add('dragging');
+}
+function menuDragOver(ev) {
+  ev.preventDefault();
+  const row = ev.target.closest('.menu-item-row');
+  if (!row || row.dataset.itemId === dragItemId) return;
+  if (row.dataset.catId !== dragCatId) { row.classList.add('drop-deny'); return; }
+  ev.dataTransfer.dropEffect = 'move';
+  const r = row.getBoundingClientRect();
+  const before = (ev.clientY - r.top) < r.height / 2;
+  row.classList.toggle('drop-before', before);
+  row.classList.toggle('drop-after', !before);
+}
+function menuDragLeave(ev) {
+  const row = ev.target.closest('.menu-item-row');
+  if (row) row.classList.remove('drop-before', 'drop-after', 'drop-deny');
+}
+function menuDrop(ev) {
+  ev.preventDefault();
+  const row = ev.target.closest('.menu-item-row');
+  document.querySelectorAll('.menu-item-row.drop-before,.menu-item-row.drop-after,.menu-item-row.drop-deny')
+    .forEach(x => x.classList.remove('drop-before', 'drop-after', 'drop-deny'));
+  if (!row || !dragItemId) return;
+  if (row.dataset.catId !== dragCatId) { showToast('السحب داخل التصنيف نفسه فقط', '⚠️'); return; }
+  if (row.dataset.itemId === dragItemId) return;
+  const r = row.getBoundingClientRect();
+  const before = (ev.clientY - r.top) < r.height / 2;
+  const ids = catOrderedIds(dragCatId).filter(id => id !== dragItemId);
+  let at = ids.indexOf(row.dataset.itemId);
+  if (at < 0) return;
+  if (!before) at += 1;
+  ids.splice(at, 0, dragItemId);
+  applyCatOrder(dragCatId, ids);
+  showToast('تمت إعادة الترتيب', '✅');
+}
+function menuDragEnd() {
+  dragItemId = null; dragCatId = null;
+  document.querySelectorAll('.menu-item-row.dragging').forEach(x => x.classList.remove('dragging'));
 }
 
 /* ================================================================
@@ -390,7 +494,7 @@ function openEditItem(id) {
       </div>
       <div class="mgr-form-group">
         <label>الترتيب</label>
-        <input type="text" id="editItemSort" value="${item.sort_order || 0}" inputmode="numeric">
+        <div class="auto-sort-note">🔢 تلقائي (#${item.sort_order || '—'}) — اسحب الصنف ⠿ في القائمة لتغيير ترتيبه</div>
       </div>
     </div>
     
@@ -475,7 +579,9 @@ function saveItem(id) {
                     || item.base_name;
   item.barcode       = document.getElementById('editItemBarcode')?.value.trim() || null;
   item.image_url     = document.getElementById('editItemImage')?.value.trim() || null;
-  item.sort_order    = parseInt(document.getElementById('editItemSort').value) || item.sort_order;
+  /* الترقيم آلي عبر السحب والإفلات — لا حقل يدوي بعد الآن */
+  const sortEl = document.getElementById('editItemSort');
+  if (sortEl) item.sort_order = parseInt(sortEl.value) || item.sort_order;
   item.price         = (() => { const v = parseLocalNum(document.getElementById('editItemPrice').value); return isNaN(v) ? item.price : v; })();
   item.cost_manual   = parseLocalNum(document.getElementById('editItemCost').value) || 0;
   item.is_available  = document.getElementById('editItemAvail').checked;
@@ -511,51 +617,16 @@ function saveItem(id) {
   }
   DATA.items = [...DATA.items];
 
-  // Force direct DB update immediately to bypass any array issues
-  if (window.ALFA_CONFIG && ALFA_CONFIG.supabase && ALFA_CONFIG.supabase.url && window.AlfaSB) {
-    const s = ALFA_CONFIG.supabase;
-    const remoteItem = {
-      id: item.id,
-      category_id: item.category_id,
-      /* إصلاح: كان يُرسل item.name المؤلَّف («الاسم + الصيغة») في عمود name،
-         ما يسبب تكرار الاسم عند كل سحب. العمود name = الاسم الأساسي فقط. */
-      name: item.base_name || item.name,
-      variant: item.variant_clean || item.variant || null,
-      family: item.family || item.base_name || item.name,
-      option_name: item.option_name || item.family || item.base_name || item.name,
-      variant_clean: item.variant_clean || item.variant || null,
-      category_name: item.category_name || null,
-      barcode: item.barcode || null,
-      price: Math.round(Number(item.price) || 0),
-      cost_mode: item.cost_mode || 'manual',
-      cost_manual: Math.round(Number(item.cost_manual) || 0),
-      is_available: item.is_available !== false,
-      sort_order: Number(item.sort_order) || 0,
-      order_count: Number(item.order_count) || 0,
-      is_pinned_popular: !!item.is_pinned_popular,
-      image_url: item.image_url || null,
-    };
-    fetch(s.url + '/rest/v1/items?id=eq.' + item.id, {
-      method: 'PATCH',
-      headers: {
-        'apikey': s.anonKey,
-        'Authorization': 'Bearer ' + s.anonKey,
-        'Content-Type': 'application/json',
-        'Prefer': 'return=minimal'
-      },
-      body: JSON.stringify(remoteItem)
-    }).then(res => {
-      if (!res.ok) {
-        res.text().then(t => showToast('خطأ تحديث السحابة المباشر: ' + t, '❌'));
-      }
-    }).catch(err => console.error(err));
-  }
+  /* رفع مباشر فوري لقاعدة البيانات (upsert: إدراج أو تحديث) —
+     يستبدل PATCH الناري-وانسَ الذي كان يفشل بصمت تام على الصفوف
+     الجديدة (المعرّف المرقّى حديثاً لـ UUID غير موجود في السحابة
+     فيعيد PATCH نجاحاً وهمياً بـ 0 صفوف!). */
+  commitMenu();
 
 
   closeEditModal();
   renderContent();
   showToast(`تم حفظ: ${item.name} بسعر ${item.price}`, '✅');
-  if (window.MenuSync) MenuSync.pushSoon();
 }
 
 function deleteItem(id) {
@@ -566,7 +637,7 @@ function deleteItem(id) {
   closeEditModal();
   renderContent();
   showToast('تم حذف الصنف', '🗑️');
-  if (window.MenuSync) { MenuSync.removeItem(id); MenuSync.pushSoon(); }
+  commitDelete('item', id);
 }
 
 /* ================================================================
@@ -723,7 +794,7 @@ function saveNewItem() {
   activeCatId = catId;
   renderContent();
   showToast(`تمت إضافة: ${name}`, '✅');
-  if (window.MenuSync) MenuSync.pushSoon();
+  commitMenu();
 }
 
 /* ================================================================
@@ -797,11 +868,12 @@ function saveCat(id) {
   closeEditModal();
   renderContent();
   showToast(`تم حفظ التصنيف: ${cat.name}`, '✅');
-  if (window.MenuSync) MenuSync.pushSoon();
+  commitMenu();
 }
 
 function deleteCat(id) {
-  const cnt = items.filter(i => i.category_id === id).length;
+  const doomedIds = items.filter(i => i.category_id === id).map(i => i.id);
+  const cnt = doomedIds.length;
   const cat = categories.find(c => c.id === id);
   if (cnt > 0) {
     if (!confirm(`التصنيف "${cat?.name}" يحتوي ${cnt} صنف — هل تريد حذفهم جميعاً؟`)) return;
@@ -816,7 +888,7 @@ function deleteCat(id) {
   closeEditModal();
   renderContent();
   showToast('تم حذف التصنيف', '🗑️');
-  if (window.MenuSync) { MenuSync.removeCat(id); MenuSync.pushSoon(); }
+  commitDelete('cat', id, doomedIds);
 }
 
 /* ── إضافة تصنيف سريع ── */
@@ -867,7 +939,7 @@ function saveNewCat() {
   closeEditModal();
   renderContent();
   showToast(`تمت إضافة التصنيف: ${name}`, '✅');
-  if (window.MenuSync) MenuSync.pushSoon();
+  commitMenu();
 }
 
 /* ================================================================

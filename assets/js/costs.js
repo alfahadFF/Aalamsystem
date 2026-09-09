@@ -279,7 +279,9 @@ function setManualCost(id){
   if (window.AlfaDB && AlfaDB.upsert) AlfaDB.upsert('items', item);
   else DATA.items = (DATA.items || []).slice();
   menuItems = DATA.items || menuItems;
-  if (window.MenuSync) MenuSync.pushSoon();
+  /* رفع مباشر فوري (كان pushSoon المؤجَّل يضيع عند التنقل السريع) */
+  if (window.commitMenuNow) commitMenuNow(DATA.items, DATA.categories);
+  else if (window.MenuSync) MenuSync.pushSoon();
   showToast(n>0 ? 'تم حفظ التكلفة اليدوية' : 'تمت العودة لتكلفة الوصفة', '💾');
   renderAll();
 }

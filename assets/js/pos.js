@@ -60,8 +60,96 @@ let deferredAddr  = '';
 let voiceActive   = false;
 let voiceRecog    = null;
 let pendingNoteItemId = null;
+let qtyEditId = null;   // تعديل الكمية بالنقر على خانة العدد
+let qtyEditBuf = '';
 const NOTE_SUGGESTIONS = ['ملح خفيف','بدون ملح','حار زيادة','بدون حار','ثوم زيادة','بدون ثوم','بدون خس','خس زيادة','بدون مخلل','مخلل زيادة','بدون فطر','بطاطا زيادة','صوص زيادة','مايونيز زيادة','بدون مايونيز'];
 let cart = [];
+
+/* ── خدمات الطلب (طاولة / توصيل) — قيم اختيارية تُضاف فوق الصافي ── */
+let orderServices = { table: 0, delivery: 0 };
+let servicesOpen = false;
+function servicesTotal() {
+  return (Number(orderServices.table) || 0) + (Number(orderServices.delivery) || 0);
+}
+function grandWithServices(sub, disc) {
+  return Math.max(0, sub - disc) + servicesTotal();
+}
+
+/* ── ألوان عائلات قسم السندويشات والغربي (لون مميز لكل عائلة) ── */
+const FAMILY_COLORS = [
+  { bg: '#FEF3C7', bd: '#D97706' },  // كهرماني
+  { bg: '#DBEAFE', bd: '#2563EB' },  // أزرق
+  { bg: '#DCFCE7', bd: '#16A34A' },  // أخضر
+  { bg: '#FCE7F3', bd: '#DB2777' },  // وردي
+  { bg: '#EDE9FE', bd: '#7C3AED' },  // بنفسجي
+  { bg: '#FFEDD5', bd: '#EA580C' },  // برتقالي
+  { bg: '#D1FAE5', bd: '#059669' },  // زمردي
+  { bg: '#E0F2FE', bd: '#0284C7' },  // سماوي
+  { bg: '#FAE8FF', bd: '#A21CAF' },  // فوشي
+  { bg: '#FEF9C3', bd: '#CA8A04' },  // أصفر
+  { bg: '#FFE4E6', bd: '#E11D48' },  // أحمر وردي
+  { bg: '#CCFBF1', bd: '#0D9488' },  // فيروزي
+  { bg: '#E0E7FF', bd: '#4F46E5' },  // نيلي
+  { bg: '#ECFCCB', bd: '#65A30D' },  // ليموني
+  { bg: '#F3E8FF', bd: '#9333EA' },  // أرجواني
+  { bg: '#E2E8F0', bd: '#475569' },  // رمادي مزرق
+];
+let _westCatCache = null;
+function westernCatIds() {
+  if (!_westCatCache) {
+    _westCatCache = new Set((DATA.categories || [])
+      .filter(c => c.id === 'cat_western' || /غربي/.test(String(c.name || '')))
+      .map(c => c.id));
+  }
+  return _westCatCache;
+}
+/* العائلة الأساسية: المتغيرات تُعامل كعائلتها الأم (طلب العميل):
+   «كريسبي وجبنة» = كريسبي، «شيش مع جبنة» = شيش، وكل البرغر = برغر */
+function baseFamily(fam) {
+  const s = String(fam || '').trim();
+  if (!s) return s;
+  if (s === 'برغر' || s.indexOf('برغر ') === 0) return 'برغر';
+  const m = s.match(/^(.*?)\s+(?:وجبنة|مع جبنة|بالجبنة|جبنة)$/);
+  if (m && m[1].trim()) return m[1].trim();
+  return s;
+}
+function westernBaseFamilies() {
+  const ids = westernCatIds();
+  const fams = [];
+  (DATA.items || []).forEach(i => {
+    if (!ids.has(i.category_id)) return;
+    const b = baseFamily(i.family) || i.family;
+    if (b && !fams.includes(b)) fams.push(b);
+  });
+  return fams.sort((a, b) => String(a).localeCompare(String(b), 'ar'));
+}
+function familyColor(fam) {
+  const base = baseFamily(fam) || fam;
+  const fams = westernBaseFamilies();
+  let idx = fams.indexOf(base);
+  if (idx < 0) { /* احتياط: توزيع ثابت بالهاش */
+    const s = String(base || '');
+    idx = 0;
+    for (let k = 0; k < s.length; k++) idx = (idx * 31 + s.charCodeAt(k)) >>> 0;
+    idx %= FAMILY_COLORS.length;
+  }
+  return FAMILY_COLORS[idx % FAMILY_COLORS.length];
+}
+function isWesternItem(it) { return !!(it && westernCatIds().has(it.category_id)); }
+function famCardStyle(fam, isActive) {
+  if (isActive) return '';
+  const c = familyColor(fam);
+  return `background:linear-gradient(180deg,#ffffff,${c.bg});border:2px solid ${c.bd};color:#0f172a;`;
+}
+function famTitleStyle(fam) {
+  const c = familyColor(fam);
+  return `color:${c.bd};border-inline-start:5px solid ${c.bd};padding-inline-start:8px;`;
+}
+function famItemStyle(it) {
+  if (!isWesternItem(it)) return '';
+  const c = familyColor(it.family);
+  return `background:linear-gradient(180deg,#ffffff,${c.bg});border:2px solid ${c.bd};box-shadow:0 2px 8px ${c.bd}44;`;
+}
 /* الخصم تلقائي بالكامل من إعدادات المدير — لا تدخل للكاشير */
 
 /* ── بطاقات القسم الأيمن: الأكثر طلباً / العروض / الخصومات ── */
@@ -115,13 +203,14 @@ function toggleCurrency() {
 }
 /* ── مسودة الفاتورة: حفظ تلقائي + استعادة بعد أي انقطاع + حارس الخروج ── */
 const DRAFT_KEY = 'alfaprosys_pos_draft';
+const POS_BUILD = 'b56';   /* نسخة كود الكاشير — تُرفع مع SW وتظهر شارة في الشريط العلوي */
 let leaveModalOpen = false;
 let leaveTargetUrl = null;
 function saveDraft() {
   try {
     if (!cart.length && !heldOrders.length) { localStorage.removeItem(DRAFT_KEY); return; }
     localStorage.setItem(DRAFT_KEY, JSON.stringify({
-      cart, heldOrders, orderType, selectedHall, selectedTable, deliveryInfo, payMethod, savedAt: Date.now(),
+      cart, heldOrders, orderType, selectedHall, selectedTable, deliveryInfo, payMethod, orderServices, savedAt: Date.now(),
     }));
   } catch (e) {}
 }
@@ -133,11 +222,13 @@ function restoreDraft() {
     if (!d || (!(d.cart || []).length && !(d.heldOrders || []).length)) { localStorage.removeItem(DRAFT_KEY); return false; }
     cart = d.cart || [];
     heldOrders = d.heldOrders || [];
+    heldSeq = heldOrders.reduce((m, h) => Math.max(m, Number(h.id) || 0), 0) + 1;
     if (d.orderType) orderType = d.orderType;
     if (d.selectedHall) selectedHall = d.selectedHall;
     if (d.selectedTable) selectedTable = d.selectedTable;
     if (d.deliveryInfo) deliveryInfo = d.deliveryInfo;
     if (d.payMethod) payMethod = d.payMethod;
+    if (d.orderServices) orderServices = { table: Number(d.orderServices.table) || 0, delivery: Number(d.orderServices.delivery) || 0 };
     return true;
   } catch (e) { return false; }
 }
@@ -328,6 +419,7 @@ function itemButtonTitle(item) {
 }
 
 function renderPOS() {
+  _westCatCache = null;
   /* إن أصبح التصنيف المختار بلا أصناف متاحة (أو أُوقف) نعود لعرض الكل،
      وإلا بقي الكاشير عالقاً على تصنيف فارغ */
   if (activeCategoryId && !sellableCategories().some(c => c.id === activeCategoryId)) {
@@ -384,34 +476,11 @@ function renderPOS() {
           ${orderType === 'delivery' ? renderDeliveryFields() : ''}
           ${orderType === 'contract' ? renderContractPanel() : ''}
 
-          ${orderType !== 'contract' ? (searchTerm.trim() || searchOpen ? renderSearchArea(items) : (displayMode === 'buttons' ? renderButtonFlow(items) : displayMode === 'direct' ? renderDirectFlow(items) : renderDropdownFlow(items))) : ''}
+          <div id="menuFlow">${orderType !== 'contract' ? (searchTerm.trim() || searchOpen ? renderSearchArea(items) : (displayMode === 'buttons' ? renderButtonFlow(items) : displayMode === 'direct' ? renderDirectFlow(items) : renderDropdownFlow(items))) : ''}</div>
         </section>
 
-        <aside class="bill-panel clean-bill-panel">
-          <div class="bill-head">
-            <div><h2>🧾 فاتورة ${nextInvoiceLabel()}</h2><p>${orderType==='dinein' ? escapeHtml(selectedHall) : orderType==='takeaway' ? 'سفري' : 'توصيل'}</p></div>
-            
-          </div>
-          <div class="bill-list">
-            ${cart.length === 0 ? `<div class="empty-cart">الفاتورة فارغة<br>اختر الأصناف من القائمة</div>` : cart.map(c => `
-              <div class="bill-item-card">
-                <div class="bill-item-top">
-                  <div class="bill-info"><strong><span class="bill-item-title ${c.offer_id ? 'dinv-offer-row' : ''}">${c.offer_id ? '🎟️ ' : ''}${escapeHtml(c.name)}</span>${!c.locked && itemDiscRule(c.id) ? `<span class="item-disc-badge" title="خصم إداري تلقائي">−${fmtNum(itemDiscRule(c.id).pct)}%</span>` : ''}</strong></div>
-                  <div class="bill-qty-badge">${c.locked ? '🔒' : fmtNum(c.qty)}</div>
-                  <div class="bill-line-total">${c.locked ? fmtCur(c.price) : (itemDiscRule(c.id) ? `<s>${fmtCur(c.price * c.qty)}</s> <b>${fmtCur(itemNet(c) * c.qty)}</b>` : fmtCur(c.price * c.qty))}</div>
-                  <button class="remove-item-btn" type="button" data-action="remove-item" data-id="${c.id}" aria-label="إزالة الصنف">x</button>
-                </div>
-                <textarea class="item-note-input" readonly data-action="note-open" data-id="${c.id}" placeholder="ملاحظات: ثوم زيادة، بدون حار، بطاطا زيادة...">${escapeHtml(c.note || '')}</textarea>
-              </div>`).join('')}
-          </div>
-          <div class="bill-total-box"><span>المجموع (${count})</span><strong>${fmtCur(total)}</strong></div>
-          ${(function(){ const dp = discountParts(); return dp.total ? `<div class="bill-discount-line">💸 خصم تلقائي${dp.itemPart && dp.invPart ? ' (أصناف + فاتورة ' + fmtNum(invDiscPct()) + '%)' : dp.itemPart ? ' أصناف' : ' فاتورة ' + fmtNum(invDiscPct()) + '%'}: -${fmtCur(dp.total)} → الإجمالي ${fmtCur(Math.max(0,total-dp.total))}</div>` : ''; })()}
-          <div class="bill-actions">
-            <button class="calc-btn" type="button" data-action="hold-order">⏸️ تعليق</button>
-          </div>
-          ${renderHeldPanel()}
-          ${renderPaySection()}
-          <div class="bill-actions"><button class="calc-btn" type="button" data-action="open-calc" ${cart.length===0?'disabled':''}>🧮 الحاسبة</button><button class="print-btn" type="button" data-action="submit-order" ${cart.length===0?'disabled':''}>🖨️ طباعة الفاتورة</button></div>
+        <aside class="bill-panel clean-bill-panel" id="billPanel">
+          ${renderBillPanel(total, count)}
         </aside>
       </div>
       <div class="mobile-nav-scrim" id="mobileNavScrim" data-action="close-nav"></div>
@@ -419,7 +488,8 @@ function renderPOS() {
       <nav class="mobile-cashier-nav" id="mobileCashierNav"><div class="mobile-nav-head"><strong>قائمة الكاشير</strong><button type="button" data-action="close-nav">✕</button></div><div class="mobile-nav-grid">${renderMobileCashierLinks()}</div></nav>
       ${renderQtyModal()}
       ${renderNoteModal()}
-      ${renderCalcModal(total - discountParts().total)}
+      ${renderServicesModal()}
+      ${renderCalcModal(grandWithServices(total, discountParts().total))}
       ${renderLeaveModal()}
     </div>`;
 
@@ -451,13 +521,14 @@ function renderDirectPOS(total, count) {
           ${window.NetBadge ? NetBadge.html('netBadgePos') : ''}
           ${currencyNew ? '<span class="cur-new-chip" title="العرض بالعملة الجديدة">ل.س جديدة</span>' : ''}
           <div class="invoice-mini-badge">فاتورة ${nextInvoiceLabel()}</div>
+          <span class="build-chip" title="نسخة كود الكاشير">${POS_BUILD}</span>
         </header>
 
         <div class="d-body">
           <section class="d-main" aria-label="الفاتورة والأصناف">
-            <div class="d-invwrap">${renderDirectInvoice(total, count)}</div>
-            <div class="d-items">${renderDirectItemsArea(items)}</div>
-            <div class="d-paybar">${renderPaySection()}<button class="d-print-btn" type="button" data-action="submit-order" ${cart.length===0?'disabled':''}>🖨️ طباعة</button></div>
+            <div class="d-invwrap" id="menuInvoice">${renderDirectInvoice(total, count)}</div>
+            <div class="d-items" id="menuItems">${renderDirectItemsArea(items)}</div>
+            <div class="d-paybar" id="menuPaybar">${renderPaySection()}<button class="d-print-btn" type="button" data-action="submit-order" ${cart.length===0?'disabled':''}>🖨️ طباعة</button></div>
           </section>
 
           <aside class="d-mid" aria-label="نوع الطلب والتصنيفات">
@@ -468,6 +539,7 @@ function renderDirectPOS(total, count) {
             </div>
             <div class="d-cats" aria-label="التصنيفات الرئيسية">
               ${cats.map(c => `<button class="d-cat ${activeCategoryId===c.id?'active':''}" type="button" data-action="category" data-value="${escapeHtml(c.id)}"><span>${c.icon}</span>${escapeHtml(c.name)}</button>`).join('')}
+              <button class="d-cat svc-dcat" type="button" data-action="open-services"><span>🛎️</span>خدمات${svcBadgeHtml()}</button>
             </div>
           </aside>
 
@@ -488,7 +560,8 @@ function renderDirectPOS(total, count) {
 
       ${renderQtyModal()}
       ${renderNoteModal()}
-      ${renderCalcModal(total - discountParts().total)}
+      ${renderServicesModal()}
+      ${renderCalcModal(grandWithServices(total, discountParts().total))}
       ${renderLeaveModal()}
     </div>`;
 
@@ -503,6 +576,7 @@ function renderDirectAuxModal() {
   const title = directAuxModal === 'hall' ? 'اختيار الصالة'
     : directAuxModal === 'delivery' ? 'بيانات التوصيل'
     : directAuxModal === 'contract' ? 'اختيار العقد'
+    : directAuxModal === 'services' ? 'خدمات الطلب'
     : 'حسم الفاتورة';
   let body = '';
   if (directAuxModal === 'hall') {
@@ -523,6 +597,13 @@ function renderDirectAuxModal() {
     body = `<div class="d-aux-hint">خصم الأصناف: <b>${fmtCur(dp.itemPart)}</b> — خصم الفاتورة: <b>${fmtNum(pct)}%</b> (${fmtCur(dp.invPart)})</div>
       <div class="d-aux-disc-grid">${[0,5,10,15,20].map(n => `<button type="button" class="d-aux-pct ${pct===n?'on':''}" data-action="set-inv-disc" data-value="${n}">${n}%</button>`).join('')}</div>
       <div class="d-aux-custom"><input id="dAuxDisc" type="number" min="0" max="100" inputmode="numeric" value="${pct}" placeholder="%"><button type="button" data-action="set-inv-disc" data-value="">تطبيق</button></div>`;
+  } else if (directAuxModal === 'services') {
+    const st = Number(orderServices.table) || 0;
+    const sd = Number(orderServices.delivery) || 0;
+    body = `<div class="d-aux-hint">اترك القيمة 0 عند عدم وجود خدمة — تُضاف الخدمات فوق صافي الفاتورة</div>
+      <div class="d-aux-custom"><span style="font-weight:800;white-space:nowrap;align-self:center;">🍽️ طاولة</span><input id="svcTable" type="number" min="0" inputmode="numeric" value="${st}" placeholder="0"></div>
+      <div class="d-aux-custom"><span style="font-weight:800;white-space:nowrap;align-self:center;">🛵 توصيل</span><input id="svcDelivery" type="number" min="0" inputmode="numeric" value="${sd}" placeholder="0"></div>
+      <div style="display:flex;gap:8px;margin-top:10px;"><button type="button" class="d-aux-done" style="flex:1;" data-action="save-services">✔ حفظ</button><button type="button" class="d-aux-done" style="flex:1;filter:grayscale(1);" data-action="clear-services">تصفير</button></div>`;
   }
   return `
     <div class="d-aux-scrim" data-action="close-direct-aux"></div>
@@ -560,7 +641,7 @@ function renderDirectInvoice(total, count) {
       <span class="dinv-c dinv-n">${idx + 1}</span>
       <span class="dinv-c dinv-name ${c.offer_id ? 'dinv-offer-row' : ''}" title="${escapeHtml(c.name)}">${c.offer_id && !c.offer_disc ? '🎟️ ' : ''}${escapeHtml(c.name)}${!c.locked && itemDiscRule(c.id) ? ` <span class="item-disc-badge">−${fmtNum(itemDiscRule(c.id).pct)}%</span>` : ''}</span>
       <span class="dinv-c dinv-price">${itemDiscRule(c.id) ? `<s>${fmtCur(c.price)}</s>` : fmtCur(c.price)}</span>
-      <span class="dinv-c dinv-qty">${c.locked ? '🔒' : fmtNum(c.qty)}</span>
+      <span class="dinv-c dinv-qty qty-tap" data-action="qty-edit" data-id="${escapeHtml(c.id)}" title="اضغط لتعديل الكمية">${c.locked ? '🔒' : fmtNum(c.qty)}</span>
       <span class="dinv-c dinv-disc">${c.offer_disc ? 'خصم عرض' : c.is_free ? '🎁 مجاني' : (c.locked ? 'عرض' : (itemDiscRule(c.id) ? `−${fmtNum(itemDiscRule(c.id).pct)}%` : '—'))}</span>
       <span class="dinv-c dinv-total">${c.locked ? fmtCur(c.price) : fmtCur(itemNet(c) * c.qty)}</span>
       <span class="dinv-c dinv-note ${c.note ? '' : 'muted'}" data-action="note-open" data-id="${escapeHtml(c.id)}" title="اضغط لتعديل الملاحظة">${c.note ? escapeHtml(c.note) : '—'}</span>
@@ -572,13 +653,15 @@ function renderDirectInvoice(total, count) {
   for (let i = cart.length; i < TOTAL_ROWS; i++) {
     extra.push(`<div class="dinv-row empty"><span class="dinv-c dinv-n">${i + 1}</span><span class="dinv-c dinv-name"></span><span class="dinv-c dinv-price"></span><span class="dinv-c dinv-qty"></span><span class="dinv-c dinv-disc"></span><span class="dinv-c dinv-total"></span><span class="dinv-c dinv-note"></span><span class="dinv-c"></span></div>`);
   }
-  const net = Math.max(0, total - disc);
+  const net = grandWithServices(total, disc);
 
   return `
     <div class="dinv-banner">
       <div class="dinv-banner-lbl">الإجمالي</div>
       <div class="dinv-banner-amt">${fmtCur(net)}<small>${fmtNum(count)} صنف</small></div>
     </div>
+    ${servicesTotal() ? `<div class="dinv-svc-strip">🛎️ خدمات: ${(Number(orderServices.table) || 0) ? 'طاولة ' + fmtCur(orderServices.table) : ''}${(Number(orderServices.table) || 0) && (Number(orderServices.delivery) || 0) ? ' + ' : ''}${(Number(orderServices.delivery) || 0) ? 'توصيل ' + fmtCur(orderServices.delivery) : ''} <b>(+${fmtCur(servicesTotal())})</b></div>` : ''}
+    ${renderHeldPanel()}
     <div class="dinv-head">
       <span class="dinv-n">#</span><span>اسم المادة</span><span class="dinv-price">السعر</span><span class="dinv-qty">الكمية</span><span class="dinv-disc">الحسم</span><span class="dinv-total">الإجمالي</span><span class="dinv-note">ملاحظة</span><span></span>
     </div>
@@ -590,9 +673,9 @@ function renderDirectItemsArea(items) {
     return '<div class="d-items-hint">اختر عقداً من زر «عقود» لتظهر الأصناف</div>';
   }
   if (searchTerm.trim() || searchOpen) return renderSearchArea(items);
-  const list = activeCategoryId
-    ? catItems()
-    : (DATA.items || []).filter(i => i.is_available !== false);
+  /* لا تصنيف مختار = لا أصناف إطلاقاً (طلب العميل: منع العرض العشوائي الكامل) */
+  if (!activeCategoryId) return '<div class="d-items-hint">👆 اختر تصنيفاً لعرض الأصناف</div>';
+  const list = catItems();
   if (!list.length) return '<div class="d-items-hint">لا أصناف في هذا التصنيف</div>';
   return `<div class="d-menu-grid">${renderItemButtons(list)}</div>`;
 }
@@ -609,7 +692,7 @@ function renderDirectPad() {
       </div>
       ${padMode === 'note'
         ? `<div class="dpad-note-row">${voiceMicBtn('pad-note', true)}<input id="dPadInput" class="dpad-input" type="text" dir="rtl" lang="ar" autocomplete="off" placeholder="اكتب أو انطق الملاحظة" value="${escapeHtml(padBuf)}"></div>`
-        : `<div class="dpad-display">${padBuf || (sel ? fmtNum(sel.qty) : '0')}</div>`}
+        : `<div class="dpad-display" id="dpadDisplay">${padBuf || (sel ? fmtNum(sel.qty) : '0')}</div>`}
       <div class="dpad-keys">${keys.map(k => `<button class="dpad-key" type="button" data-action="d-pad-key" data-value="${k}">${k}</button>`).join('')}</div>
       <div class="dpad-note-chips">${NOTE_SUGGESTIONS.slice(0, 8).map(n => `<button class="dpad-chip" type="button" data-action="d-note-chip" data-value="${escapeHtml(n)}">${escapeHtml(n)}</button>`).join('')}</div>
       <div class="dpad-actions">
@@ -626,13 +709,37 @@ function directItemAdd(id) {
   const ex = cart.find(c => c.id === id && !c.locked);
   if (ex) ex.qty += 1; else cart.push({ id: item.id, name: item.name, price: item.price, qty: 1, note: '' });
   directSelectedId = id;
-  renderPOS();
+  if (!updateCartPanel([id])) renderPOS();
+}
+/* تحديث موضعي لشاشة اللوحة (بلا إعادة بناء) — false تعني تعذّر فيُستدعى renderPOS */
+function updateDPadDisplay() {
+  try {
+    if (padMode === 'note') {
+      const inp = document.getElementById('dPadInput');
+      if (!inp) return false;
+      inp.value = padBuf;
+      return true;
+    }
+    const el = document.getElementById('dpadDisplay');
+    if (!el) return false;
+    const sel = cart.find(c => c.id === directSelectedId);
+    el.textContent = padBuf || (sel ? fmtNum(sel.qty) : '0');
+    return true;
+  } catch (e) { return false; }
+}
+function updateQEditDisplay() {
+  try {
+    const el = document.getElementById('qeditDisplay');
+    if (!el) return false;
+    el.textContent = qtyEditBuf === '' ? '—' : qtyEditBuf;
+    return true;
+  } catch (e) { return false; }
 }
 function dPadKey(k) {
-  if (k === 'C') { padBuf = ''; return renderPOS(); }
-  if (k === '⌫') { padBuf = padBuf.slice(0, -1); return renderPOS(); }
-  padBuf += k;
-  renderPOS();
+  if (k === 'C') padBuf = '';
+  else if (k === '⌫') padBuf = padBuf.slice(0, -1);
+  else padBuf += k;
+  if (!updateDPadDisplay()) renderPOS();
 }
 function dPadApply() {
   const row = cart.find(c => c.id === directSelectedId);
@@ -644,34 +751,20 @@ function dPadApply() {
       if (padBuf.trim() === '' ) return showToast('أدخل الكمية من اللوحة', '⚠️');
       removeFromCart(row.id); padBuf = ''; return;
     }
-    row.qty = q; pad(0, -1); return renderPOS(); }
-  padBuf += k;
-  renderPOS();
-}
-function dPadApply() {
-  const row = cart.find(c => c.id === directSelectedId);
-  if (!row) return showToast('اختر صنفاً من جدول الفاتورة أولاً', '⚠️');
-  if (row.locked) return showToast('🔒 العرض ثابت — يمكن الإضافة عليه فقط', '⚠️');
-  if (padMode === 'qty') {
-    const q = Math.round(Number(padBuf));
-    if (!q || q <= 0) {
-      if (padBuf.trim() === '' ) return showToast('أدخل الكمية من اللوحة', '⚠️');
-      removeFromCart(row.id); padBuf = ''; return;
-    }
-    row.qty = q; padBuf = ''; renderPOS();
+    row.qty = q; padBuf = ''; updateDPadDisplay(); if (!updateCartPanel([row.id])) renderPOS();
     return showToast(`${row.name} × ${fmtNum(q)}`, '✅');
   }
   const t = padBuf.trim();
   if (!t) return showToast('اكتب الملاحظة أولاً', '⚠️');
   row.note = row.note ? row.note + '، ' + t : t;
-  padBuf = ''; renderPOS();
+  padBuf = ''; updateDPadDisplay(); if (!updateCartPanel([row.id])) renderPOS();
   showToast('أُضيفت الملاحظة', '📝');
 }
 function dNoteChip(txt) {
   const row = cart.find(c => c.id === directSelectedId);
   if (!row) return showToast('اختر صنفاً من جدول الفاتورة أولاً', '⚠️');
   row.note = row.note ? row.note + '، ' + txt : txt;
-  renderPOS();
+  if (!updateCartPanel([row.id])) renderPOS();
   showToast(`ملاحظة: ${txt}`, '📝');
 }
 
@@ -1212,7 +1305,7 @@ function renderPaySection() {
   } else if (payMethod === 'partial') {
     const total = cart.reduce((s,x)=>s+x.price*x.qty, 0);
     const paid  = Number(partialAmount) || 0;
-    const rem   = total - paid;
+    const rem   = grandWithServices(total, discountParts().total) - paid;
     extra = `
       <div class="pay-extra">
         <label class="pay-extra-label">المبلغ المدفوع الآن</label>
@@ -1330,7 +1423,61 @@ function renderSelectionBar() {
 
 function renderMainCategoryGrid() {
   const cats = sellableCategories();
-  return `<div class="single-stage"><div class="main-category-grid primary-only-grid">${cats.map(c => `<button class="main-category-card" type="button" data-action="category" data-value="${escapeHtml(c.id)}"><span>${c.icon}</span><strong>${escapeHtml(c.name)}</strong></button>`).join('')}<button class="main-category-card search-category-card" type="button" data-action="toggle-search"><span>🔎</span><strong>بحث</strong></button></div></div>`;
+  return `<div class="single-stage"><div class="main-category-grid primary-only-grid">${cats.map(c => `<button class="main-category-card" type="button" data-action="category" data-value="${escapeHtml(c.id)}"><span>${c.icon}</span><strong>${escapeHtml(c.name)}</strong></button>`).join('')}<button class="main-category-card search-category-card" type="button" data-action="toggle-search"><span>🔎</span><strong>بحث</strong></button>${renderServicesCatCard()}</div></div>`;
+}
+
+/* ── زر الخدمات: شارة المبلغ + البطاقة + النافذة ── */
+function svcBadgeHtml() {
+  const t = servicesTotal();
+  return t > 0 ? `<span class="svc-badge">+${fmtCur(t)}</span>` : '';
+}
+function renderServicesCatCard() {
+  return `<button class="main-category-card services-category-card" type="button" data-action="open-services"><span>🛎️</span><strong>خدمات</strong>${svcBadgeHtml()}</button>`;
+}
+function renderServicesModal() {
+  if (!servicesOpen || displayMode === 'direct') return '';
+  const t = Number(orderServices.table) || 0;
+  const d = Number(orderServices.delivery) || 0;
+  return `
+    <div class="svc-scrim" data-action="close-services"></div>
+    <div class="svc-modal" role="dialog" aria-label="خدمات الطلب">
+      <div class="svc-head"><strong>🛎️ خدمات الطلب</strong><button type="button" data-action="close-services">✕</button></div>
+      <div class="svc-hint">اترك القيمة 0 عند عدم وجود خدمة — تُضاف الخدمات فوق صافي الفاتورة</div>
+      <label class="svc-row"><span>🍽️ خدمة طاولة</span><input id="svcTable" type="number" min="0" inputmode="numeric" value="${t}" placeholder="0"></label>
+      <label class="svc-row"><span>🛵 خدمة توصيل</span><input id="svcDelivery" type="number" min="0" inputmode="numeric" value="${d}" placeholder="0"></label>
+      <div class="svc-actions">
+        <button type="button" class="svc-save" data-action="save-services">✔ حفظ</button>
+        <button type="button" class="svc-clear" data-action="clear-services">تصفير</button>
+      </div>
+    </div>`;
+}
+function readServicesInputs() {
+  const t = document.getElementById('svcTable');
+  const d = document.getElementById('svcDelivery');
+  orderServices.table = Math.max(0, Math.round(Number(t && t.value) || 0));
+  orderServices.delivery = Math.max(0, Math.round(Number(d && d.value) || 0));
+}
+function openServices() {
+  if (displayMode === 'direct') directAuxModal = 'services';
+  else servicesOpen = true;
+  renderPOS();
+}
+function closeServices() {
+  servicesOpen = false;
+  if (displayMode === 'direct') directAuxModal = null;
+  renderPOS();
+}
+function saveServices() {
+  readServicesInputs();
+  servicesOpen = false;
+  if (displayMode === 'direct') directAuxModal = null;
+  renderPOS();
+  const t = servicesTotal();
+  showToast(t > 0 ? `خدمات الطلب: ${fmtCur(t)}` : 'لا خدمات على هذا الطلب', t > 0 ? '🛎️' : 'ℹ️');
+}
+function clearServices() {
+  orderServices = { table: 0, delivery: 0 };
+  renderPOS();
 }
 
 function renderButtonFlow(items) {
@@ -1339,7 +1486,8 @@ function renderButtonFlow(items) {
   // المطلوب: تصنيف رئيسي -> تصنيف فرعي -> الأصناف مباشرة
   if (!activeCategoryId) return renderMainCategoryGrid();
   if (!activeFamily) {
-    return `${renderSelectionBar()}<div class="single-stage"><div class="family-grid no-horizontal-scroll">${fams.map(f => `<button class="family-card" type="button" data-action="family" data-value="${escapeHtml(f)}">${escapeHtml(familyLabel(f))}</button>`).join('')}</div></div>`;
+    const westFam = activeCategoryId && westernCatIds().has(activeCategoryId);
+    return `${renderSelectionBar()}<div class="single-stage"><div class="family-grid no-horizontal-scroll">${fams.map(f => `<button class="family-card" type="button" data-action="family" data-value="${escapeHtml(f)}"${westFam ? ` style="${famCardStyle(f, false)}"` : ''}>${escapeHtml(familyLabel(f))}</button>`).join('')}</div></div>`;
   }
   return `${renderSelectionBar()}<div class="item-grid final-items-grid">${renderItemButtons(items)}</div>`;
 }
@@ -1351,9 +1499,10 @@ function renderDirectFlow() {
   if (!activeCategoryId) return renderMainCategoryGrid();
   const all = catItems();
   const fams = uniq(all.map(i => i.family));
+  const westDirect = activeCategoryId && westernCatIds().has(activeCategoryId);
   return `${renderSelectionBar()}<div class="direct-flow">${fams.map(f => `
     <section class="direct-family">
-      <h3 class="direct-family-title">${escapeHtml(familyLabel(f))}</h3>
+      <h3 class="direct-family-title"${westDirect ? ` style="${famTitleStyle(f)}"` : ''}>${escapeHtml(familyLabel(f))}</h3>
       <div class="item-grid final-items-grid direct-items-grid">${renderItemButtons(all.filter(i => i.family === f))}</div>
     </section>`).join('')}
   </div>`;
@@ -1368,6 +1517,7 @@ function renderDropdownFlow(items) {
         <label><span>الرئيسي</span><select data-action="select-category"><option value="">اختر...</option>${cats.map(c => `<option value="${escapeHtml(c.id)}" ${activeCategoryId===c.id?'selected':''}>${escapeHtml(c.icon+' '+c.name)}</option>`).join('')}</select></label>
         <label><span>الفرعي</span><select data-action="select-family" ${!activeCategoryId?'disabled':''}><option value="">اختر...</option>${fams.map(f => `<option value="${escapeHtml(f)}" ${activeFamily===f?'selected':''}>${escapeHtml(familyLabel(f))}</option>`).join('')}</select></label>
       </div>
+      <button class="svc-mini-btn" type="button" data-action="open-services">🛎️ خدمات ${svcBadgeHtml()}</button>
     </div>
     ${activeFamily ? `<div class="item-grid final-items-grid">${renderItemButtons(items)}</div>` : `<div class="guide-box">اختر التصنيف ثم الفرعي لإظهار الأصناف.</div>`}
   `;
@@ -1393,7 +1543,8 @@ function renderItemButtons(items) {
     const nameHtml = parts.sub
       ? `<span class="item-name-main">${escapeHtml(parts.head)}</span><span class="item-name-sub">${escapeHtml(parts.sub)}</span>`
       : `<span class="item-name-main">${escapeHtml(parts.head)}</span>`;
-    return `<button class="item-btn" type="button" data-action="open-qty" data-id="${item.id}">${inCart ? `<span class="item-qty-badge">${inCart.qty}</span>` : ''}${drule ? `<span class="item-disc-badge" title="خصم ${fmtNum(drule.pct)}%">−${fmtNum(drule.pct)}%</span>` : ''}<div class="item-name">${nameHtml}</div>${priceHtml}</button>`;
+    const westIt = isWesternItem(item);
+    return `<button class="item-btn" type="button" data-action="open-qty" data-id="${item.id}"${westIt ? ` style="${famItemStyle(item)}"` : ''}>${inCart ? `<span class="item-qty-badge">${inCart.qty}</span>` : ''}${drule ? `<span class="item-disc-badge" title="خصم ${fmtNum(drule.pct)}%">−${fmtNum(drule.pct)}%</span>` : ''}<div class="item-name">${nameHtml}</div>${priceHtml}</button>`;
   }).join('');
 }
 
@@ -1438,7 +1589,7 @@ function confirmQty(qty) {
   if (!pendingItemId || !qty || qty <= 0) return;
   addToCart(pendingItemId, qty);
   pendingItemId = null;
-  renderPOS();
+  dropModalNodes();
 }
 function confirmCustomQty() {
   const input = document.getElementById('customQtyInput');
@@ -1502,7 +1653,65 @@ function saveNoteModal() {
   const row = cart.find(c => c.id === pendingNoteItemId);
   if (row) row.note = document.getElementById('noteModalText')?.value.trim() || '';
   pendingNoteItemId = null;
+  if (!updateCartPanel(row ? [row.id] : [])) renderPOS();
+  dropModalNodes();
+}
+
+/* ── تعديل الكمية بالنقر على خانة العدد (نفس آلية الملاحظات) ── */
+function openQtyEdit(id) {
+  const row = cart.find(c => c.id === id);
+  if (!row) return;
+  if (row.locked) return showToast('🔒 العرض ثابت — يمكن الإضافة عليه فقط', '⚠️');
+  qtyEditId = id;
+  qtyEditBuf = '';
   renderPOS();
+}
+function closeQtyEdit() {
+  qtyEditId = null;
+  qtyEditBuf = '';
+  renderPOS();
+}
+function qtyEditKey(v) {
+  if (v === 'C') qtyEditBuf = '';
+  else if (v === '⌫') qtyEditBuf = qtyEditBuf.slice(0, -1);
+  else if (/^[0-9]$/.test(v || '') && qtyEditBuf.length < 3) qtyEditBuf += v;
+  if (!updateQEditDisplay()) renderPOS();
+}
+function applyQtyEdit() {
+  const row = cart.find(c => c.id === qtyEditId);
+  const buf = qtyEditBuf;
+  qtyEditId = null;
+  qtyEditBuf = '';
+  if (!row || buf === '') { dropModalNodes(); return; }   // لا تغيير = إغلاق فقط بلا أي بناء
+  const q = Math.floor(Number(buf));
+  if (!Number.isFinite(q) || q <= 0) {
+    cart = cart.filter(c => c.id !== row.id);
+    showToast(`حُذف «${row.name}» من الفاتورة`, '🗑️');
+  } else {
+    row.qty = Math.min(999, q);
+    showToast(`الكمية الجديدة: ${fmtNum(row.qty)}`, '🔢');
+  }
+  if (!updateCartPanel([row.id])) renderPOS();
+  dropModalNodes();
+}
+function renderQtyEditModal() {
+  if (!qtyEditId) return '';
+  const row = cart.find(c => c.id === qtyEditId);
+  if (!row) return '';
+  const keys = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '⌫', '0', 'C'];
+  return `
+    <div class="qedit-scrim" data-action="qty-edit-close"></div>
+    <div class="qedit-modal" role="dialog" aria-label="تعديل الكمية">
+      <div class="qedit-head"><strong>🔢 تعديل الكمية</strong><button type="button" data-action="qty-edit-close">✕</button></div>
+      <div class="qedit-item">${escapeHtml(row.name)}</div>
+      <div class="qedit-display"><small>القديمة: ${fmtNum(row.qty)}</small><b id="qeditDisplay">${qtyEditBuf === '' ? '—' : escapeHtml(qtyEditBuf)}</b></div>
+      <div class="qedit-keys">${keys.map(k => `<button type="button" class="qedit-key${k === 'C' ? ' danger' : ''}" data-action="qty-edit-key" data-value="${k}">${k}</button>`).join('')}</div>
+      <div class="qedit-hint">الرقم الجديد يستبدل القديم · 0 = حذف السطر · فارغ = إلغاء</div>
+      <div class="svc-actions">
+        <button type="button" class="svc-save" data-action="qty-edit-apply">✔ تطبيق</button>
+        <button type="button" class="svc-clear" data-action="qty-edit-close">إلغاء</button>
+      </div>
+    </div>`;
 }
 
 function renderCashierSideLinks() {
@@ -1549,7 +1758,12 @@ function bindPOSActions() {
       if (liveActions.includes(action)) el.addEventListener('input', () => handleAction(action, el.value, el));
       else el.addEventListener('input', () => handleAction(action, el.value, el));
     }
-    else el.addEventListener('click', () => handleAction(action, el.dataset.value, el));
+    else el.addEventListener('click', (ev) => {
+      /* خانة العدد داخل صف الفاتورة: امنع الفقاعة لمعالج الصف (d-select-row)
+         الذي يفتح نافذة الملاحظات — وإلا ظهرت الملاحظات بدل لوحة الكمية */
+      if (action === 'qty-edit') ev.stopPropagation();
+      handleAction(action, el.dataset.value, el, ev);
+    });
   });
   document.getElementById('posSearchInput')?.addEventListener('input', e => { searchTerm = e.target.value; updateSearchResultsOnly(); });
   document.getElementById('conSearchInput')?.addEventListener('input', e => { contractSearchTerm = e.target.value; updateContractList(); });
@@ -1584,7 +1798,7 @@ function autoFillPartial(phone) {
   if (nameEl) nameEl.value = partialName;
 }
 
-function handleAction(action, value, el) {
+function handleAction(action, value, el, ev) {
   switch(action) {
     case 'toggle-nav': return toggleCashierNav();
     case 'close-nav': return closeCashierNav();
@@ -1620,6 +1834,14 @@ function handleAction(action, value, el) {
     case 'close-direct-aux':
       directAuxModal = null;
       return renderPOS();
+    case 'open-services': return openServices();
+    case 'close-services': return closeServices();
+    case 'save-services': return saveServices();
+    case 'clear-services': return clearServices();
+    case 'qty-edit': return openQtyEdit(el.dataset.id);
+    case 'qty-edit-key': return qtyEditKey(value);
+    case 'qty-edit-apply': return applyQtyEdit();
+    case 'qty-edit-close': return closeQtyEdit();
     case 'open-direct-disc':
       directAuxModal = 'discount';
       return renderPOS();
@@ -1669,7 +1891,19 @@ function handleAction(action, value, el) {
     case 'close-pos-embed': return closePosEmbed();
     case 'placeholder': closeCashierNav(); return showToast(`سنضيف ${el.dataset.msg} لاحقًا`, el.dataset.icon || 'ℹ️');
     case 'back-step': return backStep();
-    case 'd-select-row': directSelectedId = el.dataset.id; return openNoteModal(el.dataset.id);
+    case 'd-select-row': {
+      directSelectedId = el.dataset.id;
+      /* نصف الصف الأيمن (جهة العدد) → لوحة الكمية، والنصف الأيسر (جهة الملاحظة) → الملاحظات */
+      if (ev && ev.clientX != null && el.getBoundingClientRect) {
+        const r = el.getBoundingClientRect();
+        if ((ev.clientX - r.left) >= r.width / 2) {
+          const _row = cart.find(c => c.id === el.dataset.id);
+          if (_row && _row.locked) return showToast('🔒 العرض ثابت — يمكن الإضافة عليه فقط', '⚠️');
+          return openQtyEdit(el.dataset.id);
+        }
+      }
+      return openNoteModal(el.dataset.id);
+    }
     case 'd-del-row': {
       const row = cart.find(c => c.id === directSelectedId);
       if (!row) return showToast('اختر الصف المطلوب حذفه من الجدول', '⚠️');
@@ -1715,6 +1949,144 @@ function updateSearchResultsOnly() {
     el.addEventListener('click', () => handleAction(el.dataset.action, el.dataset.value, el));
   });
 }
+/* ربط محصور بحاويات جديدة فقط (نمط updateSearchResultsOnly) —
+   الربط العام هنا كان سيضاعف المستمعات على الأزرار الباقية */
+function bindMenuAreaActions(box) {
+  box.querySelectorAll('[data-action]').forEach(el => {
+    const action = el.dataset.action;
+    if (el.tagName === 'SELECT') el.addEventListener('change', () => handleAction(action, el.value, el));
+    else el.addEventListener('click', (ev) => handleAction(action, el.dataset.value, el, ev));
+  });
+  box.querySelector('#posSearchInput')?.addEventListener('input', e => { searchTerm = e.target.value; updateSearchResultsOnly(); });
+}
+/* تحديث موضعي لمنطقة الأصناف عند التنقل (تصنيف/عائلة/رجوع/مسح بحث) —
+   يعيد false فيُستدعى renderPOS الكامل */
+function updateMenuArea() {
+  try {
+    if (activeCategoryId && !sellableCategories().some(c => c.id === activeCategoryId)) return false;
+    const items = finalItems();
+    if (displayMode === 'direct') {
+      const cats = document.querySelectorAll('.d-cat[data-action="category"]');
+      if (!cats.length) return false;
+      cats.forEach(b => b.classList.toggle('active', b.dataset.value === activeCategoryId));
+      const area = document.getElementById('menuItems');
+      if (!area) return false;
+      area.innerHTML = renderDirectItemsArea(items);
+      bindMenuAreaActions(area);
+    } else {
+      const area = document.getElementById('menuFlow');
+      if (!area) return false;
+      area.innerHTML = orderType !== 'contract'
+        ? (searchTerm.trim() || searchOpen ? renderSearchArea(items)
+          : (displayMode === 'buttons' ? renderButtonFlow(items) : displayMode === 'direct' ? renderDirectFlow(items) : renderDropdownFlow(items)))
+        : '';
+      bindMenuAreaActions(area);
+    }
+    return true;
+  } catch (e) { return false; }
+}
+function renderBillPanel(total, count) {
+  return `
+          <div class="bill-head">
+            <div><h2>🧾 فاتورة ${nextInvoiceLabel()}</h2><p>${orderType==='dinein' ? escapeHtml(selectedHall) : orderType==='takeaway' ? 'سفري' : 'توصيل'}</p></div>
+            
+          </div>
+          <div class="bill-list">
+            ${cart.length === 0 ? `<div class="empty-cart">الفاتورة فارغة<br>اختر الأصناف من القائمة</div>` : cart.map(c => `
+              <div class="bill-item-card">
+                <div class="bill-item-top">
+                  <div class="bill-info"><strong><span class="bill-item-title ${c.offer_id ? 'dinv-offer-row' : ''}">${c.offer_id ? '🎟️ ' : ''}${escapeHtml(c.name)}</span>${!c.locked && itemDiscRule(c.id) ? `<span class="item-disc-badge" title="خصم إداري تلقائي">−${fmtNum(itemDiscRule(c.id).pct)}%</span>` : ''}</strong></div>
+                  <div class="bill-qty-badge qty-tap" data-action="qty-edit" data-id="${escapeHtml(c.id)}" title="اضغط لتعديل الكمية">${c.locked ? '🔒' : fmtNum(c.qty)}</div>
+                  <div class="bill-line-total">${c.locked ? fmtCur(c.price) : (itemDiscRule(c.id) ? `<s>${fmtCur(c.price * c.qty)}</s> <b>${fmtCur(itemNet(c) * c.qty)}</b>` : fmtCur(c.price * c.qty))}</div>
+                  <button class="remove-item-btn" type="button" data-action="remove-item" data-id="${c.id}" aria-label="إزالة الصنف">x</button>
+                </div>
+                <textarea class="item-note-input" readonly data-action="note-open" data-id="${c.id}" placeholder="ملاحظات: ثوم زيادة، بدون حار، بطاطا زيادة...">${escapeHtml(c.note || '')}</textarea>
+              </div>`).join('')}
+          </div>
+          <div class="bill-total-box"><span>المجموع (${count})</span><strong>${fmtCur(total)}</strong></div>
+          ${(function(){ const dp = discountParts(); const st = servicesTotal(); const grand = grandWithServices(total, dp.total);
+            let h = dp.total ? `<div class="bill-discount-line">💸 خصم تلقائي${dp.itemPart && dp.invPart ? ' (أصناف + فاتورة ' + fmtNum(invDiscPct()) + '%)' : dp.itemPart ? ' أصناف' : ' فاتورة ' + fmtNum(invDiscPct()) + '%'}: -${fmtCur(dp.total)}${st ? '' : ` → الإجمالي ${fmtCur(grand)}`}</div>` : '';
+            if (st) h += `<div class="bill-services-line">🛎️ خدمات${(Number(orderServices.table)||0) ? ' طاولة ' + fmtCur(orderServices.table) : ''}${(Number(orderServices.delivery)||0) ? ((Number(orderServices.table)||0) ? ' + ' : ' ') + 'توصيل ' + fmtCur(orderServices.delivery) : ''} → الإجمالي ${fmtCur(grand)}</div>`;
+            return h; })()}
+          <div class="bill-actions">
+            <button class="calc-btn" type="button" data-action="hold-order">⏸️ تعليق</button>
+          </div>
+          ${renderHeldPanel()}
+          ${renderPaySection()}
+          <div class="bill-actions"><button class="calc-btn" type="button" data-action="open-calc" ${cart.length===0?'disabled':''}>🧮 الحاسبة</button><button class="print-btn" type="button" data-action="submit-order" ${cart.length===0?'disabled':''}>🖨️ طباعة الفاتورة</button></div>
+`;
+}
+/* ربط محصور بلوحة الفاتورة الجديدة (مرآة bindPOSActions: SELECT/TEXTAREA/INPUT/click + منع فقاعة qty-edit) */
+function bindPanelActions(box) {
+  box.querySelectorAll('[data-action]').forEach(el => {
+    const action = el.dataset.action;
+    if (el.tagName === 'SELECT') el.addEventListener('change', () => handleAction(action, el.value, el));
+    else if (el.tagName === 'TEXTAREA') {
+      if (action === 'note-open') el.addEventListener('click', () => handleAction(action, el.value, el));
+      else el.addEventListener('change', () => handleAction(action, el.value, el));
+    }
+    else if (el.tagName === 'INPUT') el.addEventListener('input', () => handleAction(action, el.value, el));
+    else el.addEventListener('click', (ev) => {
+      if (action === 'qty-edit') ev.stopPropagation();
+      handleAction(action, el.dataset.value, el, ev);
+    });
+  });
+}
+/* إزالة نوافذ الكمية/الملاحظات بعد التطبيق الموضعي (آمنة دوماً: لا شيء = لا عمل) */
+function dropModalNodes() {
+  try {
+    document.querySelector('.qty-modal')?.remove();
+    document.querySelector('.qty-modal-scrim')?.remove();
+    document.querySelector('.note-modal')?.remove();
+    document.querySelector('.note-modal-scrim')?.remove();
+    document.querySelector('.qedit-modal')?.remove();
+    document.querySelector('.qedit-scrim')?.remove();
+  } catch (e) {}
+}
+/* شارة كمية الصنف على زر القائمة: تحديث/إنشاء/إزالة — false لأي شذوذ */
+function updateItemBadge(id) {
+  try {
+    const q = (typeof CSS !== 'undefined' && CSS.escape) ? CSS.escape(String(id)) : String(id).replace(/["\\]/g, '\\$&');
+    let okAll = true;
+    document.querySelectorAll('.item-btn[data-id="' + q + '"]').forEach(b => {
+      try {
+        const row = cart.find(c => String(c.id) === String(id));
+        let badge = b.querySelector('.item-qty-badge');
+        if (row) {
+          if (!badge) { badge = document.createElement('span'); badge.className = 'item-qty-badge'; b.prepend(badge); }
+          badge.textContent = row.qty;
+        } else if (badge) badge.remove();
+      } catch (e) { okAll = false; }
+    });
+    return okAll;
+  } catch (e) { return false; }
+}
+/* تحديث موضعي للوحة الفاتورة + الشارات + الحفظ — false تعني البناء الكامل */
+function updateCartPanel(changedIds) {
+  try {
+    const total = cart.reduce((s, x) => s + x.price * x.qty, 0);
+    const count = cart.reduce((s, x) => s + x.qty, 0);
+    if (displayMode === 'direct') {
+      const inv = document.getElementById('menuInvoice');
+      const pay = document.getElementById('menuPaybar');
+      if (!inv || !pay) return false;
+      inv.innerHTML = renderDirectInvoice(total, count);
+      pay.innerHTML = `${renderPaySection()}<button class="d-print-btn" type="button" data-action="submit-order" ${cart.length===0?'disabled':''}>🖨️ طباعة</button>`;
+      bindPanelActions(inv);
+      bindPanelActions(pay);
+      const dh = document.querySelector('.dpad-head');
+      if (dh) { const sel = cart.find(c => c.id === directSelectedId); dh.innerHTML = sel ? `الهدف: <b>${escapeHtml(sel.name)}</b>` : 'اختر صنفاً من جدول الفاتورة'; }
+    } else {
+      const panel = document.getElementById('billPanel');
+      if (!panel) return false;
+      panel.innerHTML = renderBillPanel(total, count);
+      bindPanelActions(panel);
+    }
+    for (const id of (changedIds || [])) { if (!updateItemBadge(id)) return false; }
+    saveDraft();
+    return true;
+  } catch (e) { return false; }
+}
 function updateSearchInputAndResults() {
   const input = document.getElementById('posSearchInput');
   if (input) input.value = '';
@@ -1731,7 +2103,7 @@ function toggleDisplayMode(){
   closeCashierNav(); renderPOS();
 }
 function toggleSearch(){ searchOpen = !searchOpen; if(!searchOpen) searchTerm=''; renderPOS(); }
-function clearSearch(){ searchTerm=''; searchOpen=false; activeCategoryId=null; activeFamily=null; renderPOS(); }
+function clearSearch(){ searchTerm=''; searchOpen=false; activeCategoryId=null; activeFamily=null; if (!updateMenuArea()) renderPOS(); }
 function selectMainCategory(id){
   activeCategoryId=id||null;
   activeFamily=null;
@@ -1740,28 +2112,28 @@ function selectMainCategory(id){
     const fams = families();
     if (fams.length === 1) activeFamily = fams[0];
   }
-  renderPOS();
+  if (!updateMenuArea()) renderPOS();
 }
-function selectFamily(f){ activeFamily=f||null; renderPOS(); }
+function selectFamily(f){ activeFamily=f||null; if (!updateMenuArea()) renderPOS(); }
 function backStep(){
   activeCategoryId = null;
   activeFamily = null;
   searchTerm = '';
-  renderPOS();
+  if (!updateMenuArea()) renderPOS();
 }
 function goLevel(level){
   if (level === 'category') activeFamily=null;
-  renderPOS();
+  if (!updateMenuArea()) renderPOS();
 }
-function addToCart(id, qty=1){ const item=DATA.items.find(i=>i.id===id); if(!item) return; const ex=cart.find(c=>c.id===id && !c.locked); if(ex) ex.qty += qty; else cart.push({id:item.id,name:item.name,price:item.price,qty,note:''}); renderPOS(); }
+function addToCart(id, qty=1){ const item=DATA.items.find(i=>i.id===id); if(!item) return; const ex=cart.find(c=>c.id===id && !c.locked); if(ex) ex.qty += qty; else cart.push({id:item.id,name:item.name,price:item.price,qty,note:''}); if (!updateCartPanel([id])) renderPOS(); }
 function removeFromCart(id){
   const row = cart.find(c=>c.id===id);
-  if (row && row.locked) { cart = cart.filter(c => c.offer_id !== row.offer_id); showToast('أُلغي العرض كاملاً','🚫'); return renderPOS(); }
-  cart=cart.filter(c=>c.id!==id); if(pendingNoteItemId===id) pendingNoteItemId=null; renderPOS();
+  if (row && row.locked) { const ids = cart.filter(c => c.offer_id === row.offer_id).map(c => c.id); cart = cart.filter(c => c.offer_id !== row.offer_id); showToast('أُلغي العرض كاملاً','🚫'); if (!updateCartPanel(ids)) renderPOS(); return; }
+  cart=cart.filter(c=>c.id!==id); if(pendingNoteItemId===id) pendingNoteItemId=null; if (!updateCartPanel([id])) renderPOS(); dropModalNodes();
 }
 function updateItemNote(id,note){ const row=cart.find(c=>c.id===id); if(row && !row.locked) row.note=note; }
-function changeQty(id,d){ const row=cart.find(c=>c.id===id); if(!row) return; if(row.locked) return showToast('🔒 العرض ثابت — يمكن الإضافة عليه فقط','⚠️'); row.qty+=d; if(row.qty<=0) cart=cart.filter(c=>c.id!==id); renderPOS(); }
-function clearCart(){ cart=[]; renderPOS(); }
+function changeQty(id,d){ const row=cart.find(c=>c.id===id); if(!row) return; if(row.locked) return showToast('🔒 العرض ثابت — يمكن الإضافة عليه فقط','⚠️'); row.qty+=d; if(row.qty<=0) cart=cart.filter(c=>c.id!==id); if (!updateCartPanel([id])) renderPOS(); }
+function clearCart(){ cart=[]; orderServices = { table: 0, delivery: 0 }; renderPOS(); }
 function requireShiftOn(){ return localStorage.getItem('alfaprosys_require_shift') === '1'; }
 function shiftClosedBlocked(){ return requireShiftOn() && !(DATA.cashierSession && DATA.cashierSession.shift_open); }
 function shiftBanner(){
@@ -1775,13 +2147,16 @@ function submitOrder(){
   const total = cart.reduce((s,x)=>s+x.price*x.qty,0);
   const dp    = discountParts();
   const disc  = dp.total;
+  const svcT  = Math.max(0, Math.round(Number(orderServices.table) || 0));
+  const svcD  = Math.max(0, Math.round(Number(orderServices.delivery) || 0));
+  const grand = Math.max(0, total - disc) + svcT + svcD;
 
   /* 🔴 تحذير سقف الذمة: آجل بعقد، أو طلب بنوع «عقد» */
   const _creditConId = (payMethod==='deferred' && deferredMode==='contract' && selectedContractId)
     || (orderType==='contract' && selectedContractId) || null;
   if (_creditConId) {
     const _ci = contractCreditInfo(_creditConId);
-    const _cs = creditState(_ci, Math.max(0, total - disc));
+    const _cs = creditState(_ci, grand);
     if (_cs && _cs.over) {
       const _wmsg = `🔴 تحذير: تجاوز سقف ذمة ${_ci.con.client_name} — الذمة ستصبح ${fmtCur(_cs.after)} والسقف ${fmtCur(_ci.limit)} ل.س`;
       setTimeout(() => showToast(_wmsg, '⚠️'), 1900);   /* بعد توست الفاتورة ليراه الكاشير */
@@ -1809,8 +2184,13 @@ function submitOrder(){
     discount_detail: {
       invoice_pct: invDiscPct(),
       items: cartDiscountLines().map(c => { const r = itemDiscRule(c.id); return { id: c.id, name: c.name, pct: r.pct, amount: Math.round(c.price*c.qty*r.pct/100) }; }),
+      service_table: svcT,
+      service_delivery: svcD,
     },
-    total: Math.max(0, total - disc),
+    service_table: svcT,
+    service_delivery: svcD,
+    service_fee: svcT + svcD,
+    total: grand,
     time: now.toTimeString().slice(0,5),
     created_at: now.toISOString(),
     is_online: false,
@@ -1890,7 +2270,7 @@ function submitOrder(){
   showToast(orderType==='takeaway' || orderType==='delivery'
     ? `فاتورة ${_lbl} · دورك ${_lbl} → المطبخ`
     : `فاتورة ${_lbl} → المطبخ`,'🍳');
-  cart=[]; renderPOS();
+  cart=[]; orderServices = { table: 0, delivery: 0 }; renderPOS();
   // طباعة حرارية تلقائية (كاشير + مطبخ) — قابلة للإطفاء من config.js
   try {
     const _th = window.ALFA_CONFIG && window.ALFA_CONFIG.thermal || {};
@@ -1900,22 +2280,23 @@ function submitOrder(){
 
 /* ── تعليق / استئناف الطلبات ── */
 function holdCurrentOrder(){
-  if(!cart.length){ showToast('لا يوجد طلب لتعليقه','⚠️'); return; }
-  heldOrders.push({ id:heldSeq++, at:new Date().toTimeString().slice(0,5), cart:cart.slice(), type:orderType });
-  cart=[]; renderPOS();
+  if(!cart.length && !servicesTotal()){ showToast('لا يوجد طلب لتعليقه','⚠️'); return; }
+  heldOrders.push({ id:heldSeq++, at:new Date().toTimeString().slice(0,5), cart:cart.slice(), type:orderType, services:{ table: Number(orderServices.table) || 0, delivery: Number(orderServices.delivery) || 0 } });
+  cart=[]; orderServices = { table: 0, delivery: 0 }; renderPOS();
   showToast('تم تعليق الطلب','⏸️');
 }
 function renderHeldPanel(){
   if(!heldOrders.length) return '';
   return `<div class="held-strip">${heldOrders.map(h=>`
     <button class="held-chip" type="button" data-action="resume-held" data-value="${h.id}">
-      ⏸️ #${h.id} · ${h.cart.length} صنف · ${h.at}
+      ⏸️ #${h.id} · ${h.cart.length} صنف · ${h.at}${(h.services && ((Number(h.services.table) || 0) + (Number(h.services.delivery) || 0)) > 0) ? ' 🛎️' : ''}
     </button>`).join('')}</div>`;
 }
 function resumeHeld(id){
   const h = heldOrders.find(x=>x.id==id); if(!h) return;
-  if(cart.length) holdCurrentOrder();   // علّق الحالي قبل الاستئناف
+  if(cart.length || servicesTotal()) holdCurrentOrder();   // علّق الحالي قبل الاستئناف
   cart = h.cart.slice();
+  orderServices = { table: Number(h.services && h.services.table) || 0, delivery: Number(h.services && h.services.delivery) || 0 };
   heldOrders = heldOrders.filter(x=>x.id!=id);
   renderPOS();
   showToast('تم استئناف الطلب','▶️');
@@ -1932,6 +2313,7 @@ function pickContract(id) {
   if (!con) return renderPOS();
   /* أضف أصناف العقد إلى السلة تلقائياً بكمياتها */
   cart = [];
+  orderServices = { table: 0, delivery: 0 };
   (con.items || []).forEach(it => {
     cart.push({
       id:    it.item_id,
@@ -1999,8 +2381,20 @@ function updateContractList() {
   });
 }
 
+/* السحب الخلفي اكتمل: تحديث واحد يعرض البيانات الطازجة (يُتجاهل أثناء الكتابة) */
+if (typeof window !== 'undefined' && window.addEventListener) {
+  window.addEventListener('alfa:cloud-ready', function () {
+    try {
+      const a = document.activeElement;
+      if (a && (a.tagName === 'INPUT' || a.tagName === 'TEXTAREA')) return;
+      renderPOS();
+    } catch (e) {}
+  });
+}
+
 (window.alfaStart||function(fn){fn();})(function () {
   const _draftRestored = restoreDraft();
+  if (window.__splash) window.__splash.set(75, 'جاري تجهيز القائمة...');
   try {
     const _p = new URLSearchParams(location.search);
     if (_p.get('table')) {
@@ -2012,6 +2406,7 @@ function updateContractList() {
   } catch (err) {}
   if (_draftRestored) setTimeout(() => showToast('استُعيدت مسودة الفاتورة الأخيرة', '🔄'), 350);
   renderPOS();
+  if (window.__splash) window.__splash.done();
   if (window.Notify) Notify.init();
   if (window.InvoiceSync && InvoiceSync.pull) {
     setInterval(function () {

@@ -54,7 +54,7 @@ function bySort(a,b){ return (a.sort_order||0)-(b.sort_order||0); }
 function uniq(arr){ return [...new Set(arr.filter(Boolean))]; }
 function nowTime(){ return new Date().toLocaleTimeString('ar-EG',{hour:'2-digit',minute:'2-digit'}); }
 function selectedInvoice(){ return invoices.find(i => i.id === selectedId); }
-function recalc(inv){ inv.total=(inv.items||[]).reduce((s,x)=>s+Number(x.total||0),0); }
+function recalc(inv){ inv.total=(inv.items||[]).reduce((s,x)=>s+Number(x.total||0),0)+(Number(inv.service_table)||0)+(Number(inv.service_delivery)||0); }
 
 /* 🛵 فواتير الأونلاين: قراءة فقط + حذف فقط (الطلب 13) */
 function isOnlineInv(inv){
@@ -321,6 +321,7 @@ function renderDetail(inv){
     </div>
 
     <!-- الإجمالي -->
+    ${((Number(inv.service_table) || 0) + (Number(inv.service_delivery) || 0) > 0) ? `<div class="inv-svc-lines">${(Number(inv.service_table) || 0) ? `<div class="inv-svc-row"><span>🍽️ خدمة طاولة</span><strong>${fmtNum(inv.service_table)} ل.س</strong></div>` : ''}${(Number(inv.service_delivery) || 0) ? `<div class="inv-svc-row"><span>🛵 خدمة توصيل</span><strong>${fmtNum(inv.service_delivery)} ل.س</strong></div>` : ''}</div>` : ''}
     <div class="inv-total-bar">
       <span>إجمالي الفاتورة</span>
       <strong>${fmtNum(inv.total)} ل.س</strong>

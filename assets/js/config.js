@@ -101,7 +101,7 @@ window.ALFA_CONFIG = {
        title اسم المطعم · sub العنوان/الهاتف · noLabel «رقم الطلب:» · no الرقم
        date سطر التاريخ · cust سطر الزبون · th رؤوس الأعمدة · td خلايا الجدول
        note الملاحظات · sum المجاميع · thanks سطر الشكر */
-    fonts: { title: 20, sub: 14, noLabel: 14, no: 26, date: 14, cust: 12.5,
+    fonts: { title: 20, sub: 14, noLabel: 26, no: 26, date: 14, cust: 12.5,
              th: 9.5, td: 12, name: 11, note: 11, sum: 12.5, thanks: 16 },
     feedMm: 3,           // مساحة السحب بعد آخر سطر (كانت 8 مم)
 
@@ -187,7 +187,8 @@ try {
     'tables.html',
     'online_orders.html',
     'delivery.html',
-    'edit_invoice.html'
+    'edit_invoice.html',
+    'customers.html'
   ];
 
   // التحقق من الصلاحيات

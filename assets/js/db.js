@@ -42,15 +42,18 @@ window.AlfaDB = {
   ping: async function () {
     if (!this.configured()) return { ok: false, reason: 'not-configured' };
     if (!this.isOnline()) return { ok: false, reason: 'offline' };
+    const ctrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
+    const t = ctrl ? setTimeout(function () { try { ctrl.abort(); } catch (e) {} }, 10000) : null;
     try {
       const s = ALFA_CONFIG.supabase;
       const res = await fetch(s.url + '/rest/v1/', {
         headers: { apikey: s.anonKey, Authorization: 'Bearer ' + s.anonKey },
+        signal: ctrl ? ctrl.signal : undefined,
       });
       return { ok: res.ok, status: res.status };
     } catch (e) {
       return { ok: false, reason: String(e && e.message || e) };
-    }
+    } finally { if (t) clearTimeout(t); }
   },
 
   flush: async function () {
@@ -72,7 +75,11 @@ window.AlfaDB = {
     } else {
       d[table] = row;
     }
-    if (window.SyncQueue) {
+    if (window.AlfaOutbox && (table === 'invoices' || table === 'customers' || table === 'suppliers')) {
+      /* توجيه حي للمحرك العام بدل الطابور الميت */
+      try { AlfaOutbox.commitOne(table, row); } catch (e) {}
+    } else if (table !== 'items' && window.SyncQueue) {
+      /* الأصناف يملكها صندوق المنيو — لا طابور وهمي لها */
       SyncQueue.push({ table: table, op: 'upsert', row_id: row.id || table, row: row, at: Date.now() });
     }
   },
@@ -80,7 +87,9 @@ window.AlfaDB = {
     const d = window.DEMO_DATA;
     if (!d || !table || id == null) return;
     if (Array.isArray(d[table])) d[table] = d[table].filter(function (r) { return r.id !== id; });
-    if (window.SyncQueue) {
+    if (window.AlfaOutbox && (table === 'invoices' || table === 'customers' || table === 'suppliers')) {
+      try { AlfaOutbox.commitDelete(table, id); } catch (e) {}
+    } else if (table !== 'items' && window.SyncQueue) {
       SyncQueue.push({ table: table, op: 'delete', row_id: id, at: Date.now() });
     }
   },

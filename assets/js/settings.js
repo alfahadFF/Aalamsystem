@@ -217,7 +217,9 @@ function applyPriceChange(){
     const factor = 1 + (ch.direction === 'up' ? ch.pct : -ch.pct) / 100;
     const step = roundStepVal();
     DATA.items = (DATA.items || []).map(it => Object.assign({}, it, { price: roundPrice((it.price || 0) * factor) }));
-    if (window.MenuSync) MenuSync.pushSoon();
+    /* رفع مباشر فوري (كان pushSoon المؤجَّل يضيع عند التنقل السريع) */
+    if (window.commitMenuNow) commitMenuNow(DATA.items, DATA.categories);
+    else if (window.MenuSync) MenuSync.pushSoon();
     if (window.SettingsSync) SettingsSync.pushSoon();
     p.last_change = { rate: ch.rate || p.usd_rate, pct: Number(ch.pct), direction: ch.direction, step, at: new Date().toISOString().slice(0, 10) };
     window.AlfaAudit && AlfaAudit.log('settings', 'تغيير أسعار جماعي',
@@ -323,6 +325,8 @@ function toggleOffer(id){
 function deleteOffer(id){
   const o = (DATA.offers||[]).find(x => x.id === id);
   DATA.offers = (DATA.offers||[]).filter(x => x.id !== id);
+  if (window.SettingsSync && SettingsSync.removeOffer) SettingsSync.removeOffer(id);
+  else if (window.AlfaOutbox) AlfaOutbox.commitDelete('offers', id);
   if (window.SettingsSync) SettingsSync.pushSoon();
   renderOffersAdmin();
   window.AlfaAudit && AlfaAudit.log('settings', 'حذف عرض', (o && o.title) || id, 'المدير');

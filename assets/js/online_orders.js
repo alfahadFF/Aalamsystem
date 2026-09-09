@@ -180,12 +180,14 @@ function printReceipt(o, invId){
 async function refreshOrders(){
   const cfg = (window.ALFA_CONFIG||{}).onlineOrders || {};
   if(cfg.endpoint){
+    const ctrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
+    const t = ctrl ? setTimeout(function () { try { ctrl.abort(); } catch (e) {} }, 15000) : null;
     try{
-      const res = await fetch(cfg.endpoint, { headers:{ 'x-cashier-pin': cfg.pin||'' } });
+      const res = await fetch(cfg.endpoint, { headers:{ 'x-cashier-pin': cfg.pin||'' }, signal: ctrl ? ctrl.signal : undefined });
       const data = await res.json();
       if(Array.isArray(data.orders)){ DATA.online_orders = data.orders; }
       showToast('تم التحديث من المصدر الخارجي', '🔄');
-    }catch(err){ showToast('تعذّر الاتصال بالمصدر الخارجي', '⚠️'); }
+    }catch(err){ showToast('تعذّر الاتصال بالمصدر الخارجي', '⚠️'); }finally{ if (t) clearTimeout(t); }
   } else {
     showToast('وضع تجريبي: لا مصدر خارجي مضبوط', '🧪');
   }

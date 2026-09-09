@@ -343,7 +343,12 @@ function togglePanel(key) {
    ================================================================ */
 function deletePurchase(idx) {
   if (!confirm(`حذف: ${purchases[idx]?.item}؟`)) return;
+  const doomed = purchases[idx] && purchases[idx].id;
   purchases.splice(idx, 1);
+  if (doomed != null) {
+    if (window.ExpenditureSync && ExpenditureSync.removePur) ExpenditureSync.removePur(doomed);
+    else if (window.AlfaOutbox) AlfaOutbox.commitDelete('purchases', doomed);
+  }
   persistExp();
   renderContent();
   showToast('تم حذف حركة الشراء', '🗑️');
@@ -398,7 +403,7 @@ function buildPurchaseForm() {
         <option value="new">➕ تصنيف جديد...</option>
       </select>
     </div>
-    <div class="mgr-form-group" id="purNewCatRow" style="display:none;">
+    <div class="mgr-form-group" id="purNeewCatRow" style="display:none;">
       <label>اسم التصنيف الجديد</label>
       <input type="text" id="purNewCatInput" placeholder="مثال: ألبان ومنتجات">
     </div>
