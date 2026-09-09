@@ -1,13 +1,13 @@
 /* ============================================================
    sw.js — Service Worker: العمل دون اتصال (Offline-first)
    - تثبيت: تخزين مسبق لكل ملفات التطبيق.
-   - تصفح (HTML): شبكة أولًا ثم الكاش (لتلقي التحديثات، ويعمل أوفلاين).
-   - ملفات الإعداد الحساسة (config.js): شبكة أولًا دائماً — لا يجوز
-     تجميدها بالكاش، لأنها تحمل مفاتيح/إعدادات تتغيّر بدون نشر كامل.
+   - تصفح (HTML): سباق شبكة 2.5ث وإلا الكاش فوراً + تحديث خلفي (وضع سوريا).
+   - ملفات الإعداد الحساسة (config.js): نفس السباق — لا تجميد بالكاش
+     (التحديث يصل خلفاً) ولا تعليق للإقلاع على شبكة بطيئة.
    - أصول أخرى (js/css/أيقونات): كاش أولًا ثم شبكة.
    - خطوط خارجية: كاش أولًا بعد أول تحميل (تعمل أوفلاين لاحقًا).
    ============================================================ */
-const VERSION = 'alfaprosys-v42';
+const VERSION = 'alfaprosys-v65'; /* v65: الكاشير يدخل العملاء — إصلاح صلاحية */ 
 
 /* ملفات تُجلب دائماً من الشبكة أولاً (لا كاش-أولاً أبداً)
    أضف هنا أي ملف إعدادات حسّاس مستقبلاً بنفس الطريقة */
@@ -15,6 +15,31 @@ const NETWORK_FIRST_ASSETS = [
   'assets/js/config.js',
   'assets/js/qz-tray.min.js',   // مكتبة QZ — محلية الآن (كانت CDN) لطباعة أوفلاين
 ];
+
+/* مهلة سباق الشبكة (وضع سوريا): إن لم ترد الشبكة خلالها قُدّم الكاش فوراً
+   وأكمل التحديث في الخلفية — التنقل بين الشاشات لا ينتظر الشبكة أبداً */
+const NAV_TIMEOUT = 2500;
+
+/* سباق شبكة/كاش: الأحدث إن كانت الشبكة سريعة، وإلا الكاش فوراً + تحديث خلفي.
+   يعيد { res, bg } حيث bg وعد التحديث الخلفي (يُمرر لـ waitUntil). */
+function networkRace(req, ms) {
+  return caches.open(VERSION).then((cache) =>
+    cache.match(req).then((cached) => {
+      const net = fetch(req).then((res) => {
+        if (res && res.ok) cache.put(req, res.clone()).catch(() => {});
+        return res;
+      }).catch(() => null);
+      return Promise.race([
+        net,
+        new Promise((resolve) => setTimeout(() => resolve('timeout'), ms)),
+      ]).then((winner) => {
+        if (winner && winner !== 'timeout') return { res: winner, bg: null };
+        if (cached) return { res: cached, bg: net };
+        return net.then((late) => ({ res: late, bg: null }));
+      });
+    })
+  );
+}
 
 const CORE = [
   'manifest.webmanifest',
@@ -32,7 +57,8 @@ const CORE = [
   'assets/js/config.js','assets/js/utils.js','assets/js/data.js','assets/js/app.js',
   'assets/js/nav.js','assets/js/notify.js','assets/js/alerts.js','assets/js/thermal.js',
   'assets/js/qz-tray.min.js',
-  'assets/js/sync/storage.js','assets/js/sync/queue.js','assets/js/sync/remote.js',
+  'assets/js/sync/storage.js','assets/js/sync/outbox.js','assets/js/sync/queue.js','assets/js/sync/remote.js',
+  'assets/js/sync/manager.js',
   // السكربتات — كل صفحة
   'assets/js/pos.js','assets/js/manager.js','assets/js/sales.js','assets/js/invoices.js',
   'assets/js/open_invoices.js','assets/js/edit_invoice.js','assets/js/reports.js',
@@ -76,29 +102,25 @@ self.addEventListener('fetch', (event) => {
 
   const url = new URL(req.url);
 
-  // تصفح الصفحات: شبكة أولًا ثم الكاش (يعمل أوفلاين)
+  // تصفح الصفحات: سباق شبكة 2.5ث وإلا الكاش فوراً + تحديث خلفي (يعمل أوفلاين)
   if (req.mode === 'navigate') {
     event.respondWith(
-      fetch(req).then((res) => {
-        const copy = res.clone();
-        caches.open(VERSION).then((c) => c.put(req, copy));
-        return res;
-      }).catch(() =>
-        caches.match(req).then((hit) => hit || caches.match('index.html'))
-      )
+      networkRace(req, NAV_TIMEOUT).then(({ res, bg }) => {
+        if (bg) event.waitUntil(bg);
+        return res || caches.match('index.html');
+      })
     );
     return;
   }
 
-  // ملفات إعداد حساسة: شبكة أولًا دائماً (config.js وما شابهه)
+  // ملفات إعداد حساسة: سباق شبكة 2.5ث وإلا الكاش (config.js سكربت حاجب — لا يعلّق الإقلاع)
   if (url.origin === self.location.origin &&
       NETWORK_FIRST_ASSETS.some((p) => url.pathname.endsWith('/' + p) || url.pathname.endsWith(p))) {
     event.respondWith(
-      fetch(req).then((res) => {
-        const copy = res.clone();
-        caches.open(VERSION).then((c) => c.put(req, copy));
-        return res;
-      }).catch(() => caches.match(req))
+      networkRace(req, NAV_TIMEOUT).then(({ res, bg }) => {
+        if (bg) event.waitUntil(bg);
+        return res || caches.match(req);
+      })
     );
     return;
   }

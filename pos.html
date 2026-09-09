@@ -8,7 +8,8 @@
 
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Changa:wght@600;700;800&family=Almarai:wght@400;700;800&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Changa:wght@600;700;800&family=Almarai:wght@400;700;800&display=swap" rel="stylesheet" media="print" onload="this.media='all'" />
+  <noscript><link href="https://fonts.googleapis.com/css2?family=Changa:wght@600;700;800&family=Almarai:wght@400;700;800&display=swap" rel="stylesheet" /></noscript>
 
   <link rel="stylesheet" href="assets/css/style.css" />
   <link rel="manifest" href="manifest.webmanifest" />
@@ -17,13 +18,74 @@
   <link rel="apple-touch-icon" href="assets/icon/logo.png" />
   <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
+  <style>
+    /* شاشة الإقلاع: تُرسم فوراً قبل السكربتات والخطوط لتخفي زمن التحميل */
+    #bootSplash{position:fixed;inset:0;z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;background:linear-gradient(160deg,#102A43,#0B1F33 70%);color:#fff;font-family:Tahoma,Arial,sans-serif;transition:opacity .45s ease;}
+    #bootSplash.hide{opacity:0;pointer-events:none;}
+    #bootSplash .sp-logo{width:84px;height:84px;filter:drop-shadow(0 4px 14px rgba(0,0,0,.4));}
+    #bootSplash .sp-name{font-size:26px;font-weight:800;}
+    #bootSplash .sp-sub{font-size:15px;color:#FCD34D;font-weight:700;}
+    #bootSplash .sp-bar{width:min(280px,70vw);height:10px;border-radius:99px;background:rgba(255,255,255,.15);overflow:hidden;margin-top:14px;}
+    #bootSplash .sp-fill{height:100%;width:0;border-radius:99px;background:linear-gradient(90deg,#D97706,#FBBF24);animation:spFill 9s ease-out forwards;transition:width .3s ease;}
+    @keyframes spFill{to{width:90%;}}
+    #bootSplash .sp-msg{font-size:13px;color:#CBD5E1;min-height:20px;text-align:center;padding:0 16px;}
+    @media (prefers-reduced-motion:reduce){#bootSplash .sp-fill{animation:none;width:45%;}}
+  </style>
 </head>
 <body>
+  <div id="bootSplash" role="status" aria-label="جاري فتح نقطة البيع">
+    <svg class="sp-logo" viewBox="0 0 120 120" fill="none" aria-hidden="true">
+      <path d="M25 95L50 30H95L82 50H55L45 72H72L62 95H25Z" fill="#FFFFFF"/>
+      <path d="M52 28C68 20 85 18 100 24C102 28 98 35 90 38C82 40 70 48 62 60L52 28Z" fill="#38BDF8"/>
+      <circle cx="95" cy="30" r="3" fill="#FBBF24"/>
+      <circle cx="75" cy="45" r="2.5" fill="#38BDF8"/>
+      <circle cx="60" cy="70" r="3" fill="#FBBF24"/>
+      <path d="M60 70L75 45L95 30" stroke="#38BDF8" stroke-width="2" stroke-linecap="round"/>
+      <path d="M85 70L98 50M98 50L90 48M98 50L100 58" stroke="#FBBF24" stroke-width="2.5" stroke-linecap="round"/>
+    </svg>
+    <div class="sp-name">alfaprosys</div>
+    <div class="sp-sub">نقطة البيع</div>
+    <div class="sp-bar"><div class="sp-fill"></div></div>
+    <div class="sp-msg">جاري فتح الكاشير…</div>
+  </div>
+  <script>
+    /* متحكم شاشة الإقلاع — يعمل قبل كل السكربتات الثقيلة */
+    (function () {
+      var el = document.getElementById('bootSplash');
+      if (!el) return;
+      var fill = el.querySelector('.sp-fill'), msg = el.querySelector('.sp-msg'), dead = false;
+      var t1 = setTimeout(function () { if (!dead && msg) msg.textContent = 'ما زال التحميل جارياً… لحظات ويفتح الكاشير ⏳'; }, 8000);
+      var t2 = setTimeout(function () {
+        if (dead) return;
+        if (fill) fill.style.animation = 'none';
+        if (msg) msg.textContent = 'التحميل يستغرق وقتاً طويلاً — تحقق من الاتصال ثم حدّث الصفحة 🔄';
+      }, 25000);
+      window.__splash = {
+        set: function (p, m) {
+          if (dead) return;
+          if (fill) { fill.style.animation = 'none'; fill.style.width = p + '%'; }
+          if (m && msg) msg.textContent = m;
+        },
+        done: function () {
+          if (dead) return;
+          dead = true;
+          clearTimeout(t1); clearTimeout(t2);
+          if (fill) fill.style.width = '100%';
+          if (msg) msg.textContent = 'تم — أهلاً بك 👋';
+          setTimeout(function () {
+            el.classList.add('hide');
+            setTimeout(function () { el.remove(); }, 500);
+          }, 250);
+        }
+      };
+    })();
+  </script>
   <section id="posApp" class="pos-page-shell" aria-label="شاشة نقطة البيع"></section>
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
     <script src="assets/js/config.js"></script>
   <script src="assets/js/sync/storage.js"></script>
+  <script src="assets/js/sync/outbox.js"></script>
   <script src="assets/js/sync/queue.js"></script>
   <script src="assets/js/sync/remote.js"></script>
   <script src="assets/js/sync/manager.js"></script>
