@@ -191,8 +191,17 @@ async function refreshOrders(){
       if(Array.isArray(data.orders)){ DATA.online_orders = data.orders; }
       showToast('تم التحديث من المصدر الخارجي', '🔄');
     }catch(err){ showToast('تعذّر الاتصال بالمصدر الخارجي', '⚠️'); }finally{ if (t) clearTimeout(t); }
+  } else if (window.AlfaSB && AlfaSB.enabled && AlfaSB.enabled()) {
+    try {
+      const remote = await AlfaSB.get('online_orders', '?select=*&order=created_at.desc');
+      if (Array.isArray(remote)) {
+        DATA.online_orders = remote;
+        if (window.alfaPersist) window.alfaPersist();
+        showToast('تم التحديث من قاعدة البيانات', '☁️');
+      }
+    } catch (err) { showToast('تعذّر جلب الطلبات من قاعدة البيانات', '⚠️'); }
   } else {
-    showToast('وضع تجريبي: لا مصدر خارجي مضبوط', '🧪');
+    showToast('لا يوجد اتصال بمصدر الطلبات', '⚠️');
   }
   renderAll();
   if (window.Notify) Notify.check(false);
