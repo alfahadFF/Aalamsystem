@@ -1,6 +1,8 @@
 const DATA = window.DEMO_DATA;
 
 let activeCategoryId = null;
+let sandwichPage = 0;
+function isSandwichCategory(){ const c=(DATA.categories||[]).find(x=>x.id===activeCategoryId); return !!(c && /سندويش|ساندويتش|sandwich/i.test(String(c.name||''))); }
 let activeFamily = null;
 const POS_MODES = [
   { id: 'buttons',  label: 'أزرر' },
@@ -14,11 +16,21 @@ try {
 } catch (e) {}
 let searchOpen = false;
 let searchTerm = '';
-let orderType = 'dinein';
+let orderType = 'takeaway';
 function onlinePendingCount(){ return (DATA.online_orders||[]).filter(o=>o.status==='new').length; }
-let selectedTable = DATA.tables[0] || 'طاولة 1';
+let selectedTable = '';
 let selectedHall = 'صالة داخلية';
 let deliveryInfo = { name: '', phone: '', address: '' };
+let orderNotes = '';
+function parseDeliveryText(text) {
+  const raw = String(text || '').trim();
+  const m = raw.match(/(?:\+?\d[\d\s-]{6,}\d)/);
+  if (!m) return { name: raw, phone: deliveryInfo.phone || '', address: deliveryInfo.address || '' };
+  const phone = m[0].replace(/[\s-]/g, '');
+  const before = raw.slice(0, m.index).trim();
+  const after = raw.slice(m.index + m[0].length).trim();
+  return { name: before, phone: phone, address: after };
+}
 let calcOpen = false;
 let calcPaid = '';
 let directAuxModal = null;
@@ -67,6 +79,7 @@ let cart = [];
 
 /* ── خدمات الطلب (طاولة / توصيل) — قيم اختيارية تُضاف فوق الصافي ── */
 let orderServices = { table: 0, delivery: 0 };
+let serviceSelected = { table: false, delivery: false };
 let servicesOpen = false;
 function servicesTotal() {
   return (Number(orderServices.table) || 0) + (Number(orderServices.delivery) || 0);
@@ -467,7 +480,7 @@ function renderPOS() {
                 ${t.icon} ${t.label}
               </button>
             `).join('')}
-            <a class="ot-btn" href="tables.html" title="خريطة الطاولات — الشاغرة والمشغولة">🗺️ الطاولات</a>
+            <button class="ot-btn" type="button" data-action="tables" title="اختر الطاولة بعد إضافة الأصناف">🗺️ الطاولات</button>
             <a class="ot-btn online-ot-btn" href="online_orders.html" title="الطلبات الأونلاين الواردة">
               🛵 أونلاين${onlinePendingCount() ? ` <span class="online-pending-badge">${onlinePendingCount()}</span>` : ''}
             </a>
@@ -528,7 +541,7 @@ function renderDirectPOS(total, count) {
           <section class="d-main" aria-label="الفاتورة والأصناف">
             <div class="d-invwrap" id="menuInvoice">${renderDirectInvoice(total, count)}</div>
             <div class="d-items" id="menuItems">${renderDirectItemsArea(items)}</div>
-            <div class="d-paybar" id="menuPaybar">${renderPaySection()}<button class="d-print-btn" type="button" data-action="submit-order" ${cart.length===0?'disabled':''}>🖨️ طباعة</button></div>
+            <div class="d-paybar" id="menuPaybar"><button class="d-print-btn" type="button" data-action="submit-order" ${cart.length===0?'disabled':''}>🖨️ طباعة</button><button class="d-calc-btn" type="button" data-action="open-calc" ${cart.length===0?'disabled':''}>🧮 حاسبة الباقي</button>${renderPaySection()}</div>
           </section>
 
           <aside class="d-mid" aria-label="نوع الطلب والتصنيفات">
@@ -540,6 +553,10 @@ function renderDirectPOS(total, count) {
             <div class="d-cats" aria-label="التصنيفات الرئيسية">
               ${cats.map(c => `<button class="d-cat ${activeCategoryId===c.id?'active':''}" type="button" data-action="category" data-value="${escapeHtml(c.id)}"><span>${c.icon}</span>${escapeHtml(c.name)}</button>`).join('')}
               <button class="d-cat svc-dcat" type="button" data-action="open-services"><span>🛎️</span>خدمات${svcBadgeHtml()}</button>
+            </div>
+            <div class="d-note-actions" style="display:flex;gap:6px;padding:8px 4px;flex-wrap:wrap;">
+              <button class="d-note-btn" type="button" data-action="order-note" style="flex:1;min-width:120px;padding:10px;border:1px solid #cbd5e1;border-radius:8px;background:#fff;cursor:pointer;font-weight:700;">📝 ملاحظات الطلب</button>
+              <button class="d-note-btn" type="button" data-action="selected-note" style="flex:1;min-width:120px;padding:10px;border:1px solid #cbd5e1;border-radius:8px;background:#fff;cursor:pointer;font-weight:700;">🍽️ ملاحظات الصنف</button>
             </div>
           </aside>
 
@@ -580,10 +597,15 @@ function renderDirectAuxModal() {
     : 'حسم الفاتورة';
   let body = '';
   if (directAuxModal === 'hall') {
+    const hallTables = selectedHall ? (DATA.tables || []).map(t => {
+      const busy = (DATA.invoices || []).some(i => i.type === 'dinein' && i.status === 'open' && i.hall === selectedHall && i.table_label === t);
+      return `<button class="d-aux-item ${busy?'busy':''}" type="button" data-action="table-pick" data-value="${escapeHtml(t)}" ${busy?'disabled':''}><strong>${escapeHtml(t)}</strong><small>${busy?'مشغولة':'شاغرة'}</small></button>`;
+    }).join('') : '';
     body = `<div class="d-aux-halls">${['صالة خارجية','صالة داخلية','صالة العائلات'].map(h =>
       `<button class="hall-chip ${selectedHall===h?'selected':''}" type="button" data-action="hall" data-value="${escapeHtml(h)}">${escapeHtml(h)}</button>`
     ).join('')}</div>
-    <div class="d-aux-hint">الصالة الحالية: <b>${escapeHtml(selectedHall || '—')}</b></div>`;
+    <div class="d-aux-hint">الصالة الحالية: <b>${escapeHtml(selectedHall || '—')}</b></div>
+    ${selectedHall ? `<div class="d-aux-hint">اختر طاولة شاغرة:</div><div class="d-aux-list">${hallTables || '<div>لا توجد طاولات معرفة</div>'}</div>` : ''}`;
   } else if (directAuxModal === 'delivery') {
     body = renderDeliveryFields() + `<button class="d-aux-done" type="button" data-action="close-direct-aux">تم</button>`;
   } else if (directAuxModal === 'contract') {
@@ -597,10 +619,18 @@ function renderDirectAuxModal() {
     body = `<div class="d-aux-hint">خصم الأصناف: <b>${fmtCur(dp.itemPart)}</b> — خصم الفاتورة: <b>${fmtNum(pct)}%</b> (${fmtCur(dp.invPart)})</div>
       <div class="d-aux-disc-grid">${[0,5,10,15,20].map(n => `<button type="button" class="d-aux-pct ${pct===n?'on':''}" data-action="set-inv-disc" data-value="${n}">${n}%</button>`).join('')}</div>
       <div class="d-aux-custom"><input id="dAuxDisc" type="number" min="0" max="100" inputmode="numeric" value="${pct}" placeholder="%"><button type="button" data-action="set-inv-disc" data-value="">تطبيق</button></div>`;
+  } else if (directAuxModal === 'order-note') {
+    const known = [...new Set((DATA.invoices || []).map(x => String(x.notes || '').trim()).filter(Boolean))].slice(0, 20);
+    body = `<div class="d-aux-hint">اكتب جزءًا من الملاحظة وستظهر الاقتراحات السابقة تلقائيًا</div>
+      <input id="orderNoteInput" class="note-modal-text" list="orderNoteSuggestions" value="${escapeHtml(orderNotes)}" placeholder="ملاحظة الطلب العامة" autocomplete="off">
+      <datalist id="orderNoteSuggestions">${known.map(n => `<option value="${escapeHtml(n)}"></option>`).join('')}</datalist>
+      <div class="note-suggestions-grid">${known.map(n => `<button type="button" class="note-suggestion" data-action="order-note-pick" data-value="${escapeHtml(n)}">${escapeHtml(n)}</button>`).join('')}</div>
+      <div style="display:flex;gap:8px;margin-top:10px;"><button type="button" class="d-aux-done" style="flex:1" data-action="order-note-save">حفظ</button><button type="button" class="d-aux-done" style="flex:1" data-action="close-direct-aux">إلغاء</button></div>`;
   } else if (directAuxModal === 'services') {
     const st = Number(orderServices.table) || 0;
     const sd = Number(orderServices.delivery) || 0;
-    body = `<div class="d-aux-hint">اترك القيمة 0 عند عدم وجود خدمة — تُضاف الخدمات فوق صافي الفاتورة</div>
+    body = `<div class="d-aux-hint">اختر الخدمة ثم أدخل قيمتها، والقيمة الافتراضية صفر</div>
+      <div style="display:flex;gap:8px;margin:8px 0;"><button type="button" class="d-aux-item" data-action="service-select" data-service="table">🍽️ خدمة طاولة</button><button type="button" class="d-aux-item" data-action="service-select" data-service="delivery">🛵 خدمة توصيل</button></div>
       <div class="d-aux-custom"><span style="font-weight:800;white-space:nowrap;align-self:center;">🍽️ طاولة</span><input id="svcTable" type="number" min="0" inputmode="numeric" value="${st}" placeholder="0"></div>
       <div class="d-aux-custom"><span style="font-weight:800;white-space:nowrap;align-self:center;">🛵 توصيل</span><input id="svcDelivery" type="number" min="0" inputmode="numeric" value="${sd}" placeholder="0"></div>
       <div style="display:flex;gap:8px;margin-top:10px;"><button type="button" class="d-aux-done" style="flex:1;" data-action="save-services">✔ حفظ</button><button type="button" class="d-aux-done" style="flex:1;filter:grayscale(1);" data-action="clear-services">تصفير</button></div>`;
@@ -636,15 +666,16 @@ function renderDirectInvoice(total, count) {
   const dp0 = discountParts();
   const disc = dp0.total;
   /* الأصناف المخفوضة تُعرض صافية في صفوفها، وخصم الفاتورة يظهر في التذييل */
-  const rows = cart.map((c, idx) => `
-    <div class="dinv-row ${directSelectedId===c.id?'selected':''}" data-action="d-select-row" data-id="${escapeHtml(c.id)}">
+  const serviceCartRows = (serviceSelected.table ? [{id:'service_table',name:'خدمة طاولة',qty:1,price:Number(orderServices.table)||0,note:''}] : []).concat(serviceSelected.delivery ? [{id:'service_delivery',name:'خدمة توصيل',qty:1,price:Number(orderServices.delivery)||0,note:''}] : []);
+  const rows = cart.concat(serviceCartRows).map((c, idx) => `
+    <div class="dinv-row ${directSelectedId===c.id?'selected':''}">
       <span class="dinv-c dinv-n">${idx + 1}</span>
-      <span class="dinv-c dinv-name ${c.offer_id ? 'dinv-offer-row' : ''}" title="${escapeHtml(c.name)}">${c.offer_id && !c.offer_disc ? '🎟️ ' : ''}${escapeHtml(c.name)}${!c.locked && itemDiscRule(c.id) ? ` <span class="item-disc-badge">−${fmtNum(itemDiscRule(c.id).pct)}%</span>` : ''}</span>
+      <span class="dinv-c dinv-name ${c.offer_id ? 'dinv-offer-row' : ''}" data-action="d-select-row" data-id="${escapeHtml(c.id)}" onclick="event.stopPropagation();directSelectedId='${escapeHtml(c.id)}';renderPOS();" title="حدد الصنف ثم استخدم زر ملاحظات الصنف">${c.offer_id && !c.offer_disc ? '🎟️ ' : ''}${escapeHtml(c.name)}${!c.locked && itemDiscRule(c.id) ? ` <span class="item-disc-badge">−${fmtNum(itemDiscRule(c.id).pct)}%</span>` : ''}</span>
       <span class="dinv-c dinv-price">${itemDiscRule(c.id) ? `<s>${fmtCur(c.price)}</s>` : fmtCur(c.price)}</span>
-      <span class="dinv-c dinv-qty qty-tap" data-action="qty-edit" data-id="${escapeHtml(c.id)}" title="اضغط لتعديل الكمية">${c.locked ? '🔒' : fmtNum(c.qty)}</span>
+      <span class="dinv-c dinv-qty qty-controls">${c.locked ? '🔒' : `<button type="button" data-action="qty-dec" data-id="${escapeHtml(c.id)}">−</button><input class="qty-inline" type="number" min="1" value="${c.qty}" data-action="qty-input" data-id="${escapeHtml(c.id)}"><button type="button" data-action="qty-inc" data-id="${escapeHtml(c.id)}">+</button>`}</span>
       <span class="dinv-c dinv-disc">${c.offer_disc ? 'خصم عرض' : c.is_free ? '🎁 مجاني' : (c.locked ? 'عرض' : (itemDiscRule(c.id) ? `−${fmtNum(itemDiscRule(c.id).pct)}%` : '—'))}</span>
       <span class="dinv-c dinv-total">${c.locked ? fmtCur(c.price) : fmtCur(itemNet(c) * c.qty)}</span>
-      <span class="dinv-c dinv-note ${c.note ? '' : 'muted'}" data-action="note-open" data-id="${escapeHtml(c.id)}" title="اضغط لتعديل الملاحظة">${c.note ? escapeHtml(c.note) : '—'}</span>
+      <span class="dinv-c dinv-note ${c.note ? '' : 'muted'}" title="ملاحظة الصنف — استخدم زر ملاحظات الصنف">${c.note ? escapeHtml(c.note) : '—'}</span>
       <button class="dinv-del" type="button" data-action="remove-item" data-id="${escapeHtml(c.id)}" title="حذف الصنف">✕</button>
     </div>`).join('');
 
@@ -913,28 +944,8 @@ function toggleCardsDrawer() {
 }
 
 function renderDeliveryFields() {
-  return `
-    <div class="delivery-card">
-      <div class="delivery-card-title">🛵 بيانات التوصيل</div>
-      <div class="delivery-fields">
-        <div class="delivery-field-row">
-          <input type="text" data-action="delivery-field" data-field="name"
-            value="${escapeHtml(deliveryInfo.name)}" placeholder="اسم العميل">
-          ${voiceMicBtn('delivery-name')}
-        </div>
-        <div class="delivery-field-row">
-          <input type="tel" inputmode="tel" data-action="delivery-field" data-field="phone"
-            value="${escapeHtml(deliveryInfo.phone)}" placeholder="رقم الهاتف">
-          ${voiceMicBtn('delivery-phone')}
-        </div>
-        <div class="delivery-field-row">
-          <input class="delivery-address" type="text" data-action="delivery-field" data-field="address"
-            value="${escapeHtml(deliveryInfo.address)}" placeholder="العنوان الكامل">
-          ${voiceMicBtn('delivery-address')}
-        </div>
-      </div>
-    </div>
-  `;
+  const combined = [deliveryInfo.name, deliveryInfo.phone, deliveryInfo.address].filter(Boolean).join(' ');
+  return `<div class="delivery-card"><div class="delivery-card-title">🛵 بيانات التوصيل</div><div class="delivery-fields"><div class="delivery-field-row"><input type="text" data-action="delivery-combined" value="${escapeHtml(combined)}" placeholder="الاسم ثم رقم الهاتف ثم العنوان"><span title="تمييز تلقائي">✦</span></div></div></div>`;
 }
 
 /* ================================================================
@@ -1535,7 +1546,9 @@ function renderSearchResultsContent(items) {
 function renderSearchResults(items) { return renderSearchArea(items); }
 function renderItemButtons(items) {
   if (!items.length) return `<div class="empty-items">لا توجد أصناف ضمن هذا الاختيار</div>`;
-  return items.map(item => {
+  const paged = (isSandwichCategory() || items.length > 16) ? items.slice(sandwichPage*16, sandwichPage*16+16) : items;
+  const pager = (isSandwichCategory() || items.length > 16) && items.length > 16 ? `<div class="items-pager"><button type="button" data-action="sandwich-prev" ${sandwichPage===0?'disabled':''}>→ السابق</button><span>صفحة ${sandwichPage+1} من ${Math.ceil(items.length/16)}</span><button type="button" data-action="sandwich-next" ${sandwichPage>=Math.ceil(items.length/16)-1?'disabled':''}>التالي ←</button></div>` : '';
+  return paged.map(item => {
     const inCart = cart.find(c => c.id === item.id);
     const drule = itemDiscRule(item.id);
     const priceHtml = drule ? `<div class="item-price"><s>${fmtCur(item.price)}</s> <b>${fmtCur(itemNet(item))}</b></div>` : `<div class="item-price">${fmtCur(item.price)}</div>`;
@@ -1545,7 +1558,7 @@ function renderItemButtons(items) {
       : `<span class="item-name-main">${escapeHtml(parts.head)}</span>`;
     const westIt = isWesternItem(item);
     return `<button class="item-btn" type="button" data-action="open-qty" data-id="${item.id}"${westIt ? ` style="${famItemStyle(item)}"` : ''}>${inCart ? `<span class="item-qty-badge">${inCart.qty}</span>` : ''}${drule ? `<span class="item-disc-badge" title="خصم ${fmtNum(drule.pct)}%">−${fmtNum(drule.pct)}%</span>` : ''}<div class="item-name">${nameHtml}</div>${priceHtml}</button>`;
-  }).join('');
+  }).join('') + pager;
 }
 
 function renderQtyModal() {
@@ -1617,7 +1630,7 @@ function renderNoteModal() {
         </div>
       </div>
       <div class="note-suggestions-grid">
-        ${NOTE_SUGGESTIONS.map(n => `<button type="button" class="note-suggestion ${noteHas(current,n) ? 'selected' : ''}" data-action="note-toggle" data-value="${escapeHtml(n)}">${escapeHtml(n)}</button>`).join('')}
+        ${learnedNoteSuggestions(row.id).map(n => `<button type="button" class="note-suggestion ${noteHas(current,n) ? 'selected' : ''}" data-action="note-toggle" data-value="${escapeHtml(n)}">${escapeHtml(n)}</button>`).join('')}
       </div>
       <textarea id="noteModalText" class="note-modal-text" placeholder="أو اكتب ملاحظة خاصة...">${escapeHtml(current)}</textarea>
       <button class="note-save-btn" type="button" data-action="note-save">حفظ الملاحظات</button>
@@ -1629,6 +1642,16 @@ function noteParts(text) {
 }
 function noteHas(text, note) {
   return noteParts(text).includes(note);
+}
+function learnedNoteSuggestions(itemId) {
+  const out = [];
+  const seen = new Set();
+  const add = v => { const t=String(v||'').trim(); if(t && !seen.has(t)){seen.add(t);out.push(t);} };
+  NOTE_SUGGESTIONS.forEach(add);
+  (DATA.invoices || []).forEach(inv => (inv.items || []).forEach(it => {
+    if (!itemId || it.id === itemId) noteParts(it.note).forEach(add);
+  }));
+  return out.slice(0, 24);
 }
 function openNoteModal(id) {
   const lr = cart.find(c => c.id === id && c.locked);
@@ -1754,7 +1777,7 @@ function bindPOSActions() {
       else el.addEventListener('change', () => handleAction(action, el.value, el));
     }
     else if (el.tagName === 'INPUT') {
-      const liveActions = ['delivery-field','pay-wallet-ref','pay-partial-amount','pay-def-name','pay-def-phone','pay-def-addr'];
+      const liveActions = ['delivery-field','delivery-combined','pay-wallet-ref','pay-partial-amount','pay-def-name','pay-def-phone','pay-def-addr'];
       if (liveActions.includes(action)) el.addEventListener('input', () => handleAction(action, el.value, el));
       else el.addEventListener('input', () => handleAction(action, el.value, el));
     }
@@ -1828,17 +1851,28 @@ function handleAction(action, value, el, ev) {
       }
       return renderPOS();
     case 'hall':
-      selectedHall = value;
-      if (displayMode === 'direct') directAuxModal = null;
+      selectedHall = value; selectedTable = '';
+      if (displayMode === 'direct') directAuxModal = 'hall';
+      return renderPOS();
+    case 'table-pick':
+      selectedTable = value; orderType = 'dinein'; directAuxModal = null;
       return renderPOS();
     case 'close-direct-aux':
       directAuxModal = null;
       return renderPOS();
     case 'open-services': return openServices();
+    case 'order-note': directAuxModal = 'order-note'; return renderPOS();
+    case 'order-note-save': { const x=document.getElementById('orderNoteInput'); orderNotes=(x&&x.value||'').trim(); directAuxModal=null; return renderPOS(); }
+    case 'order-note-pick': { const x=document.getElementById('orderNoteInput'); if(x) x.value=value; return; }
+    case 'selected-note': { if (!directSelectedId) return showToast('حدد صنفًا أولًا','⚠️'); return openNoteModal(directSelectedId); }
     case 'close-services': return closeServices();
+    case 'service-select': { const k=el.dataset.service; serviceSelected[k]=true; const id=k==='table'?'svcTable':'svcDelivery'; const x=document.getElementById(id); if(x){x.focus();x.select();} renderPOS(); return; }
     case 'save-services': return saveServices();
     case 'clear-services': return clearServices();
     case 'qty-edit': return openQtyEdit(el.dataset.id);
+    case 'qty-inc': { const r=cart.find(x=>x.id===el.dataset.id&&!x.locked); if(r){r.qty++; renderPOS();} return; }
+    case 'qty-dec': { const r=cart.find(x=>x.id===el.dataset.id&&!x.locked); if(r){r.qty=Math.max(1,r.qty-1); renderPOS();} return; }
+    case 'qty-input': { const r=cart.find(x=>x.id===el.dataset.id&&!x.locked); const q=Math.max(1,Number(el.value)||1); if(r){r.qty=q; renderPOS();} return; }
     case 'qty-edit-key': return qtyEditKey(value);
     case 'qty-edit-apply': return applyQtyEdit();
     case 'qty-edit-close': return closeQtyEdit();
@@ -1855,9 +1889,31 @@ function handleAction(action, value, el, ev) {
       return renderPOS();
     }
     case 'delivery-field': deliveryInfo[el.dataset.field] = el.value; return;
+    case 'delivery-combined': {
+      const p = parseDeliveryText(el.value);
+      deliveryInfo.name = p.name; deliveryInfo.phone = p.phone; deliveryInfo.address = p.address;
+      const q = String(el.value || '').trim().toLowerCase();
+      if (q.length >= 2) {
+        const hit = (DATA.customers || []).find(c => {
+          const n = String(c.name || '').trim().toLowerCase();
+          const ph = String(c.phone || '').replace(/\D/g, '');
+          const digits = q.replace(/\D/g, '');
+          return (n && n.includes(q)) || (digits.length >= 5 && ph.endsWith(digits));
+        });
+        if (hit) {
+          deliveryInfo.name = hit.name || deliveryInfo.name;
+          deliveryInfo.phone = hit.phone || deliveryInfo.phone;
+          deliveryInfo.address = hit.address || deliveryInfo.address;
+          el.value = [deliveryInfo.name, deliveryInfo.phone, deliveryInfo.address].filter(Boolean).join(' ');
+        }
+      }
+      return;
+    }
     case 'open-calc': calcOpen = true; return renderPOS();
     case 'close-calc': calcOpen = false; calcPaid = ''; return renderPOS();
-    case 'category': return selectMainCategory(value);
+    case 'category': sandwichPage=0; return selectMainCategory(value);
+    case 'sandwich-prev': sandwichPage=Math.max(0,sandwichPage-1); return renderPOS();
+    case 'sandwich-next': sandwichPage++; return renderPOS();
     case 'family': return selectFamily(value);
     case 'select-category': return selectMainCategory(value);
     case 'select-family': return selectFamily(value);
@@ -1885,7 +1941,9 @@ function handleAction(action, value, el, ev) {
     case 'session': return guardLeave('cashier_session.html');
     case 'kitchen': return openPosScreen('kitchen.html', 'شاشة المطبخ');
     case 'queue':   return openPosScreen('queue.html', 'شاشة النداء');
-    case 'tables':  return openPosScreen('tables.html', 'خريطة الطاولات');
+    case 'tables':
+      if (!cart.length) return showToast('أضف الأصناف أولًا ثم اختر الطاولة','⚠️');
+      orderType = 'dinein'; directAuxModal = 'hall'; return renderPOS();
     case 'online-orders': return openPosScreen('online_orders.html', 'الطلبات الأونلاين');
     case 'delivery-screen': return openPosScreen('delivery.html', 'شاشة التوصيل');
     case 'close-pos-embed': return closePosEmbed();
@@ -1988,7 +2046,7 @@ function updateMenuArea() {
 function renderBillPanel(total, count) {
   return `
           <div class="bill-head">
-            <div><h2>🧾 فاتورة ${nextInvoiceLabel()}</h2><p>${orderType==='dinein' ? escapeHtml(selectedHall) : orderType==='takeaway' ? 'سفري' : 'توصيل'}</p></div>
+            <div><h2>🧾 فاتورة ${nextInvoiceLabel()}</h2><p>${orderType==='dinein' ? escapeHtml(selectedHall) : orderType==='takeaway' ? 'خارجي' : 'توصيل'}</p></div>
             
           </div>
           <div class="bill-list">
@@ -2141,9 +2199,10 @@ function shiftBanner(){
   return `<div class="shift-block-banner">🚫 <b>الوردية مغلقة — البيع موقوف</b> <a href="cashier_session.html">فتح الوردية الآن ↩</a></div>`;
 }
 
-function submitOrder(){
+async function submitOrder(){
   if(!cart.length){ showToast('السلة فارغة','⚠️'); return; }
   if (shiftClosedBlocked()) { showToast('ممنوع البيع — افتح الوردية أولاً', '🚫'); return; }
+  if (orderType === 'dinein' && (!selectedHall || !selectedTable)) { showToast('اختر الصالة والطاولة قبل الطباعة', '⚠️'); return; }
   const total = cart.reduce((s,x)=>s+x.price*x.qty,0);
   const dp    = discountParts();
   const disc  = dp.total;
@@ -2163,10 +2222,11 @@ function submitOrder(){
     }
   }
   const now   = new Date();
-  const invNo   = window.nextDailyNo ? nextDailyNo() : 1;
+  const invNo   = window.reserveInvoiceNo ? await reserveInvoiceNo() : (window.nextDailyNo ? nextDailyNo() : 1);
   const invDate = window.businessDay ? businessDay() : '';
   const inv = {
-    id: window.nextInvoiceId ? nextInvoiceId() : (invDate + '-' + String(invNo).padStart(3, '0')),
+    // تم حجز invNo أعلاه؛ لا تستدعِ nextInvoiceId هنا حتى لا يُحجز رقم ثانٍ.
+    id: invDate + '-' + String(invNo).padStart(3, '0'),
     no: invNo,
     date: invDate,
     type: orderType,
@@ -2193,13 +2253,14 @@ function submitOrder(){
     total: grand,
     time: now.toTimeString().slice(0,5),
     created_at: now.toISOString(),
+    notes: orderNotes || '',
     is_online: false,
     items: cart.map(c=>({
       id:c.id, name:c.name, qty:c.qty, price:c.price, total:c.price*c.qty, note:c.note||'',
       offer_id: c.offer_id || null,      // ربط كل بند بعرضه (فارغ للأصناف العادية)
       is_free:  !!c.is_free,             // المقدَّم مجاناً: يخصم مخزوناً بلا إيراد
       offer_disc: !!c.offer_disc,        // سطر خصم العرض (مالي فقط — لا يظهر للمطبخ)
-    })),
+    })).concat((serviceSelected.table ? [{id:'service_table', name:'خدمة طاولة', qty:1, price:svcT, total:svcT, note:'', is_service:true}] : []), (serviceSelected.delivery ? [{id:'service_delivery', name:'خدمة توصيل', qty:1, price:svcD, total:svcD, note:'', is_service:true}] : [])), 
   };
   if(orderType==='takeaway' || orderType==='delivery') inv.queue_no = invNo; // الدور = رقم الفاتورة نفسه
   DATA.invoices = [inv, ...(DATA.invoices||[])];

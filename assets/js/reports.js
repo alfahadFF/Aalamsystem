@@ -205,12 +205,20 @@ function exportReportCSV(){
         csvClean(k.querySelector('.rpt-kpi-val')?.textContent),
       ]));
   }
-  const csv = '\uFEFF' + rows.map(r => r.map(csvCell).join(',')).join('\r\n');
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
-  a.download = `تقرير-${TAB_LABELS[currentTab] || currentTab}-${dateFrom}_${dateTo}.csv`;
-  document.body.appendChild(a); a.click(); a.remove();
-  showToast('صُدّر التقرير بصيغة Excel', '📊');
+  const name = `تقرير-${TAB_LABELS[currentTab] || currentTab}-${dateFrom}_${dateTo}`;
+  if (window.XLSX) {
+    const ws = XLSX.utils.aoa_to_sheet(rows);
+    ws['!cols'] = rows.reduce((a, r) => { r.forEach((v,i) => a[i] = { wch: Math.max(a[i]?.wch || 10, Math.min(42, String(v||'').length + 2)) }); return a; }, []);
+    const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, 'التقرير');
+    XLSX.writeFile(wb, name + '.xlsx');
+    showToast('تم تصدير ملف Excel فعلي', '📊');
+  } else {
+    const csv = '\uFEFF' + rows.map(r => r.map(csvCell).join(',')).join('\r\n');
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+    a.download = name + '.csv'; document.body.appendChild(a); a.click(); a.remove();
+    showToast('تم تصدير CSV احتياطيًا', '📄');
+  }
 }
 function printReport(){
   document.getElementById('exportMenu')?.classList.remove('open');

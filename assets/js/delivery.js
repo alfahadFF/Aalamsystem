@@ -37,6 +37,7 @@ let activeAgentId  = null;        // التبويب الفرعي في سجل ا�
 let assignModal    = null;        // { invoiceId } — مودال الإسناد
 let feedbackModal  = null;        // { invoiceId } — مودال ملاحظة العميل
 let trackModal     = null;        // invoiceId — مودال التتبع
+let agentFormModal = false;
 let role           = '';
 
 /* ── حالة التوصيل ── */
@@ -159,6 +160,7 @@ function renderApp() {
     ${feedbackModal ? renderFeedbackModal() : ''}
     <!-- مودال التتبع -->
     ${trackModal ? renderTrackModal() : ''}
+    ${agentFormModal ? renderAgentFormModal() : ''}
   `;
 
   renderTabContent();
@@ -432,6 +434,7 @@ function renderAgentsTab() {
             💰 المبالغ المستلمة من العميل: <strong>${fmt(total)}</strong>
             ${fees > 0 ? ` &nbsp;|&nbsp; رسوم للشركة: <strong>${fmt(fees)}</strong>` : ''}
           </div>
+          <button class="dlv-btn dlv-btn-print" onclick="printAgentReport('${e(agent.id)}')">🖨️ طباعة كشف</button>
           <button class="dlv-btn dlv-btn-settle"
             onclick="settleAgent('${e(agent.id)}','${e(agent.name)}',${total},${fees})">
             💵 محاسبة ${e(agent.name)}
@@ -850,6 +853,17 @@ function doCopyLink() {
   }
 }
 
+function printAgentReport(agentId) {
+  const agent = agents().find(a => a.id === agentId); if (!agent) return;
+  const invs = agentInvoices(agentId); const total = invs.reduce((s,i)=>s+Number(i.total||0),0);
+  const fees = invs.reduce((s,i)=>s+Number((i.delivery_info||{}).fee||0),0);
+  const w = window.open('', '_blank', 'width=800,height=900'); if (!w) return showToast('اسمح بالنوافذ المنبثقة للطباعة','⚠️');
+  w.document.write('<!doctype html><html dir="rtl"><head><meta charset="utf-8"><title>كشف توصيل</title><style>body{font-family:Arial,Tahoma;margin:18px;color:#111}h2{text-align:center}table{width:100%;border-collapse:collapse;margin-top:15px}th,td{border:1px solid #333;padding:7px;text-align:center}th{background:#eee}.sum{font-size:16px;font-weight:bold;margin-top:15px}@media print{button{display:none}}</style></head><body>');
+  w.document.write('<h2>كشف محاسبة التوصيل</h2><div>العامل/الشركة: <b>'+String(agent.name).replace(/[<>]/g,'')+'</b></div><div>التاريخ: '+new Date().toLocaleString('ar')+'</div><table><tr><th>الفاتورة</th><th>العميل</th><th>الإجمالي</th><th>رسوم التوصيل</th><th>الحالة</th></tr>');
+  invs.forEach(i=>{const d=i.delivery_info||{};w.document.write('<tr><td>'+i.id+'</td><td>'+String(i.customer_name||'').replace(/[<>]/g,'')+'</td><td>'+Number(i.total||0).toLocaleString()+'</td><td>'+Number(d.fee||0).toLocaleString()+'</td><td>'+String(d.status||'').replace(/[<>]/g,'')+'</td></tr>');});
+  w.document.write('</table><div class="sum">إجمالي المبالغ: '+total.toLocaleString()+' ل.س — الرسوم: '+fees.toLocaleString()+' ل.س — الصافي: '+(total-fees).toLocaleString()+' ل.س</div><script>window.onload=function(){window.print();}</script></body></html>');w.document.close();
+}
+
 /* ================================================================
    محاسبة العامل
    ================================================================ */
@@ -864,30 +878,10 @@ function settleAgent(agentId, agentName, total, fees) {
 /* ================================================================
    إضافة عامل (مؤقت)
    ================================================================ */
-function openAddAgentModal() {
-  const name = prompt('اسم العامل أو الشركة:');
-  if (!name || !name.trim()) return;
-  const type = confirm('شركة توصيل خارجية؟ (موافق = شركة، إلغاء = موظف)')
-    ? 'company' : 'employee';
-  const phone = prompt('رقم الهاتف (اختياري):') || '';
-  const fee = type === 'company'
-    ? (parseInt(prompt('رسوم الرحلة (ل.س) — 0 إن لم تكن ثابتة:') || '0') || 0)
-    : 0;
-
-  const newAgent = {
-    id: 'drv_' + Date.now(),
-    name: name.trim(),
-    type, phone, fee_per_trip: fee,
-    notes: '',
-    is_active: true,
-  };
-  window.DEMO_DATA.delivery_agents = [...(window.DEMO_DATA.delivery_agents || []), newAgent];
-  if (window.AgentSync) AgentSync.pushSoon();
-  activeAgentId = newAgent.id;
-  activeTab = 'agents';
-  showToast(`تم إضافة ${newAgent.name}`, '✅');
-  renderApp();
-}
+function openAddAgentModal() { agentFormModal = true; renderApp(); }
+function closeAgentForm(){ agentFormModal = false; renderApp(); }
+function renderAgentFormModal(){ return `<div class="dlv-modal-scrim" onclick="closeAgentForm()"></div><div class="dlv-modal" role="dialog"><div class="dlv-modal-head"><strong>إضافة عامل أو شركة توصيل</strong><button onclick="closeAgentForm()">✕</button></div><div class="dlv-modal-body"><label>الاسم<input id="agentName" type="text" placeholder="اسم العامل أو الشركة"></label><label>النوع<select id="agentType"><option value="employee">موظف</option><option value="company">شركة</option></select></label><label>الهاتف<input id="agentPhone" type="tel" placeholder="رقم الهاتف"></label><label>رسوم الرحلة<input id="agentFee" type="number" min="0" value="0" placeholder="0"></label><label>ملاحظات<textarea id="agentNotes" placeholder="ملاحظات"></textarea></label><div class="dlv-modal-actions"><button class="dlv-btn" onclick="closeAgentForm()">إلغاء</button><button class="dlv-btn dlv-btn-assign" onclick="saveAgentForm()">حفظ</button></div></div></div>`; }
+function saveAgentForm(){ const name=(document.getElementById('agentName')?.value||'').trim(); if(!name) return showToast('اسم العامل أو الشركة مطلوب','⚠️'); const rec={id:'drv_'+Date.now(),name,type:document.getElementById('agentType').value,phone:document.getElementById('agentPhone').value.trim(),fee_per_trip:Number(document.getElementById('agentFee').value)||0,notes:document.getElementById('agentNotes').value.trim(),is_active:true}; window.DEMO_DATA.delivery_agents=[...(window.DEMO_DATA.delivery_agents||[]),rec]; if(window.AgentSync) AgentSync.pushSoon(); activeAgentId=rec.id; activeTab='agents'; agentFormModal=false; showToast('تمت إضافة عامل التوصيل','✅'); renderApp(); }
 
 /* ================================================================
    اختيار عامل في التبويب

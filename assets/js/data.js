@@ -3075,17 +3075,42 @@ window.DEMO_DATA.price_settings = window.DEMO_DATA.price_settings || {
   window.invNoLabel = function (inv) {
     return window.invoiceNo ? window.invoiceNo(inv) : String((inv && inv.id) || '');
   };
+  /*
+   * حجز الرقم محلياً قبل إنشاء الفاتورة.
+   * السبب: حساب max + 1 وحده يعيد الرقم نفسه عند فتح نافذتين أو عند العمل
+   * دون اتصال ثم إعادة تحميل البيانات. الحجز محفوظ في localStorage ويستمر
+   * بعد الإغلاق، بينما تبقى الفاتورة نفسها في الطابور حتى تُرفع لاحقاً.
+   * الترقيم الموحد بين أجهزة متعددة يحتاج قيداً/دالة ذرية في قاعدة البيانات.
+   */
   window.nextDailyNo = function () {
     const today = window.businessDay();
-    let max = 0;
+    const key = 'alfaprosys_invoice_reservation_' + today;
+    let reserved = 0;
+    try { reserved = Number(localStorage.getItem(key) || 0) || 0; } catch (e) {}
+    let max = reserved;
     (window.DEMO_DATA.invoices || []).forEach(function (i) {
       const d = i.date || (i.created_at ? window.businessDay(i.created_at) : null);
-      if (d === today && +i.no > max) max = +i.no;
+      if (d === today && Number(i.no) > max) max = Number(i.no);
     });
     (window.DEMO_DATA.online_orders || []).forEach(function (o) {
-      if (o.date === today && +o.no > max) max = +o.no;
+      if (o.date === today && Number(o.no) > max) max = Number(o.no);
     });
-    return max + 1;
+    const next = max + 1;
+    try { localStorage.setItem(key, String(next)); } catch (e) {}
+    return next;
+  };
+  window.reserveInvoiceNo = function () {
+    const today = window.businessDay();
+    if (navigator.onLine !== false && window.AlfaSB && AlfaSB.enabled && AlfaSB.enabled() && AlfaSB.rpc) {
+      return AlfaSB.rpc('reserve_invoice_no', { p_business_day: today })
+        .then(function (n) {
+          n = Number(Array.isArray(n) ? n[0] : n);
+          if (!n) throw new Error('invalid invoice number');
+          try { localStorage.setItem('alfaprosys_invoice_reservation_' + today, String(n)); } catch (e) {}
+          return n;
+        }).catch(function () { return window.nextDailyNo(); });
+    }
+    return Promise.resolve(window.nextDailyNo());
   };
   window.nextInvoiceId = function () {
     const today = window.businessDay();
@@ -3170,6 +3195,17 @@ window.DEMO_DATA.price_settings = window.DEMO_DATA.price_settings || {
          فيُعرض seed ثم يُستبدل — وكان الحفظ السريع/الأوفلاين يدفع البذرة!) */
       for (const k of Object.keys(saved)) {
         base[k] = saved[k];
+      }
+    }
+    /* تسليم نظيف للعميل: تبقى المنيو والموظفون والموردون والإعدادات،
+       وتُحذف كل الحركة المالية/التشغيلية التجريبية. */
+    if (window.ALFA_CLEAN_START !== false && (function(){ try { return !localStorage.getItem('alfaprosys_clean_financial_v1'); } catch(e){ return true; } })()) {
+      ['invoices','online_orders','shifts_history','audit_log','loyalty_ledger','material_purchases','contracts'].forEach(function (k) { base[k] = []; });
+      base.cashierSession = null;
+      base.last_close = null;
+      if (window.SyncQueue && window.SyncQueue.clear) window.SyncQueue.clear();
+      if (window.localStorage) {
+        try { localStorage.removeItem('alfaprosys_data_v1'); localStorage.removeItem('alfaprosys_queue_v1'); localStorage.setItem('alfaprosys_clean_financial_v1','1'); } catch (e) {}
       }
     }
     if (window.SyncQueue && window.SyncQueue.hydrate) window.SyncQueue.hydrate(queue || []);

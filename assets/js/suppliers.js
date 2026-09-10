@@ -28,7 +28,7 @@ function commitSupplier(row){
 let editId = null;
 function showSupplierForm(){ document.getElementById('supForm').style.display = 'block'; document.getElementById('supScrim').style.display = 'block'; }
 function closeSupplierForm(){ document.getElementById('supForm').style.display = 'none'; document.getElementById('supScrim').style.display = 'none'; }
-function clearSupplierForm(){ ['supName','supPhone','supMats','supNotes'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; }); }
+function clearSupplierForm(){ ['supName','supPhone','supMats','supBalance','supNotes'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; }); }
 function openAddSupplier(){ editId = null; clearSupplierForm(); showSupplierForm(); }
 function openEditSupplier(id){
   editId = id;
@@ -36,6 +36,7 @@ function openEditSupplier(id){
   document.getElementById('supName').value = s.name || '';
   document.getElementById('supPhone').value = s.phone || '';
   document.getElementById('supMats').value = s.materials || '';
+  document.getElementById('supBalance').value = s.previous_balance || 0;
   document.getElementById('supNotes').value = s.notes || '';
   showSupplierForm();
 }
@@ -46,6 +47,7 @@ function saveSupplier(){
     name,
     phone: document.getElementById('supPhone').value.trim(),
     materials: document.getElementById('supMats').value.trim(),
+    previous_balance: Number(document.getElementById('supBalance').value) || 0,
     notes: document.getElementById('supNotes').value.trim(),
   };
   if (editId) {
@@ -130,6 +132,7 @@ function render(){
       <input id="supName" placeholder="اسم المورد" style="padding:10px;border-radius:10px;border:1.5px solid var(--line);font-family:inherit;">
       <input id="supPhone" placeholder="الهاتف" style="padding:10px;border-radius:10px;border:1.5px solid var(--line);font-family:inherit;">
       <input id="supMats" placeholder="المواد الموردة (مثال: دجاج، خبز)" style="padding:10px;border-radius:10px;border:1.5px solid var(--line);font-family:inherit;">
+      <input id="supBalance" type="number" min="0" placeholder="ذمم سابقة على المطعم" style="padding:10px;border-radius:10px;border:1.5px solid var(--line);font-family:inherit;">
       <input id="supNotes" placeholder="ملاحظات" style="padding:10px;border-radius:10px;border:1.5px solid var(--line);font-family:inherit;">
     </div>
     <div style="display:flex;gap:8px;margin-top:14px;">

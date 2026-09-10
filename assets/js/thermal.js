@@ -210,7 +210,7 @@
   /* تسمية نوع الطلب كما تُخزَّن في الفاتورة (dinein/takeaway/delivery/contract/أونلاين) */
   function typeLabel(inv) {
     if (inv.is_online || inv.source_order_id) return 'طلب أونلاين';
-    return ({ dinein: 'طلب طاولة', table: 'طلب طاولة', takeaway: 'سفري', delivery: 'توصيل', contract: 'عقد' })[inv.type] || 'طلب';
+    return ({ dinein: 'طلب طاولة', table: 'طلب طاولة', takeaway: 'خارجي', delivery: 'توصيل', contract: 'عقد' })[inv.type] || 'طلب';
   }
   function payLabel(inv) {
     return ({ cash: 'نقداً', wallet: 'محفظة', partial: 'دفع جزئي', deferred: 'آجل' })[inv.pay_type] || (inv.pay_type || '');
@@ -252,8 +252,8 @@
     const cust1 = [inv.customer_name, inv.phone].filter(Boolean).join(' ');
     const cust2 = ([inv.customer_address].filter(Boolean).join(' ') + (isDlv ? ' خارجي' : '')).trim();
     /* نوع الطلب قبل الجدول: كلمة عارية بلا عنوان (طاولة/سفري/خارجي/أونلاين) */
-    const TYPE_AR = { dinein: 'طاولة', table: 'طاولة', takeaway: 'سفري', delivery: 'خارجي', online: 'أونلاين', contract: 'عقد' };
-    const typeAr = inv.source === 'online' ? 'أونلاين' : (TYPE_AR[inv.type] || '');
+    const TYPE_AR = { dinein: 'طاولة', table: 'طاولة', takeaway: 'خارجي', delivery: 'خارجي', online: 'أونلاين', contract: 'عقد' };
+    const typeAr = inv.source === 'online' ? 'أونلاين' : (inv.type === 'dinein' ? '' : (TYPE_AR[inv.type] || ''));
 
     /* خلايا بحدود كاملة كالصورة + التفاف النص داخل الخلايا حتى لا تتمدد
        الأسماء والملاحظات الطويلة خارج الجدول */
@@ -276,9 +276,9 @@
           <td style="${TD}text-align:center;font-weight:normal;font-size:${F.note}px;"></td>
         </tr>`;
     let svcRows = '';
-    if (!opts.kitchen) {
-      if (svcT > 0) svcRows += svcRowFor('خدمة طاولة', svcT);
-      if (svcD > 0) svcRows += svcRowFor('خدمة توصيل', svcD);
+    if (!opts.kitchen && !items.some(x => x.is_service)) {
+      if (svcT > 0 || inv.type === 'dinein' || inv.type === 'table') svcRows += svcRowFor('خدمة طاولة', svcT);
+      if (svcD > 0 || inv.type === 'delivery') svcRows += svcRowFor('خدمة توصيل', svcD);
       if (!svcRows) {
         const fee = Number(inv.service_fee) || 0;
         if (fee > 0 && (inv.type === 'delivery' || inv.type === 'table' || inv.type === 'dinein'))
@@ -328,7 +328,9 @@
             ? `${cust1 ? `<div style="font-size:${F.cust}px;font-weight:bold;text-align:center;">${esc(cust1)}</div>` : ''}${cust2 ? `<div style="font-size:${F.cust}px;font-weight:bold;text-align:center;">${esc(cust2)}</div>` : ''}`
             : `${cust ? `<div style="font-size:${F.cust}px;font-weight:bold;text-align:center;">${esc(cust)}</div>` : ''}`}
           ${typeAr ? `<div style="font-size:${F.date}px;font-weight:900;text-align:center;">${esc(typeAr)}</div>` : ''}
+          ${inv.type === 'dinein' && inv.hall ? `<div style="font-size:14px;font-weight:900;text-align:center;">طاولة — ${esc(inv.hall)}</div>` : ''}
         </div>
+        ${inv.notes ? `<div style="font-size:14px;font-weight:900;text-align:right;border:1px solid #000;padding:3px 5px;margin:0 auto 3mm;width:calc(100% - 1mm);">ملاحظات الطلب: ${esc(inv.notes)}</div>` : ''}
 
         <table style="width:calc(100% - 1mm);border-collapse:collapse;border:1px solid #000;margin:0 auto 10mm;table-layout:fixed;">
           <thead><tr>${headCols}</tr></thead>
