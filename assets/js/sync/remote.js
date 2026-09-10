@@ -135,6 +135,15 @@ window.AlfaSB = (function () {
       if (!res.ok) return res.text().then(function (t) { throw new Error(table + ' delete ' + t.slice(0, 180)); });
     });
   }
+  function rpc(fn, args) {
+    return rfetch(root() + '/rest/v1/rpc/' + encodeURIComponent(fn), {
+      method: 'POST', headers: headers('return=representation'),
+      body: JSON.stringify(args || {}),
+    }).then(function (res) { return res.text().then(function (t) {
+      if (!res.ok) throw new Error('rpc ' + fn + ' ' + res.status + ' ' + t.slice(0, 220));
+      return t ? JSON.parse(t) : null;
+    }); });
+  }
   function insert(table, rows) {
     if (!rows.length) return Promise.resolve();
     return rfetch(rest(table, ''), {
@@ -147,7 +156,7 @@ window.AlfaSB = (function () {
       });
     });
   }
-  return { enabled: enabled, get: get, upsert: upsert, del: del, delFilter: delFilter, insert: insert, timeoutMs: 15000 };
+  return { enabled: enabled, get: get, rpc: rpc, upsert: upsert, del: del, delFilter: delFilter, insert: insert, timeoutMs: 15000 };
 })();
 
 window.MenuSync = (function () {
