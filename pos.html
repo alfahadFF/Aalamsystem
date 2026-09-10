@@ -46,7 +46,7 @@
     <div class="sp-name">alfaprosys</div>
     <div class="sp-sub">نقطة البيع</div>
     <div class="sp-bar"><div class="sp-fill"></div></div>
-    <div class="sp-msg">جاري فتح الكاشير…</div>
+    <div class="sp-msg">جاري فتح النظام…</div>
   </div>
   <script>
     /* متحكم شاشة الإقلاع — يعمل قبل كل السكربتات الثقيلة */
@@ -54,7 +54,7 @@
       var el = document.getElementById('bootSplash');
       if (!el) return;
       var fill = el.querySelector('.sp-fill'), msg = el.querySelector('.sp-msg'), dead = false;
-      var t1 = setTimeout(function () { if (!dead && msg) msg.textContent = 'ما زال التحميل جارياً… لحظات ويفتح الكاشير ⏳'; }, 8000);
+      var t1 = setTimeout(function () { if (!dead && msg) msg.textContent = 'ما زال التحميل جارياً… لحظات ويفتح النظام ⏳'; }, 8000);
       var t2 = setTimeout(function () {
         if (dead) return;
         if (fill) fill.style.animation = 'none';
