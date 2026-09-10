@@ -871,3 +871,13 @@
   text-decoration: none;
 }
 .track-whatsapp-btn:hover { background: #1da851; }
+
+/* نموذج إضافة عامل/شركة توصيل */
+.dlv-modal-body > label { display:flex; flex-direction:column; gap:6px; margin-bottom:13px; color:var(--fahad-navy); font-size:13px; font-weight:800; }
+.dlv-modal-body > label input, .dlv-modal-body > label select, .dlv-modal-body > label textarea { box-sizing:border-box; width:100%; min-height:42px; padding:10px 12px; border:1px solid #cbd5e1; border-radius:9px; background:#fff; color:#0f172a; font:inherit; font-weight:600; outline:none; }
+.dlv-modal-body > label textarea { min-height:78px; resize:vertical; }
+.dlv-modal-body > label input:focus, .dlv-modal-body > label select:focus, .dlv-modal-body > label textarea:focus { border-color:var(--fahad-blue); box-shadow:0 0 0 3px rgba(37,99,235,.12); }
+.dlv-modal-actions { display:flex; gap:10px; margin-top:18px; padding-top:14px; border-top:1px solid #e2e8f0; }
+.dlv-modal-actions .dlv-btn { flex:1; min-height:42px; border-radius:9px; font-weight:900; cursor:pointer; }
+.dlv-modal-actions .dlv-btn:not(.dlv-btn-assign) { background:#f8fafc; color:#475569; border:1px solid #cbd5e1; }
+.dlv-modal-actions .dlv-btn-assign { background:#1d4ed8; color:#fff; border:1px solid #1d4ed8; }

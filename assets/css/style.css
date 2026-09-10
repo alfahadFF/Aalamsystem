@@ -3875,7 +3875,7 @@ select.cust-field-input { cursor: pointer; }
 .dinv-banner-amt { font-size: 16px; font-weight: 900; direction: ltr; text-align: left; line-height: 1; }
 .dinv-banner-amt small { display: inline; font-size: 11px; font-weight: 700; opacity: .8; margin-inline-start: 8px; }
 .dinv-head, .dinv-row {
-  display: grid; grid-template-columns: 28px minmax(0, 1.5fr) 70px 48px 52px 82px minmax(70px, 1fr) 26px;
+  display: grid; grid-template-columns: 28px minmax(0, 1.35fr) 70px 104px 52px 82px minmax(70px, 1fr) 26px;
   gap: 0; align-items: stretch; padding: 0;
 }
 .dinv-head {
@@ -3894,7 +3894,19 @@ select.cust-field-input { cursor: pointer; }
 .dinv-row.empty .dinv-c { color: var(--line); }
 .dinv-n { color: var(--text-muted); font-size: 11px; text-align: center; }
 .dinv-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.d-paybar { display:grid; grid-template-columns:1fr 1fr 1fr; align-items:stretch; gap:10px; direction:rtl; }
+.d-paybar .d-print-btn { order:0; width:100%; min-height:42px; padding-inline:21px; font-size:16px; font-weight:900; }
+.d-paybar .d-calc-btn { order:0; width:100%; min-height:42px; }
+.d-paybar .pay-section { order:0; width:100%; }
+.d-paybar .d-calc-btn { order:-9; flex:0 0 auto; padding:10px 14px; border:1px solid #94a3b8; border-radius:8px; background:#fff; font-weight:800; cursor:pointer; }
 .dinv-qty { text-align: center; font-weight: 900; }
+.qty-controls { gap: 3px; justify-content: center; white-space: nowrap; }
+.qty-controls button { display:inline-flex; align-items:center; justify-content:center; width:22px; height:22px; border:1px solid #94a3b8; border-radius:5px; background:#fff; color:#0f172a; font-weight:900; cursor:pointer; }
+.qty-controls button:hover { background:#dbeafe; }
+.qty-inline { width:34px; height:22px; text-align:center; border:1px solid #94a3b8; border-radius:5px; font-weight:800; padding:0 2px; }
+.items-pager { display:flex; align-items:center; justify-content:center; gap:12px; width:100%; padding:8px; }
+.items-pager button { padding:7px 14px; border:1px solid #94a3b8; border-radius:7px; background:#fff; font-weight:800; cursor:pointer; }
+.items-pager button:disabled { opacity:.4; cursor:not-allowed; }
 .dinv-price, .dinv-total { text-align: center; }
 .dinv-total { font-weight: 900; color: var(--fahad-navy); }
 .dinv-note {
@@ -3980,12 +3992,17 @@ select.cust-field-input { cursor: pointer; }
   background: #f3f4f6; border: 1px solid #c5d0dc; border-radius: 2px; padding: 4px;
 }
 .d-paybar {
-  flex: 0 0 auto; display: flex; align-items: center; gap: 3px; flex-wrap: wrap;
-  background: #eef2f6; border: 1px solid #c5d0dc; border-radius: 2px; padding: 2px 3px;
-  direction: rtl;
+  flex: 0 0 auto; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); align-items: stretch; gap: 10px;
+  background: #eef2f6; border: 1px solid #c5d0dc; border-radius: 2px; padding: 6px;
+  direction: ltr;
 }
+.d-paybar .d-print-btn, .d-paybar .d-calc-btn, .d-paybar .pay-section { direction: rtl; }
+.d-paybar .d-print-btn, .d-paybar .d-calc-btn { height:48px; border-radius:10px; box-shadow:0 2px 5px rgba(15,23,42,.12); }
+.d-paybar .d-print-btn { background:#166534; color:#fff; font-size:17px; }
+.d-paybar .d-calc-btn { background:#fff; border:1px solid #cbd5e1; font-size:15px; font-weight:900; }
+.d-paybar .pay-section { background:#fff; border:1px solid #d7dee8; border-radius:10px; padding:6px; box-shadow:0 2px 5px rgba(15,23,42,.08); }
 .d-paybar .pay-method-btn {
-  flex: 1; min-height: 26px; height: 26px; border-radius: 3px; font-weight: 800; font-size: 11px;
+  flex: 1; min-height:36px; height:36px; border-radius:7px; font-weight:800; font-size:12px;
   padding: 0 6px; gap: 3px;
 }
 .d-paybar .pay-icon { font-size: 12px; }
