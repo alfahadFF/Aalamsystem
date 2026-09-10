@@ -11,7 +11,7 @@ const orders = () => DATA.online_orders || [];
 /* ── الترقيم المشترك مع فواتير شاشة البيع (نظام الترقيم اليومي: 001 وتجدد 8 صباحاً) ── */
 function nextInvoiceRef(){
   const today = window.businessDay ? businessDay() : '';
-  const no    = window.nextDailyNo  ? nextDailyNo() : 1;
+  const no    = 0; // يُحجز مرة واحدة داخل acceptOrder، من قاعدة البيانات عند الاتصال أو محليًا عند انقطاعه
   const pad   = window.padNo        ? padNo(no)     : String(no);
   return { id: today + '-' + pad, no, date: today, label: pad };
 }
@@ -100,9 +100,12 @@ function toggleSound(){
 function commit(){ DATA.online_orders = orders().slice(); }
 
 /* ── قبول طلب: يتحول لفاتورة ضمن التسلسل ── */
-function acceptOrder(id){
+async function acceptOrder(id){
   const o = orders().find(x=>x.id===id); if(!o) return;
   const ref = nextInvoiceRef();
+  ref.no = window.reserveInvoiceNo ? await window.reserveInvoiceNo() : ref.no;
+  ref.id = ref.date + '-' + (window.padNo ? window.padNo(ref.no) : String(ref.no).padStart(3, '0'));
+  ref.label = window.padNo ? window.padNo(ref.no) : String(ref.no).padStart(3, '0');
   o.status = 'done';
   o.invoice_id = ref.id;
   o.no = ref.no;
