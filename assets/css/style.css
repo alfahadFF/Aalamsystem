@@ -293,6 +293,20 @@ button:focus-visible, .role-card:focus-visible { outline: 3px solid rgba(2,132,1
   transition: .12s;
 }
 .ot-btn.active { border-color: var(--fahad-blue); background: var(--fahad-blue-bg); color: var(--fahad-blue); }
+/* مؤشر الصالة والطاولة المختارة — أسماء الطاولات تتكرر بين الصالات،
+   فالصالة وحدها لا تكفي: يجب أن يرى الكاشير الاثنين قبل الطباعة */
+.ot-btn.hall-indicator {
+  flex: 1 1 100%;
+  border-style: dashed;
+  color: #8a6d2f;
+  font-size: 11.5px;
+}
+.ot-btn.hall-indicator.picked {
+  border-style: solid;
+  border-color: var(--fahad-gold, #c8a45c);
+  background: rgba(200, 164, 92, 0.16);
+  font-weight: 900;
+}
 .table-strip, .cat-strip {
   display: flex;
   gap: 6px;
@@ -1335,6 +1349,14 @@ button:focus-visible, .role-card:focus-visible { outline: 3px solid rgba(2,132,1
   border-color: var(--fahad-blue);
   background: var(--fahad-blue-bg);
   color: var(--fahad-blue);
+}
+/* الطاولة المختارة — تظهر دائماً بعد الاختيار حتى يتأكد الكاشير قبل الطباعة
+   (الصالة وحدها لا تكفي: أسماء الطاولات تتكرر بين الصالات) */
+.hall-chip.table-chip {
+  border-color: var(--fahad-gold, #c8a45c);
+  background: rgba(200, 164, 92, 0.14);
+  color: #8a6d2f;
+  border-style: dashed;
 }
 
 .qty-modal-scrim {
@@ -3292,6 +3314,7 @@ select.cust-field-input { cursor: pointer; }
 }
 .status-open      { background: var(--tint-sage); color: var(--sage-deep); }
 .status-printed   { background: var(--tint-blue); color: var(--fahad-blue-deep); }
+.status-modified  { background: var(--tint-gold, #fef3c7); color: var(--fahad-gold-deep, #92400e); }
 .status-cancelled { background: var(--tint-clay); color: var(--clay-deep); }
 .status-pending   { background: var(--bg); color: var(--fahad-gold-deep); }
 .status-unknown   { background: var(--card-subtle); color: var(--text-muted); }
@@ -5111,3 +5134,137 @@ d); font-weight:700; }
 .qedit-key.danger { background: #FEF2F2; color: #DC2626; border-color: #FECACA; }
 .qedit-hint { font-size: 11.5px; color: var(--text-muted); text-align: center; margin-bottom: 10px; }
 .build-chip { font-size: 10px; color: var(--text-muted); background: #F1F5F9; border-radius: 6px; padding: 2px 7px; font-weight: 700; white-space: nowrap; }
+.qedit-tabs{display:flex;gap:6px;margin:8px 0}.qedit-tabs b{flex:1;text-align:center;padding:8px;border-radius:8px;background:#f1f5f9;color:#64748b}.qedit-tabs b.active{background:#dbeafe;color:#1d4ed8}.weight-keys{grid-template-columns:repeat(3,1fr)!important}.weight-keys .qedit-key{font-size:13px}
+
+/* ══════════════════════════════════════════════════════════════════════
+   📱 نقطة البيع على الجوال — عرض أقل من 900px
+   ──────────────────────────────────────────────────────────────────────
+   المشكلة: تخطيط .direct-pos ثلاثة أعمدة (65% منيو / 20% وسط / 15%
+   عمليات) مصمم للديسكتوب. على شاشة 390px ينضغط عمود «الوسط» إلى ~78px،
+   فيصبح شريط التصنيفات (.d-cats) قائمة عمودية بتمرير داخلي لا يظهر منها
+   إلا شريح ضيق يصعب لمسه، بينما تأكل الفاتورة (.d-invwrap) وصف الدفع
+   والطباعة (.d-paybar) معظم الشاشة.
+
+   الحل: ترتيب عمودي واحد
+     1) نوع الطلب + التصنيفات: شريط أفقي كامل العرض بأهداف لمس 46px
+     2) الفاتورة: ارتفاع محدود (32svh) بتمرير داخلي بدل أن تتمدد
+     3) الأصناف: ارتفاع محدد قابل للتمرير، لا يزاحم بقية الأقسام
+     4) الدفع والطباعة: طرق الدفع في صف كامل، والحاسبة والطباعة جنباً لجنب
+     5) أزرار العمليات: شبكة مضغوطة في الأسفل بدل عمود مقطوع
+   ══════════════════════════════════════════════════════════════════════ */
+@media (max-width: 899px) {
+
+  /* السماح بتمرير الشاشة كاملة بدل حشرها في إطار ثابت */
+  .direct-pos { overflow-y: auto; -webkit-overflow-scrolling: touch; }
+
+  .d-body {
+    flex-direction: column;
+    gap: 6px;
+    overflow: visible;
+    flex: 0 0 auto;
+  }
+  .d-main, .d-mid, .d-ops { width: 100%; min-width: 0; }
+
+  /* ── 1) نوع الطلب + التصنيفات في الأعلى ── */
+  .d-mid {
+    order: 1; flex: 0 0 auto; overflow: visible;
+    background: transparent; border: 0; padding: 0;
+  }
+  .d-mid .d-otbar { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px; }
+  .d-mid .ot-btn  { min-height: 40px; font-size: 11.5px; }
+
+  /* شريط التصنيفات: أفقي كامل العرض بدل قائمة عمودية مضغوطة */
+  .d-cats {
+    flex-direction: row;
+    overflow-x: auto; overflow-y: hidden;
+    gap: 6px; flex: 0 0 auto; min-height: 0;
+    padding: 2px 2px 4px;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+  .d-cats::-webkit-scrollbar { display: none; }
+  .d-cat {
+    flex: 0 0 auto;
+    min-height: 46px;
+    padding: 8px 14px;
+    white-space: nowrap;
+    font-size: 13.5px;
+    border-radius: 8px;
+  }
+
+  /* ── 2) و 3) الفاتورة والأصناف ── */
+  .d-main { order: 2; flex: 0 0 auto; overflow: visible; }
+  .d-invwrap { max-height: 32vh; max-height: 32svh; overflow: hidden; }
+  .d-items   { flex: 0 0 auto; height: 44vh; height: 44svh; overflow-y: auto; }
+  /* الفاتورة الفارغة: تُخفى الصفوف الوهمية (7 صفوف ≈ 280px بلا فائدة على الجوال)
+     فيبقى منها الشريط فقط، وتذهب المساحة للأصناف */
+  .dinv-row.empty { display: none; }
+
+  /* ── 4) الدفع والطباعة: صف مدمج ── */
+  .d-paybar {
+    grid-template-columns: 1fr 1fr;
+    gap: 6px; padding: 6px;
+  }
+  .d-paybar .pay-section { grid-column: 1 / -1; order: 0; }
+  .d-paybar .pay-methods-row { gap: 5px; }
+  .d-paybar .pay-method-btn { min-height: 46px; padding: 6px 4px; font-size: 11px; }
+  .d-paybar .d-calc-btn  { order: 1; height: 50px; }
+  .d-paybar .d-print-btn { order: 2; height: 50px; font-size: 16px; }
+
+  /* ── 5) أزرار العمليات: شبكة مضغوطة ── */
+  .d-ops {
+    order: 3; flex: 0 0 auto; overflow: visible;
+    flex-direction: row; flex-wrap: wrap; gap: 6px;
+    background: transparent; border: 0; padding: 0;
+  }
+  .d-ops .dop-btn { flex: 1 1 30%; min-height: 46px; padding: 6px 8px; }
+  .d-ops .dop-btn small { font-size: 11.5px; }
+}
+
+/* جوال عرضي (ارتفاع قليل): خفّض أحجام الكتل لتبقى كلها ظاهرة */
+@media (max-width: 899px) and (max-height: 560px) {
+  .d-invwrap { max-height: 26vh; max-height: 26svh; }
+  .d-items   { height: 38vh; height: 38svh; }
+  .d-cat     { min-height: 40px; padding: 6px 12px; }
+  .d-ops .dop-btn { flex: 1 1 22%; min-height: 40px; }
+}
+
+/* ── فلتر المدى الزمني في شاشة المبيعات ── */
+.sales-date-filter {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  font-size: 12px; font-weight: 800; color: var(--text-muted);
+}
+.sales-date-filter label { display: inline-flex; align-items: center; gap: 4px; }
+.sales-date-filter input[type="date"] {
+  font-family: inherit; font-size: 12px; font-weight: 700;
+  padding: 6px 8px; min-height: 34px;
+  border: 1.5px solid var(--line); border-radius: 8px;
+  background: var(--surface); color: var(--text-main);
+}
+.sales-date-btn {
+  padding: 7px 12px; min-height: 34px; border-radius: 8px;
+  border: 1.5px solid var(--fahad-blue); background: var(--fahad-blue-bg);
+  color: var(--fahad-blue); font-family: inherit; font-size: 12px;
+  font-weight: 800; cursor: pointer;
+}
+.sales-date-btn:hover { background: var(--fahad-blue); color: #fff; }
+@media (max-width: 640px) {
+  .sales-date-filter { width: 100%; justify-content: flex-start; }
+  .sales-date-filter input[type="date"] { min-height: 40px; font-size: 13px; }
+  .sales-date-btn { min-height: 40px; padding: 8px 14px; }
+}
+
+/* ── زر «إكمال من سجل الزبائن» في بطاقة التوصيل ── */
+.delivery-smart-btn {
+  flex: 0 0 auto;
+  width: 38px; height: 38px;
+  display: inline-flex; align-items: center; justify-content: center;
+  border: 1.5px solid var(--line); border-radius: 9px;
+  background: var(--card-subtle); color: var(--fahad-blue);
+  font-size: 16px; font-weight: 900; cursor: pointer;
+}
+.delivery-smart-btn:hover { background: var(--fahad-blue-bg); border-color: var(--fahad-blue); }
+@media (max-width: 640px) {
+  /* هدف لمس مريح على الجوال */
+  .delivery-smart-btn { width: 44px; height: 44px; font-size: 18px; }
+}

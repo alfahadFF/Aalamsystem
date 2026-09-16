@@ -253,3 +253,26 @@ body {
   .kds-topbar, .kds-card-actions { display: none; }
   .kds-card { break-inside: avoid; }
 }
+
+/* ══════════════════════════════════════════════════
+   مدة التحضير المتوقعة (يضبطها المطبخ)
+   ══════════════════════════════════════════════════ */
+.kds-prep {
+  font-size: 13px; font-weight: 900;
+  padding: 4px 10px; border-radius: 8px;
+  white-space: nowrap; direction: rtl;
+}
+.kds-prep.on-time { color: #7dd3fc; background: rgba(56,189,248,0.15); }
+.kds-prep.late {
+  color: #fff; background: rgba(239,68,68,0.9);
+  animation: timerPulse 1s infinite;
+}
+.kds-prep-select {
+  display: block; width: 100%;
+  font-family: inherit; font-size: 14px; font-weight: 800;
+  padding: 10px 12px; margin-bottom: 8px;
+  border: 1.5px solid #475569; border-radius: 10px;
+  background: #1e293b; color: #e2e8f0;
+  min-height: 44px; cursor: pointer;
+}
+.kds-prep-select:focus { outline: 2px solid #38bdf8; }
