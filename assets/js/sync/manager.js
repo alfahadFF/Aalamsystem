@@ -600,7 +600,7 @@
     function pull() {
       if (!on()) return Promise.resolve({ skipped: true });
       return Promise.all([
-        sb.get('settings', '?select=key,value&key=in.(price,loyalty,discount)').catch(function () { return []; }),
+        sb.get('settings', '?select=key,value&key=in.(price,loyalty,discount,invoice_print,branding,profit_pct,online_orders)').catch(function () { return []; }),
         sb.get('loyalty_ledger', '?select=*&order=id.desc').catch(function () { return []; }),
       ]).then(function (pack) {
         (pack[0] || []).forEach(function (r) {
@@ -612,6 +612,11 @@
               items: r.value.items || [],
             };
           }
+          if (r.key === 'invoice_print' && r.value) D().invoice_print_settings = r.value;
+          if (r.key === 'branding' && r.value) D().branding = r.value;
+          /* نسبة الربح المستهدفة للأصناف — يضبطها العميل من شاشة التكاليف */
+          if (r.key === 'profit_pct' && r.value) D().profit_pct = r.value;
+          if (r.key === 'online_orders' && r.value) D().online_orders = r.value;
         });
         D().loyalty_ledger = pack[1] || [];
         var max = 0;
@@ -662,6 +667,8 @@
         { key: 'discount', value: D().discount_settings || { invoice_pct: 0, items: [] } },
         { key: 'price', value: D().price_settings || {} },
         { key: 'loyalty', value: D().loyalty || {} },
+        { key: 'profit_pct', value: D().profit_pct || { default: 0, items: {} } },
+        { key: 'online_orders', value: D().online_orders || { endpoint: '', pin: '' } },
       ];
       return sb.upsert('settings', rows, 'key')
         .then(function () { return pushOffers(); })
@@ -747,7 +754,20 @@
       const g = window.AlfaOutbox.guarded;
       return g('loyalty_ledger', g('settings', pull, applySettingsBox), applyLedgerBox)();
     }
-    return { pull: pullGuarded, push: pushCommitted,
+    /* حفظ مفتاح/قيمة في جدول settings مباشرةً وإلى السحابة.
+       يُستخدم لإعدادات لا يغطيها push المجدول (إعدادات طباعة الفاتورة،
+       البراندينغ) فتُضبط مرة واحدة على جهاز وتعمّ كل الأجهزة. */
+    function saveKV(key, value) {
+      if (!on()) return Promise.reject(new Error('offline'));
+      return sb.upsert('settings', [{ key: key, value: value }], 'key')
+        .then(function () {
+          if (key === 'invoice_print') D().invoice_print_settings = value;
+          if (key === 'branding') D().branding = value;
+          try { if (window.alfaPersist) window.alfaPersist(); } catch (e) {}
+          return { pushed: true };
+        });
+    }
+    return { pull: pullGuarded, push: pushCommitted, saveKV: saveKV,
       pushSoon: function () { if (!window.AlfaOutbox) { timerSoon(hold, push); return; } commitAll(); },
       removeOffer: function (id) {
         if (!on() || !id) return Promise.resolve({ skipped: true });

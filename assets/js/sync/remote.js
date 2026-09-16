@@ -740,9 +740,17 @@ window.InvoiceSync = (function () {
     /* خدمات الطلب (طاولة/توصيل) تُرحَّل داخل discount_detail وتُعاد هنا لحقول مباشرة */
     var svcT = (dd && Number(dd.service_table)) || 0;
     var svcD = (dd && Number(dd.service_delivery)) || 0;
+    /* مدة التحضير: من عمود حقيقي إن وُجد، وإلا من الحامل _prep */
+    var prep = Number(row.prep_minutes) > 0
+      ? { minutes: Number(row.prep_minutes), set_at: row.prep_set_at || null }
+      : (dd && dd._prep) || null;
+    if (dd && dd._prep) { dd = Object.assign({}, dd); delete dd._prep; }
     return {
       id: String(row.id),
       no: Number(row.no) || 0,
+      /* رمز السحب الترويجي — كان يُولَّد ويُطبع محلياً فقط ولا يُقرأ من
+         السحابة، فلا يمكن التحقق من رمز رابح على جهاز آخر. */
+      draw_code: row.draw_code || null,
       date: row.date || '',
       type: row.type || 'takeaway',
       hall: row.hall || '',
@@ -761,6 +769,8 @@ window.InvoiceSync = (function () {
       service_table: svcT,
       service_delivery: svcD,
       service_fee: svcT + svcD,
+      prep_minutes: prep ? (Number(prep.minutes) || null) : null,
+      prep_set_at:  prep ? (prep.set_at || null) : null,
       stock_applied: !!row.stock_applied,
       notes: row.notes || '',
       address: row.address || '',
@@ -787,10 +797,19 @@ window.InvoiceSync = (function () {
     if (statusForDB === 'modified') statusForDB = 'printed';
     var dd = inv.discount_detail ? Object.assign({}, inv.discount_detail) : {};
     if (inv.delivery_info) dd._delivery = inv.delivery_info;
+    /* مدة التحضير المتوقعة (يضبطها المطبخ من شاشته): تُحمل داخل
+       discount_detail لأن عمود prep_minutes غير موجود في قاعدة البيانات —
+       تماماً كما حُمِل delivery_info قديماً في _delivery. إن أُضيف العمود
+       لاحقاً تُقرأ القيمة منه مباشرة (انظر fromInv). */
+    if (Number(inv.prep_minutes) > 0) {
+      dd._prep = { minutes: Number(inv.prep_minutes), set_at: inv.prep_set_at || null };
+    }
     if (!Object.keys(dd).length) dd = null;
     return {
       id: String(inv.id),
       no: Number(inv.no) || 0,
+      /* يُرفع الآن مع الفاتورة — السحابة تفرض عليه فهرساً فريداً */
+      draw_code: inv.draw_code || null,
       date: inv.date || '',
       type: inv.type || 'takeaway',
       hall: inv.hall || null,
@@ -861,7 +880,31 @@ window.InvoiceSync = (function () {
     });
   }
 
-  function pushOne(inv) {
+  /* ── جلب فاتورة واحدة بالمعرف ──
+     مُصمَّم لصفحة تتبع الطلب (track.html): الزبون يفتح الرابط من هاتفه
+     بلا جلسة ولا نسخة محلية، فلا يجوز سحب جدول الفواتير كاملاً إلى
+     متصفحه (أسماء وأرقام كل الزبائن) — نجلب فاتورته وحدها. */
+  function fetchOne(id) {
+    if (!sb.enabled() || !id) return Promise.resolve(null);
+    const sid = String(id);
+    return Promise.all([
+      sb.get('invoices', '?select=*&id=eq.' + encodeURIComponent(sid) + '&limit=1'),
+      sb.get('invoice_items', '?select=*&invoice_id=eq.' + encodeURIComponent(sid)),
+    ]).then(function (pair) {
+      const row = (pair[0] || [])[0];
+      if (!row) return null;
+      const inv = fromInv(row, pair[1] || []);
+      if (window.DEMO_DATA) {
+        const list = (window.DEMO_DATA.invoices || []).slice();
+        const i = list.findIndex(function (x) { return String(x.id) === sid; });
+        if (i >= 0) list[i] = inv; else list.push(inv);
+        window.DEMO_DATA.invoices = list;
+      }
+      return inv;
+    }).catch(function () { return null; });
+  }
+
+  function pushOne(inv, _retriedCode, _retriedNo) {
     if (!sb.enabled() || !inv || !inv.id) return Promise.resolve({ skipped: true });
     var row = toInv(inv);
     var lines = (inv.items || []).map(function (c) { return toLine(row.id, c); });
@@ -880,7 +923,50 @@ window.InvoiceSync = (function () {
         return { pushed: true, id: row.id };
       })
       .catch(function (e) {
-        console.error('[InvoiceSync] pushOne FAILED:', row.id, e && e.message || e);
+        var msg = String((e && e.message) || e);
+        /* ── تضارب رمز السحب مع جهاز آخر ──
+           السحابة تفرض فهرساً فريداً على draw_code، فإذا ولّد كاشيران
+           الرمز نفسه فشل الرفع بـ 409. بدون هذه المعالجة يبقى الصف
+           المعلَّق في الصندوق يُعاد رفعه بالرمز ذاته إلى الأبد — أي
+           فاتورة أموال لا تصل للسحابة أبداً. نولّد رمزاً جديداً
+           ونعيد المحاولة مرة واحدة. */
+        /* ── تضارب رقم الفاتورة بين جهازين أوفلاين ──
+           القيد الفريد invoices_date_no_key على (date,no) يرفض الفاتورة
+           إذا أنشأ جهازان الرقم نفسه دون اتصال. سابقاً كانت تُرفض
+           نهائياً فتضيع. نمنحها الآن رقماً جديداً ونعيد المحاولة مرة
+           واحدة — الرقم المطبوع يختلف عن المحفوظ، لكن الفاتورة لا تضيع. */
+        if (!_retriedNo && /date_no|invoices_date_no_key/.test(msg) && /duplicate|unique|23505/i.test(msg)) {
+          var fresh = window.alfaFreshInvoiceNo ? window.alfaFreshInvoiceNo() : 0;
+          if (fresh && fresh !== Number(inv.no)) {
+            var oldId = String(inv.id);
+            inv.no = fresh;
+            inv.id = window.nextInvoiceId ? window.nextInvoiceId(fresh) : inv.id;
+            if (window.DEMO_DATA && Array.isArray(window.DEMO_DATA.invoices)) {
+              window.DEMO_DATA.invoices.forEach(function (x) {
+                if (String(x.id) === oldId) { x.no = fresh; x.id = inv.id; }
+              });
+            }
+            try { if (window.alfaPersist) window.alfaPersist(); } catch (e2) {}
+            console.log('[InvoiceSync] رقم مكرّر — أُعيد ترقيمها إلى', fresh);
+            return pushOne(inv, _retriedCode, true);
+          }
+        }
+        if (!_retriedCode && /draw_code/i.test(msg) && /duplicate|unique|23505/i.test(msg)) {
+          var code = window.alfaNewDrawCode ? alfaNewDrawCode() : null;
+          if (code) {
+            inv.draw_code = code;
+            row.draw_code = code;
+            if (window.DEMO_DATA && Array.isArray(window.DEMO_DATA.invoices)) {
+              window.DEMO_DATA.invoices.forEach(function (x) {
+                if (String(x.id) === String(inv.id)) x.draw_code = code;
+              });
+            }
+            try { if (window.alfaPersist) window.alfaPersist(); } catch (err) {}
+            console.warn('[InvoiceSync] تضارب رمز سحب — إعادة المحاولة برمز جديد:', code);
+            return pushOne(inv, true);
+          }
+        }
+        console.error('[InvoiceSync] pushOne FAILED:', row.id, msg);
         throw e;
       });
   }
@@ -930,7 +1016,7 @@ window.InvoiceSync = (function () {
     return AlfaOutbox.guarded('invoices', pull, applyBox)();
   }
 
-  return { pull: pullGuarded, pushOne: pushOne, pushSoon: pushSoon, remove: remove };
+  return { pull: pullGuarded, pushOne: pushOne, pushSoon: pushSoon, remove: remove, fetchOne: fetchOne };
 })();
 
 window.PosSync = (function () {
@@ -1211,7 +1297,18 @@ window.OnlineOrderSync = (function () {
   function pull() {
     if (!sb.enabled() || navigator.onLine === false) return Promise.resolve({ skipped: true });
     return sb.get('online_orders', '?select=*&order=created_at.desc').then(function (remote) {
-      if (window.DEMO_DATA) DEMO_DATA.online_orders = remote || [];
+      if (window.DEMO_DATA) {
+        var local = DEMO_DATA.online_orders || [];
+        var byId = {}; local.forEach(function (x) { byId[String(x.id)] = x; });
+        (remote || []).forEach(function (r) {
+          var old = byId[String(r.id)];
+          /* الحالة المحلية النهائية لا تُستبدل بنسخة قديمة من السحابة */
+          if (old && (old.status === 'done' || old.status === 'rejected') && r.status === 'new') {
+            byId[String(r.id)] = Object.assign({}, r, { status: old.status, invoice_id: old.invoice_id || r.invoice_id, no: old.no || r.no, date: old.date || r.date });
+          } else byId[String(r.id)] = Object.assign({}, old || {}, r);
+        });
+        DEMO_DATA.online_orders = Object.keys(byId).map(function (k) { return byId[k]; }).sort(function(a,b){ return String(b.created_at||'').localeCompare(String(a.created_at||'')); });
+      }
       return { pulled: true, n: (remote || []).length };
     }).catch(function (e) {
       return { skipped: true, error: String(e && e.message || e) };
