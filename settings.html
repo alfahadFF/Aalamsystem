@@ -195,15 +195,41 @@
         </div>
       </section>
 
-      <!-- ═══ الطباعة (لاحقاً) ═══ -->
-      <section class="set-card muted-card">
+
+      <!-- ═══ الطلبات الأونلاين — كان الرابط مقفولاً داخل config.js ═══ -->
+      <section class="set-card" id="onlineOrdersCard">
         <div class="set-card-head">
           <div>
-            <h2>🖨️ إعدادات الطباعة</h2>
-            <p>الطابعات وعرض الإيصال والمعاينة قبل الطباعة — ستُضاف لاحقاً</p>
+            <h2>🌐 الطلبات الأونلاين</h2>
+            <p>رابط مصدر الطلبات — كان مقفولاً داخل ملف الكود ولا يمكن تغييره إلا بتحريره. الآن يُحفظ في قاعدة البيانات وينسخ لكل الأجهزة.</p>
           </div>
-          <span class="mgr-badge">قريباً</span>
         </div>
+        <div class="set-block">
+          <div class="set-add-row">
+            <input id="ooEndpoint" type="url" dir="ltr" placeholder="https://…/orders">
+            <input id="ooPin" type="text" inputmode="numeric" placeholder="الرقم السري (pin)">
+          </div>
+          <small class="set-round-hint">اترك الرابط فارغاً للعمل على البيانات المحلية (الوضع التجريبي).</small>
+          <div class="set-actions">
+            <button class="set-btn primary" onclick="saveOnlineOrdersSettings()">💾 حفظ إعدادات الطلبات</button>
+            <button class="set-btn" onclick="testOnlineOrdersEndpoint()">🔌 اختبار الاتصال</button>
+            <span id="ooStatus" class="set-link"></span>
+          </div>
+        </div>
+      </section>
+
+      <section class="set-card" style="border:1px solid #f59e0b;">
+        <div class="set-card-head"><div><h2>🔢 إعادة ترقيم الفواتير</h2><p>يبدأ الرقم التالي من 001 دون تغيير الفواتير القديمة</p></div></div>
+        <button class="set-btn" onclick="resetInvoiceSequenceAdmin()">إعادة البدء من الرقم 1</button>
+      </section>
+
+      <!-- ═══ تخصيص ترويسة وتذييل الفاتورة — الجدول ثابت ═══ -->
+      <section class="set-card" id="invoicePrintCard">
+        <div class="set-card-head"><div><h2>🧾 تخصيص ترويسة وتذييل الفاتورة</h2><p>تعديل العناصر المحيطة بالفاتورة فقط — جدول الأصناف والمجموع ثابتان</p></div></div>
+        <div class="set-block"><h3>الترويسة</h3><div class="set-add-row"><input id="printRestaurantName" placeholder="اسم المطعم"><input id="printRestaurantNameSize" type="number" min="12" max="32" step="0.5" placeholder="حجم خط الاسم"></div><div class="set-add-row"><input id="printDescription" placeholder="الوصف أو الهاتف"><input id="printDescriptionSize" type="number" min="9" max="24" step="0.5" placeholder="حجم خط الوصف"></div><div class="set-add-row"><input id="printAddress" placeholder="العنوان"><input id="printAddressSize" type="number" min="9" max="24" step="0.5" placeholder="حجم خط العنوان"></div><div class="set-add-row"><input id="printLogoFile" type="file" accept="image/png,image/jpeg,image/webp"><label class="set-check"><input id="printShowLogo" type="checkbox"> إظهار اللوغو</label><button class="set-btn" type="button" onclick="saveInvoicePrintSettings()">💾 حفظ إعدادات الفاتورة</button></div></div>
+        <div class="set-block"><h3>أحجام عناصر الترويسة</h3><div class="set-add-row"><label>رقم الطلب <input id="printOrderNoSize" type="number" min="12" max="32" step="0.5"></label><label>التاريخ <input id="printDateSize" type="number" min="9" max="24" step="0.5"></label><label>العميل <input id="printCustomerSize" type="number" min="9" max="24" step="0.5"></label><label>ملاحظات الطلب <input id="printOrderNotesSize" type="number" min="9" max="24" step="0.5"></label><label>جدول الأصناف <input id="printItemsSize" type="number" min="8" max="20" step="0.5"></label></div><p class="set-hint">«جدول الأصناف» يضبط حجم الخط داخل الجدول فقط — عرض الأعمدة والجدران والمخطط ثابتة لا تتأثر.</p></div>
+        <div class="set-block"><h3>التذييل</h3><div class="set-add-row"><input id="printFooterTitle" placeholder="عنوان التذييل"><input id="printFooterTitleSize" type="number" min="9" max="24" step="0.5"></div><div class="set-add-row"><input id="printThankYou" placeholder="رسالة الشكر"><input id="printThankYouSize" type="number" min="9" max="28" step="0.5"></div><div class="set-add-row"><input id="printQrFile" type="file" accept="image/png,image/jpeg,image/webp"><label class="set-check"><input id="printShowQr" type="checkbox"> إظهار QR</label><button class="set-btn" type="button" onclick="resetInvoicePrintSettings()">استعادة الافتراضي</button></div></div>
+        <p class="set-hint">اللوغو وQR صور جاهزة فقط، ولا يتم توليد QR. لا يمكن تعديل جدول الأصناف أو جدول المجموع من هنا.</p>
       </section>
 
     </main>
