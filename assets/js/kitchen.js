@@ -55,6 +55,68 @@ function timerClass(min) {
   return 'red';
 }
 
+/* إعادة رسم آمنة: الشاشة تُحدَّث تلقائياً كل 3 ثوان، فكانت إعادة الرسم
+   تُدمّر قائمة مدة التحضير المفتوحة وتُغلقها قبل أن يختار الطبّاخ.
+   الحل: لا نلمس DOM أثناء تفاعل المستخدم مع أي أداة إدخال. */
+function safeRender() {
+  var ae = document.activeElement;
+  if (ae && (ae.tagName === 'SELECT' || ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA')) return;
+  render();
+}
+
+/* ══════════════════════════════════════════════════
+   مدة التحضير المتوقعة — يضبطها المطبخ من شاشته
+   ──────────────────────────────────────────────────
+   الغاية: أن يعرف موظف البيع متى يجهز الطلب، فيجيب الزبون عن
+   «كم بقي؟» بثقة بدل التخمين. البيانات كلها هنا في شاشة المطبخ،
+   وموظف البيع يصل إليها بسهولة من جهازه.
+   ══════════════════════════════════════════════════ */
+var PREP_OPTIONS = [5, 10, 15, 20, 30, 45, 60];
+function prepRemainingMin(inv) {
+  var mins = Number(inv.prep_minutes) || 0;
+  if (!mins) return null;
+  var t = inv.prep_set_at ? new Date(inv.prep_set_at).getTime()
+        : (inv.created_at ? new Date(inv.created_at).getTime() : 0);
+  if (!t || isNaN(t)) return null;
+  var passed = Math.max(0, Math.round((Date.now() - t) / 60000));
+  return mins - passed;                 /* سالب = متأخّر عن المدة الموعودة */
+}
+function setPrep(id, minutes) {
+  var inv = (DATA.invoices || []).find(function (i) { return i.id === id; });
+  if (!inv) return;
+  var m = Number(minutes) || 0;
+  if (m > 0) { inv.prep_minutes = m; inv.prep_set_at = new Date().toISOString(); }
+  else       { inv.prep_minutes = null; inv.prep_set_at = null; }
+  if (window.AlfaDB && AlfaDB.upsert) AlfaDB.upsert('invoices', inv);
+  if (window.InvoiceSync) InvoiceSync.pushSoon(inv);
+  if (window.alfaPersist) window.alfaPersist();
+  render();
+}
+function prepBadgeHtml(inv) {
+  var rem = prepRemainingMin(inv);
+  if (rem === null) return '';
+  return rem >= 0
+    ? '<span class="kds-prep on-time">⏳ يتبقى ' + rem + ' د</span>'
+    : '<span class="kds-prep late">🔴 تأخّر ' + Math.abs(rem) + ' د</span>';
+}
+function prepSelectHtml(inv, st) {
+  if (st === 'done' || st === 'delivered') return '';
+  var cur  = Number(inv.prep_minutes) || 0;
+  var opts = PREP_OPTIONS.slice();
+  /* قيمة محفوظة من خارج القائمة (من جهاز آخر أو إصدار أقدم): تُضاف
+     حتى لا تبدو القائمة فارغة بينما العدّاد يعمل فعلاً. */
+  if (cur && opts.indexOf(cur) < 0) { opts.push(cur); opts.sort(function (a, b) { return a - b; }); }
+  return '<select class="kds-prep-select" title="مدة التحضير المتوقعة" ' +
+      'onchange="setPrep(\'' + e(inv.id) + '\', this.value)">' +
+    '<option value="">⏱ مدة التحضير…</option>' +
+    opts.map(function (m) {
+      return '<option value="' + m + '"' +
+             (cur === m ? ' selected' : '') +
+             '>' + m + ' دقيقة</option>';
+    }).join('') +
+  '</select>';
+}
+
 /* ── معلومات الطلب ── */
 function typeLabel(inv) {
   return { table: '🍽️ طاولة', takeaway: '🥡 سفري', delivery: '🛵 توصيل', contract: '📋 عقد' }[inv.type] || inv.type || '';
@@ -73,6 +135,11 @@ function setKitchen(id, st) {
   inv.kitchen_status = st;
   if (st === 'done' || st === 'delivered') {
     playSound('done');
+    /* مدة التحضير تقدير لحظي يختلف باختلاف ازدحام الطلبات، لا قيمة ثابتة
+       تُحفظ في سجل الفاتورة. لذا تُمحى عند إنجاز الطلب، وتُزامن أثناء
+       التحضير فقط ليعرف موظف البيع متى يجهز الطلب. */
+    inv.prep_minutes = null;
+    inv.prep_set_at  = null;
   }
   /* ── ترحيل ── */
   if (window.AlfaDB && AlfaDB.upsert) AlfaDB.upsert('invoices', inv);
@@ -303,6 +370,7 @@ function render() {
           (isModified ? '<span class="kds-badge modified-badge">⚠️ معدّل</span>' : '') +
         '</div>' +
         '<span class="kds-timer ' + timerClass(min) + '">⏱ ' + min + ' د</span>' +
+        prepBadgeHtml(inv) +
       '</div>' +
       /* معلومات */
       '<div class="kds-card-info">' +
@@ -330,7 +398,7 @@ function render() {
         }).join('') +
       '</div>' : '') +
       /* الإجراءات */
-      '<div class="kds-card-actions">' + actionBtn + '</div>' +
+      '<div class="kds-card-actions">' + prepSelectHtml(inv, st) + actionBtn + '</div>' +
     '</div>';
   }).join('');
 
@@ -353,7 +421,7 @@ function render() {
 
   /* تحديث تلقائي */
   refreshTimer = setInterval(function () {
-    render();
+    safeRender();
     updateClock();
   }, autoRefreshMs);
 
@@ -369,7 +437,7 @@ function render() {
   /* Pull من Supabase كل 10 ثوان */
   if (window.InvoiceSync && InvoiceSync.pull) {
     setInterval(function () {
-      InvoiceSync.pull().then(function () { render(); }).catch(function () {});
+      InvoiceSync.pull().then(function () { safeRender(); }).catch(function () {});
     }, 10000);
   }
 });

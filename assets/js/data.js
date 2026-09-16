@@ -2444,6 +2444,13 @@ window.DEMO_DATA.cashierSession = window.DEMO_DATA.cashierSession || {
   cashier_name: 'الكاشير'
 };
 
+/* ── الصادرات ومشتريات المواد ──
+   لم تكونا ضمن مفاتيح البذرة، فكانت لوحة الإدارة وشاشة الوردية والصندوق
+   تعرضهما صفراً إلى أن تُزار شاشة الصادرات مرة واحدة (التي تنشئ المفتاح).
+   تُضافان هنا فارغتين، وExpenditureSync.pull() يملؤهما من السحابة. */
+window.DEMO_DATA.expenditures        = window.DEMO_DATA.expenditures        || [];
+window.DEMO_DATA.material_purchases  = window.DEMO_DATA.material_purchases  || [];
+
 /* ================================================================
    بيانات الموظفين
    ================================================================ */
@@ -3058,10 +3065,17 @@ window.DEMO_DATA.price_settings = window.DEMO_DATA.price_settings || {
   };
 
   // 5.5) مساعدات الترقيم اليومي المشتركة (الدور = رقم الفاتورة)
-  // اليوم الإداري: يفتح 08:00 ويغلق 05:00 فجر اليوم التالي.
+  /* اليوم الإداري: يبدأ 05:00 فجراً وينتهي 05:00 فجر اليوم التالي.
+     ─────────────────────────────────────────────────────────────
+     كان الطرح 8 ساعات، فصار كل بيع بين منتصف الليل والثامنة صباحاً
+     يُسجَّل بتاريخ اليوم السابق — فيبدو للمستخدم أن فواتيره اختفت.
+     هذا صحيح لجهة الترقيم (يوم العمل يحكم تسلسل الأرقام) لكنه خاطئ
+     لجهة التاريخ المعروض. بالتدوير عند الخامسة يطابق التاريخ المخزَّن
+     التاريخ الفعلي لكل بيع بعد الخامسة صباحاً، ويبقى الترقيم محكوماً
+     بيوم العمل: بيعات السهر قبل الخامسة تُكمل يومها السابق كما ينبغي. */
   window.businessDay = function (d) {
     const t = d ? new Date(d) : new Date();
-    const s = new Date(t.getTime() - 8 * 3600e3);
+    const s = new Date(t.getTime() - 5 * 3600e3);
     const p = function (n) { return String(n).padStart(2, '0'); };
     return s.getFullYear() + '-' + p(s.getMonth() + 1) + '-' + p(s.getDate());
   };
@@ -3082,39 +3096,125 @@ window.DEMO_DATA.price_settings = window.DEMO_DATA.price_settings || {
    * بعد الإغلاق، بينما تبقى الفاتورة نفسها في الطابور حتى تُرفع لاحقاً.
    * الترقيم الموحد بين أجهزة متعددة يحتاج قيداً/دالة ذرية في قاعدة البيانات.
    */
-  window.nextDailyNo = function () {
+  /* ══════════════════════════════════════════════════════════════
+     ترقيم آمن لعدة أجهزة تعمل أوفلاين
+     ──────────────────────────────────────────────────────────────
+     المشكلة: جهازان يعملان أوفلاين في اليوم نفسه يحسب كلٌّ منهما
+     max+1 من بياناته المحلية، فيُنتجان الرقم نفسه. وعند الرفع
+     يرفض القيد الفريد invoices_date_no_key (date,no) الفاتورة
+     الثانية فتضيع نهائياً.
+
+     الحل: لكل جهاز «شريحة» ثابتة من الأرقام لا تتقاطع مع غيرها،
+     فيبقى الرقم فريداً حتى لو لم يتصل الجهازان بالسحابة إطلاقاً.
+     الشريحة تُحفظ في localStorage وتبقى ثابتة للجهاز.
+     ══════════════════════════════════════════════════════════════ */
+  /* why: عمود no عدد صحيح، فـ«01» و«001» و«1ب» كلها إما تصادم أو مرفوضة.
+     لذا يُميَّز كل جهاز بخانة ألف مختلفة:
+       الجهاز ١ → 1..999    الجهاز ٢ → 1001..1999    الجهاز ٣ → 2001..2999
+     هكذا الرقم فريد عددياً، ويبقى مقروءاً وميّزاً للجهاز بالعين. */
+  window.ALFA_SLOT_SPAN = 1000;  // سعة شريحة الجهاز الواحد في اليوم
+  window.ALFA_SLOT_MAX  = 9;     // عدد الأجهزة المدعومة
+
+  window.alfaDeviceSlot = function () {
+    try {
+      let s = localStorage.getItem('alfaprosys_device_slot');
+      if (s === null) {
+        /* اختر شريحة لا تحتوي فواتير اليوم (أي لم يستخدمها جهاز آخر) */
+        const today = window.businessDay();
+        const taken = {};
+        (window.DEMO_DATA.invoices || []).forEach(function (i) {
+          if ((i.date || '') !== today) return;
+          taken[Math.floor((Number(i.no) || 0) / window.ALFA_SLOT_SPAN)] = true;
+        });
+        s = '0';
+        for (let k = 0; k < window.ALFA_SLOT_MAX; k++) { if (!taken[k]) { s = String(k); break; } }
+        localStorage.setItem('alfaprosys_device_slot', s);
+      }
+      return Math.max(0, Math.min(window.ALFA_SLOT_MAX - 1, Number(s) || 0));
+    } catch (e) { return 0; }
+  };
+
+  /* peek=true: يحسب الرقم التالي دون حجزه — للعرض فقط.
+     السبب: شاشة البيع كانت تعرض «رقم الفاتورة القادمة» باستدعاء
+     nextDailyNo()، فيُستهلك رقم عند كل رسم للشاشة وتنشأ فجوات
+     في الترقيم ويُنفَد نطاق الجهاز بسرعة. */
+  window.nextDailyNo = function (peek) {
     const today = window.businessDay();
     const key = 'alfaprosys_invoice_reservation_' + today;
-    let reserved = 0;
-    try { reserved = Number(localStorage.getItem(key) || 0) || 0; } catch (e) {}
+    let reserved = 0, cycle = '';
+    try { reserved = Number(localStorage.getItem(key) || 0) || 0; cycle = localStorage.getItem('alfaprosys_invoice_cycle_' + today) || ''; } catch (e) {}
     let max = reserved;
+    let maxAll = 0;   // أعلى رقم في اليوم كله — يُستخدم عند تجاوز الشريحة
     (window.DEMO_DATA.invoices || []).forEach(function (i) {
       const d = i.date || (i.created_at ? window.businessDay(i.created_at) : null);
-      if (d === today && Number(i.no) > max) max = Number(i.no);
+      if (d !== today) return;
+      const n = Number(i.no) || 0;
+      if (n > maxAll) maxAll = n;
+      if ((!cycle || i.invoice_cycle === cycle) && n > max) max = n;
     });
     (window.DEMO_DATA.online_orders || []).forEach(function (o) {
+      if (o.date === today && Number(o.no) > maxAll) maxAll = Number(o.no);
       if (o.date === today && Number(o.no) > max) max = Number(o.no);
     });
-    const next = max + 1;
-    try { localStorage.setItem(key, String(next)); } catch (e) {}
+
+    const span = window.ALFA_SLOT_SPAN;
+    const base = (window.alfaDeviceSlot ? window.alfaDeviceSlot() : 0) * span;
+    let next = Math.max(max + 1, base + 1);
+    /* تجاوز الشريحة (جهاز واحد أنشأ أكثر من سعتها): خذ رقماً بعد الكل */
+    if (next >= base + span) next = Math.max(maxAll + 1, base + 1);
+    if (!peek) { try { localStorage.setItem(key, String(next)); } catch (e) {} }
     return next;
+  };
+  /* رقم بديل لفاتورة رُفضت لأن (date,no) مأخوذ — يُستخدم عند تضارب
+     جهازين أوفلاين. يختار رقماً بعد كل الأرقام المعروفة، وداخل شريحة
+     الجهاز إن أمكن، ثم يحجزه حتى لا يتكرر مع الفاتورة التالية. */
+  window.alfaFreshInvoiceNo = function () {
+    const today = window.businessDay();
+    let maxAll = 0;
+    (window.DEMO_DATA.invoices || []).forEach(function (i) {
+      if ((i.date || '') !== today) return;
+      const n = Number(i.no) || 0; if (n > maxAll) maxAll = n;
+    });
+    const span = window.ALFA_SLOT_SPAN;
+    const base = (window.alfaDeviceSlot ? window.alfaDeviceSlot() : 0) * span;
+    const fresh = Math.max(maxAll + 1, base + 1);
+    try { localStorage.setItem('alfaprosys_invoice_reservation_' + today, String(fresh)); } catch (e) {}
+    return fresh;
+  };
+
+  window.resetInvoiceNumbering = function () {
+    const day = window.businessDay();
+    const start = function (cycle) {
+      try { localStorage.setItem('alfaprosys_invoice_cycle_' + day, cycle); localStorage.setItem('alfaprosys_invoice_reservation_' + day, '0'); } catch (e) {}
+      return cycle;
+    };
+    if (window.AlfaSB && AlfaSB.enabled && AlfaSB.enabled() && AlfaSB.rpc) return AlfaSB.rpc('start_invoice_cycle', { p_business_day: day, p_created_by: (window.DEMO_DATA.cashierSession && window.DEMO_DATA.cashierSession.cashier_name) || 'المدير' }).then(function(c){ return start(Array.isArray(c)?c[0]:c); });
+    return Promise.resolve(start('local-' + Date.now()));
   };
   window.reserveInvoiceNo = function () {
     const today = window.businessDay();
+    const span = window.ALFA_SLOT_SPAN || 1000;
+    const base = (window.alfaDeviceSlot ? window.alfaDeviceSlot() : 0) * span;
     if (navigator.onLine !== false && window.AlfaSB && AlfaSB.enabled && AlfaSB.enabled() && AlfaSB.rpc) {
-      return AlfaSB.rpc('reserve_invoice_no', { p_business_day: today })
+      let cycle = ''; try { cycle = localStorage.getItem('alfaprosys_invoice_cycle_' + today) || ''; } catch (e) {}
+      return AlfaSB.rpc(cycle ? 'reserve_cycle_invoice_no' : 'reserve_invoice_no', cycle ? { p_cycle_id: cycle } : { p_business_day: today })
         .then(function (n) {
           n = Number(Array.isArray(n) ? n[0] : n);
           if (!n) throw new Error('invalid invoice number');
+          /* الخادم لا يعرف شرائح الأجهزة: قد يُعطي رقماً يقع في نطاق جهاز
+             آخر يعمل أوفلاين فيتصادمان. نرفض ما يخرج عن شريحة هذا الجهاز
+             ونستخدم الرقم المحلي الآمن بدلاً منه. */
+          if (n < base + 1 || n >= base + span) n = window.nextDailyNo();
           try { localStorage.setItem('alfaprosys_invoice_reservation_' + today, String(n)); } catch (e) {}
           return n;
         }).catch(function () { return window.nextDailyNo(); });
     }
     return Promise.resolve(window.nextDailyNo());
   };
-  window.nextInvoiceId = function () {
-    const today = window.businessDay();
-    return today + '-' + window.padNo(window.nextDailyNo());
+  window.nextInvoiceId = function (n) {
+    const today = window.businessDay(); let cycle = '';
+    try { cycle = localStorage.getItem('alfaprosys_invoice_cycle_' + today) || ''; } catch (e) {}
+    return today + (cycle ? '-' + String(cycle).slice(-6) : '') + '-' + window.padNo(n || window.nextDailyNo());
   };
 
   window.NetBadge = {
@@ -3195,17 +3295,6 @@ window.DEMO_DATA.price_settings = window.DEMO_DATA.price_settings || {
          فيُعرض seed ثم يُستبدل — وكان الحفظ السريع/الأوفلاين يدفع البذرة!) */
       for (const k of Object.keys(saved)) {
         base[k] = saved[k];
-      }
-    }
-    /* تسليم نظيف للعميل: تبقى المنيو والموظفون والموردون والإعدادات،
-       وتُحذف كل الحركة المالية/التشغيلية التجريبية. */
-    if (window.ALFA_CLEAN_START !== false && (function(){ try { return !localStorage.getItem('alfaprosys_clean_financial_v1'); } catch(e){ return true; } })()) {
-      ['invoices','online_orders','shifts_history','audit_log','loyalty_ledger','material_purchases','contracts'].forEach(function (k) { base[k] = []; });
-      base.cashierSession = null;
-      base.last_close = null;
-      if (window.SyncQueue && window.SyncQueue.clear) window.SyncQueue.clear();
-      if (window.localStorage) {
-        try { localStorage.removeItem('alfaprosys_data_v1'); localStorage.removeItem('alfaprosys_queue_v1'); localStorage.setItem('alfaprosys_clean_financial_v1','1'); } catch (e) {}
       }
     }
     if (window.SyncQueue && window.SyncQueue.hydrate) window.SyncQueue.hydrate(queue || []);

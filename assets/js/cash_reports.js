@@ -6,7 +6,7 @@
 const DATA     = window.DEMO_DATA;
 let session    = DATA.cashierSession   || {};
 let invoices   = DATA.invoices         || [];
-let expenses   = DATA.expenditures     || [];
+let expenses   = DATA.expenditures || DATA.expenditures_list || [];
 let shiftsHist = DATA.shifts_history   || [];
 
 /* ── الدور ── */
@@ -111,10 +111,11 @@ function renderContent() {
   const byCash       = printedInv.filter(i => i.pay_type === 'cash').reduce((s,i) => s+(i.total||0), 0);
   const byDeferred   = printedInv.filter(i => i.pay_type === 'deferred').reduce((s,i) => s+(i.total||0), 0);
   const byPartial    = printedInv.filter(i => i.pay_type === 'partial').reduce((s,i) => s+(i.total||0), 0);
-  const byTable      = printedInv.filter(i => i.type === 'table').reduce((s,i) => s+(i.total||0), 0);
-  const byTakeaway   = printedInv.filter(i => i.type === 'takeaway').reduce((s,i) => s+(i.total||0), 0);
-  const byDelivery   = printedInv.filter(i => i.type === 'delivery').reduce((s,i) => s+(i.total||0), 0);
-  const totalExp     = (DATA.expenditures_list || []).reduce((s,x) => s+(x.amount||0), 0);
+  /* النوع الموحّد: السحابة تخزّن الطاولات كـ dinein لا table */
+  const byTable      = printedInv.filter(i => alfaOrderType(i) === 'table').reduce((s,i) => s+(i.total||0), 0);
+  const byTakeaway   = printedInv.filter(i => alfaOrderType(i) === 'takeaway').reduce((s,i) => s+(i.total||0), 0);
+  const byDelivery   = printedInv.filter(i => alfaOrderType(i) === 'delivery').reduce((s,i) => s+(i.total||0), 0);
+  const totalExp     = (DATA.expenditures || DATA.expenditures_list || []).reduce((s,x) => s+(x.amount||0), 0);
   const cashInDrawer = (session.opening_cash || 0) + byCash - totalExp;
   const cancelled    = invoices.filter(i => i.status === 'cancelled').length;
 
@@ -586,7 +587,7 @@ function confirmCloseShift() {
   const printedInv = invoices.filter(i => i.status === 'printed');
   const totalSales = printedInv.reduce((s, i) => s + (i.total || 0), 0);
   const byCash     = printedInv.filter(i => i.pay_type === 'cash').reduce((s,i) => s+(i.total||0), 0);
-  const totalExp   = (DATA.expenditures_list || []).reduce((s,x) => s+(x.amount||0), 0);
+  const totalExp   = (DATA.expenditures || DATA.expenditures_list || []).reduce((s,x) => s+(x.amount||0), 0);
   const cashInDrw  = (session.opening_cash || 0) + byCash - totalExp;
 
   document.getElementById('crModalTitle').textContent = '🔒 تأكيد إغلاق الوردية';
@@ -615,7 +616,7 @@ function closeShift() {
   const byTable    = printedInv.filter(i => i.type === 'table').reduce((s,i) => s+(i.total||0), 0);
   const byTakeaway = printedInv.filter(i => i.type === 'takeaway').reduce((s,i) => s+(i.total||0), 0);
   const byDelivery = printedInv.filter(i => i.type === 'delivery').reduce((s,i) => s+(i.total||0), 0);
-  const totalExp   = (DATA.expenditures_list || []).reduce((s,x) => s+(x.amount||0), 0);
+  const totalExp   = (DATA.expenditures || DATA.expenditures_list || []).reduce((s,x) => s+(x.amount||0), 0);
   const cashInDrw  = (session.opening_cash || 0) + byCash - totalExp;
   const cancelled  = invoices.filter(i => i.status === 'cancelled').length;
 
@@ -692,12 +693,28 @@ function closeCrModal() {
   document.getElementById('crModal')?.classList.remove('show');
 }
 
-/* ── تشغيل ── */
-(window.alfaStart||function(fn){fn();})(function () {
+/* ══ إعادة ربط البيانات (بعد الإقلاع وبعد كل سحب من السحابة) ══
+   الشاشة كانت تلتقط المراجع مرة واحدة ولا تستمع لحدث alfa:cloud-ready،
+   فتظهر أرقام البذرة المحلية بدل ما سُحب من قاعدة البيانات. */
+function crRebind() {
   session    = DATA.cashierSession || {};
   invoices   = DATA.invoices       || [];
-  expenses   = DATA.expenditures   || [];
+  /* expenditures هو المفتاح المعتمد؛ expenditures_list مرادف قديم */
+  expenses   = DATA.expenditures || DATA.expenditures_list || [];
   shiftsHist = DATA.shifts_history || [];
+}
+
+/* ── تشغيل ── */
+(window.alfaStart||function(fn){fn();})(function () {
+  crRebind();
   renderApp();
+});
+
+/* تحديث عند اكتمال السحب فقط (بلا مؤقت دوري): الشاشة تحتوي مودال
+   إغلاق الوردية، وإعادة رسم دورية قد تُفقد المدير ما أدخله. */
+window.alfaAutoRefresh(function () {
+  crRebind();
+  if (document.getElementById('crModal')?.classList.contains('show')) return; // لا تُفسد المودال
+  renderContent();
 });
 

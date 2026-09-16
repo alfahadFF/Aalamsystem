@@ -37,6 +37,13 @@ function disc(){
 }
 function commitDisc(){ DATA.discount_settings = JSON.parse(JSON.stringify(disc())); if (window.SettingsSync) SettingsSync.pushSoon(); }
 
+function resetInvoiceSequenceAdmin(){
+  if (document.getElementById('invoiceCycleModal')) return;
+  const wrap=document.createElement('div'); wrap.id='invoiceCycleModal'; wrap.innerHTML=`<div class="set-modal-scrim show" style="z-index:1000"></div><div class="set-modal open" style="z-index:1001"><div class="set-modal-head"><strong>🔢 بدء دورة ترقيم جديدة</strong><button type="button" id="invoiceCycleClose">×</button></div><div class="set-modal-body"><p>سيبدأ الرقم الظاهر للفاتورة التالية من <b>001</b>.</p><p>لن تتغير الفواتير القديمة ولن تُحذف أي بيانات.</p><p style="color:#b45309;font-weight:800">سيتم تطبيق الدورة على الكاشير والطلبات الأونلاين معًا.</p><div class="set-modal-actions"><button class="set-btn" id="invoiceCycleCancel">إلغاء</button><button class="set-btn primary" id="invoiceCycleConfirm">بدء الدورة</button></div></div></div>`; document.body.appendChild(wrap);
+  const close=()=>wrap.remove();
+  wrap.querySelector('#invoiceCycleClose').onclick=close; wrap.querySelector('#invoiceCycleCancel').onclick=close;
+  wrap.querySelector('#invoiceCycleConfirm').onclick=async function(){ this.disabled=true; this.textContent='جارٍ البدء...'; try { await (window.resetInvoiceNumbering ? resetInvoiceNumbering() : Promise.reject(new Error('الدالة غير متاحة'))); close(); showToast('بدأت دورة ترقيم جديدة — الرقم التالي 001','✅'); } catch(e){ this.disabled=false; this.textContent='بدء الدورة'; showToast('تعذر بدء دورة الترقيم في قاعدة البيانات','⚠️'); } };
+}
 function renderDiscountSection(){
   const d = disc();
   const pct = Number(d.invoice_pct) || 0;
@@ -408,13 +415,14 @@ function loadRequireShift(){
 
 /* 🏪 هوية المطعم */
 function loadBranding(){
-  let b = {};
-  try { b = JSON.parse(localStorage.getItem('alfaprosys_branding') || '{}'); } catch (e) {}
+  /* السحابة أولاً (الهوية واحدة لكل الأجهزة)، ثم المحلي إن لم تصل */
+  let b = (window.DEMO_DATA && window.DEMO_DATA.branding) || {};
+  if (!b.name) { try { b = JSON.parse(localStorage.getItem('alfaprosys_branding') || '{}'); } catch (e) {} }
   const set = (id, v) => { const el = document.getElementById(id); if (el) el.value = v || ''; };
   set('brandName', b.name); set('brandAddress', b.address);
   set('brandPhone', b.phone); set('brandFooter', b.footer);
 }
-function saveBranding(){
+async function saveBranding(){
   const b = {
     name: document.getElementById('brandName').value.trim(),
     address: document.getElementById('brandAddress').value.trim(),
@@ -427,7 +435,129 @@ function saveBranding(){
   window.ALFA_CONFIG.thermal.restaurantName = b.name;
   window.ALFA_CONFIG.branding = b;
   window.AlfaAudit.log('settings', 'تعديل هوية المطعم', b.name, 'المدير');
-  showToast('حُفظت الهوية — ستظهر على الإيصالات والطباعة', '🏪');
+  try{
+    if(navigator.onLine!==false && window.SettingsSync && window.SettingsSync.saveKV){
+      await window.SettingsSync.saveKV('branding', b);
+      return showToast('حُفظت الهوية وستُطبَّق على كل الأجهزة', '🏪');
+    }
+  }catch(e){}
+  showToast('حُفظت الهوية محلياً — ستُزامن عند توفر الإنترنت', '🏪');
+}
+
+const PRINT_SETTINGS_KEY = 'alfaprosys_invoice_print_settings';
+const PRINT_DEFAULTS = { restaurant_name:'عالم الفواكه', restaurant_name_font_size:20, description_line:'', description_font_size:14, address_line:'', address_font_size:14, order_number_font_size:26, order_date_font_size:14, customer_data_font_size:12.5, order_notes_font_size:14, items_font_size:12, show_logo:true, footer_title:'', footer_title_font_size:14, thank_you:'شكرا لزيارتكم', thank_you_font_size:16, show_qr:true };
+const PRINT_CLOUD_KEY = 'invoice_print';
+/* إعدادات الطباعة: السحابة أولاً (تُضبط مرة وتعمّ كل الأجهزة)،
+   ثم نسخة محلية احتياطية عند انقطاع الإنترنت، ثم الافتراضيات. */
+function invoicePrintSettings(){
+  let local={}; try{ local=JSON.parse(localStorage.getItem(PRINT_SETTINGS_KEY)||'{}'); }catch(e){}
+  const cloud=(window.DEMO_DATA && window.DEMO_DATA.invoice_print_settings)||{};
+  return {...PRINT_DEFAULTS, ...local, ...cloud};
+}
+async function loadInvoicePrintSettings(){
+  try{ if(navigator.onLine!==false && window.SettingsSync && window.SettingsSync.pull) await window.SettingsSync.pull(); }catch(e){}
+  const s=invoicePrintSettings(); const map={printRestaurantName:'restaurant_name',printRestaurantNameSize:'restaurant_name_font_size',printDescription:'description_line',printDescriptionSize:'description_font_size',printAddress:'address_line',printAddressSize:'address_font_size',printOrderNoSize:'order_number_font_size',printDateSize:'order_date_font_size',printCustomerSize:'customer_data_font_size',printOrderNotesSize:'order_notes_font_size',printItemsSize:'items_font_size',printFooterTitle:'footer_title',printFooterTitleSize:'footer_title_font_size',printThankYou:'thank_you',printThankYouSize:'thank_you_font_size'}; Object.entries(map).forEach(([id,k])=>{const el=document.getElementById(id);if(el)el.value=s[k]??''});
+  const ck=(id,k,dv)=>{const el=document.getElementById(id);if(el)el.checked=(s[k]===undefined?dv:!!s[k]);};
+  ck('printShowLogo','show_logo',true); ck('printShowQr','show_qr',true); }
+async function uploadInvoiceAsset(file, kind){ if(!file)return null; const cfg=window.ALFA_CONFIG.supabase; const path='00000000-0000-0000-0000-000000000001/'+kind+'.'+(file.name.split('.').pop()||'png'); const r=await fetch(cfg.url+'/storage/v1/object/invoice-assets/'+path,{method:'POST',headers:{apikey:cfg.anonKey,Authorization:'Bearer '+cfg.anonKey,'x-upsert':'true','Content-Type':file.type||'image/png'},body:file}); if(!r.ok)throw new Error(await r.text()); return cfg.url+'/storage/v1/object/public/invoice-assets/'+path }
+async function saveInvoicePrintSettings(){ const s=invoicePrintSettings(); const map={restaurant_name:'printRestaurantName',restaurant_name_font_size:'printRestaurantNameSize',description_line:'printDescription',description_font_size:'printDescriptionSize',address_line:'printAddress',address_font_size:'printAddressSize',order_number_font_size:'printOrderNoSize',order_date_font_size:'printDateSize',customer_data_font_size:'printCustomerSize',order_notes_font_size:'printOrderNotesSize',items_font_size:'printItemsSize',footer_title:'printFooterTitle',footer_title_font_size:'printFooterTitleSize',thank_you:'printThankYou',thank_you_font_size:'printThankYouSize'}; Object.entries({show_logo:'printShowLogo',show_qr:'printShowQr'}).forEach(([k,id])=>{const el=document.getElementById(id);if(el)s[k]=!!el.checked}); Object.entries(map).forEach(([k,id])=>{const el=document.getElementById(id);if(el&&el.value!=='')s[k]=k.includes('font_size')?Number(el.value):el.value.trim()}); try { s.logo_url=await uploadInvoiceAsset(document.getElementById('printLogoFile')?.files[0],'logo')||s.logo_url||''; s.qr_image_url=await uploadInvoiceAsset(document.getElementById('printQrFile')?.files[0],'qr')||s.qr_image_url||''; } catch(e){return showToast('تعذر رفع اللوغو أو QR: '+e.message,'⚠️')} localStorage.setItem(PRINT_SETTINGS_KEY,JSON.stringify(s)); if(window.ALFA_CONFIG){ALFA_CONFIG.branding=ALFA_CONFIG.branding||{};ALFA_CONFIG.branding.name=s.restaurant_name;ALFA_CONFIG.branding.address=s.description_line;ALFA_CONFIG.thermal.fonts={...(ALFA_CONFIG.thermal.fonts||{}),title:s.restaurant_name_font_size,sub:s.description_font_size,no:s.order_number_font_size,date:s.order_date_font_size,cust:s.customer_data_font_size,note:s.order_notes_font_size,thanks:s.thank_you_font_size};ALFA_CONFIG.thermal.restaurantName=s.restaurant_name;ALFA_CONFIG.thermal.logoUrl=s.logo_url;ALFA_CONFIG.thermal.qrImageUrl=s.qr_image_url}
+  localStorage.setItem(PRINT_SETTINGS_KEY,JSON.stringify(s));
+  /* ارفعها للسحابة لتعمّ كل الأجهزة — لا يكفي الحفظ المحلي */
+  try{
+    if(navigator.onLine!==false && window.SettingsSync && window.SettingsSync.saveKV){
+      await window.SettingsSync.saveKV(PRINT_CLOUD_KEY, s);
+      return showToast('حُفظت إعدادات الطباعة وستُطبَّق على كل الأجهزة','✅');
+    }
+  }catch(e){}
+  showToast('حُفظت محلياً — ستُزامن مع بقية الأجهزة عند توفر الإنترنت','⚠️')
+}
+async function resetInvoicePrintSettings(){
+  localStorage.removeItem(PRINT_SETTINGS_KEY);
+  try{ if(navigator.onLine!==false && window.SettingsSync && window.SettingsSync.saveKV)
+         await window.SettingsSync.saveKV(PRINT_CLOUD_KEY, {...PRINT_DEFAULTS}); }catch(e){}
+  loadInvoicePrintSettings();
+  showToast('استُعيدت الإعدادات الافتراضية على كل الأجهزة','↩️')
+}
+
+/* ══════════════════════════════════════════════════════════════
+   إعادة رسم الأقسام المرتبطة بالسحابة بعد اكتمال السحب
+   ──────────────────────────────────────────────────────────────
+   المشكلة: هذه الأقسام كانت تُرسم مرة واحدة عند الإقلاع من البذرة
+   المحلية (مثلاً سعر الدولار 15,000)، ثم يصل السحب ويستبدل
+   DATA.price_settings بالقيمة الحقيقية (13,000) بلا إعادة رسم،
+   فتظل الشاشة تعرض رقماً قديماً إلى الأبد.
+
+   حاجب أمان: لا نعيد الرسم أثناء تحرير المدير لأي حقل، حتى لا
+   نقطع ما يكتبه.
+   ══════════════════════════════════════════════════════════════ */
+
+/* ══════════════════════════════════════════════════════════════
+   إعدادات الطلبات الأونلاين
+   ──────────────────────────────────────────────────────────────
+   كان الرابط والرقم السري مقفلين داخل config.js فلا يمكن تغييرهما
+   إلا بتحرير الكود. صارا يُحفظان في جدول settings تحت المفتاح
+   online_orders، فيُضبطان مرة واحدة وينسخان لكل الأجهزة.
+   ══════════════════════════════════════════════════════════════ */
+function ooStore(){
+  const D = (window.DATA = window.DATA || {});
+  if (!D.online_orders) {
+    const c = (window.ALFA_CONFIG || {}).onlineOrders || {};
+    D.online_orders = { endpoint: c.endpoint || '', pin: c.pin || '' };
+  }
+  return D.online_orders;
+}
+function loadOnlineOrdersSettings(){
+  const s = ooStore();
+  const ep = document.getElementById('ooEndpoint');
+  const pin = document.getElementById('ooPin');
+  if (ep && ep.value !== (s.endpoint || '')) ep.value = s.endpoint || '';
+  if (pin && pin.value !== (s.pin || '')) pin.value = s.pin || '';
+}
+function saveOnlineOrdersSettings(){
+  const s = ooStore();
+  const ep = (document.getElementById('ooEndpoint') || {}).value || '';
+  const pin = (document.getElementById('ooPin') || {}).value || '';
+  s.endpoint = String(ep).trim();
+  s.pin = String(pin).trim();
+  window.DATA.online_orders = { endpoint: s.endpoint, pin: s.pin };
+  if (window.AlfaOutbox && AlfaOutbox.commitRows) AlfaOutbox.commitRows('settings', [{ key: 'online_orders', value: window.DATA.online_orders }]);
+  else if (window.SettingsSync && SettingsSync.pushSoon) SettingsSync.pushSoon();
+  const st = document.getElementById('ooStatus');
+  if (st) { st.textContent = '✅ حُفظت وسُتنسخ لكل الأجهزة'; setTimeout(function(){ st.textContent=''; }, 4000); }
+  if (window.AlfaAudit && AlfaAudit.log) AlfaAudit.log('settings', 'تغيير مصدر الطلبات الأونلاين', s.endpoint || 'فارغ (محلي)', 'المدير');
+}
+async function testOnlineOrdersEndpoint(){
+  const st = document.getElementById('ooStatus');
+  const s = ooStore();
+  if (!s.endpoint) { if (st) st.textContent = '⚠️ الرابط فارغ — النظام يعمل محلياً'; return; }
+  if (st) st.textContent = '⏳ جارٍ الاختبار…';
+  const ctrl = new AbortController();
+  setTimeout(function(){ ctrl.abort(); }, 8000);
+  try {
+    const res = await fetch(s.endpoint, { headers: { 'x-cashier-pin': s.pin || '' }, signal: ctrl.signal });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const j = await res.json();
+    const n = Array.isArray(j) ? j.length : (Array.isArray(j && j.orders) ? j.orders.length : null);
+    if (st) st.textContent = n === null ? '✅ متصل (بنية غير معروفة)' : '✅ متصل — ' + n + ' طلب';
+  } catch (e) {
+    if (st) st.textContent = '❌ فشل الاتصال: ' + String(e.message || e).slice(0, 60);
+  }
+}
+window.loadOnlineOrdersSettings = loadOnlineOrdersSettings;
+window.saveOnlineOrdersSettings = saveOnlineOrdersSettings;
+window.testOnlineOrdersEndpoint = testOnlineOrdersEndpoint;
+
+
+function refreshCloudSections(){
+  var ae = document.activeElement;
+  if (ae && /^(INPUT|TEXTAREA|SELECT)$/.test(ae.tagName || '')) return;
+  try { renderRateBox(); } catch (e) {}
+  try { renderDiscountSection(); } catch (e) {}
+  try { renderOffersAdmin(); } catch (e) {}
+  try { loadRequireShift(); } catch (e) {}
+  try { loadBranding(); } catch (e) {}
+  try { loadInvoicePrintSettings(); } catch (e) {}
+  try { loadOnlineOrdersSettings(); } catch (e) {}
 }
 
 (window.alfaStart||function(fn){fn();})(function () {
@@ -439,4 +569,7 @@ function saveBranding(){
   loadRoundStep();
   loadRequireShift();
   loadBranding();
+  loadInvoicePrintSettings();
+  loadOnlineOrdersSettings();
+  if (window.alfaAutoRefresh) window.alfaAutoRefresh(refreshCloudSections);
 });

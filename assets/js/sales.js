@@ -95,7 +95,16 @@ function closeNav() {
    ================================================================ */
 function renderSalesContent() {
   const el  = document.getElementById('salesContent');
-  const all = DATA.invoices || [];
+  /* ── المدى الزمني (اختياري): فارغ = كل الفواتير ──
+     كانت الشاشة تجمع كل الفواتير تحت عنوان «مبيعات اليوم»، فيضمّ الرقم
+     أياماً سابقة بلا أي تصفية. صار المدى صريحاً يتحكّم به المستخدم. */
+  const _inv  = DATA.invoices || [];
+  const dFrom = (document.getElementById('salesDateFrom')?.value || '').trim();
+  const dTo   = (document.getElementById('salesDateTo')?.value   || '').trim();
+  const all = (dFrom || dTo)
+    ? _inv.filter(i => { const d = i.date || '';
+                         return (!dFrom || d >= dFrom) && (!dTo || d <= dTo); })
+    : _inv;
 
   /* ── حسابات ── */
   const printed   = all.filter(i => i.status === 'printed');
@@ -108,11 +117,11 @@ function renderSalesContent() {
   const avgInvoice = printed.length ? Math.round(totalSales / printed.length) : 0;
 
   /* ── أنواع الطلبات ── */
-  const cntTable    = active.filter(i => i.type==='table').length;
+  const cntTable    = active.filter(i => alfaOrderType(i)==='table').length;
   const cntTakeaway = active.filter(i => i.type==='takeaway').length;
   const cntDelivery = active.filter(i => i.type==='delivery').length;
 
-  const revTable    = active.filter(i=>i.type==='table').reduce((s,i)=>s+(i.total||0),0);
+  const revTable    = active.filter(i=>alfaOrderType(i)==='table').reduce((s,i)=>s+(i.total||0),0);
   const revTakeaway = active.filter(i=>i.type==='takeaway').reduce((s,i)=>s+(i.total||0),0);
   const revDelivery = active.filter(i=>i.type==='delivery').reduce((s,i)=>s+(i.total||0),0);
 
@@ -167,7 +176,7 @@ function renderSalesContent() {
     salesFilter === 'partial'  ? printed.filter(i=>i.pay_type==='partial') :
     salesFilter === 'deferred' ? printed.filter(i=>i.pay_type==='deferred') :
     salesFilter === 'wallet'   ? printed.filter(i=>i.pay_type==='wallet') :
-    all.filter(i => i.type === salesFilter);
+    all.filter(i => alfaOrderType(i) === salesFilter);
 
   el.innerHTML = `
 
@@ -175,7 +184,16 @@ function renderSalesContent() {
     <div class="mgr-page-header">
       <div>
         <div class="mgr-page-brand">alfaprosys</div>
-        <div class="mgr-page-title">🧾 مبيعات اليوم</div>
+        <div class="mgr-page-title">🧾 ${
+          (dFrom || dTo) ? 'المبيعات — من ' + e(dFrom || '…') + ' إلى ' + e(dTo || '…')
+                         : 'كل المبيعات'
+        }</div>
+      </div>
+      <div class="sales-date-filter">
+        <label>من <input type="date" id="salesDateFrom" value="${e(dFrom)}" onchange="renderSalesContent()"></label>
+        <label>إلى <input type="date" id="salesDateTo" value="${e(dTo)}" onchange="renderSalesContent()"></label>
+        <button type="button" class="sales-date-btn" onclick="setSalesToday()">اليوم</button>
+        ${(dFrom || dTo) ? '<button type="button" class="sales-date-btn" onclick="clearSalesDates()">الكل</button>' : ''}
       </div>
       <div class="sales-header-date" id="salesDate"></div>
     </div>
@@ -264,7 +282,7 @@ function renderSalesContent() {
           </div>
           <div class="sales-detail-row" onclick="setFilter('table')">
             <span>🍽️ صالة</span>
-            <span class="sd-right"><strong>${all.filter(i=>i.is_new_customer&&i.type==='table').length}</strong></span>
+            <span class="sd-right"><strong>${all.filter(i=>i.is_new_customer&&alfaOrderType(i)==='table').length}</strong></span>
           </div>
         </div>
       </div>
@@ -310,6 +328,23 @@ function renderSalesContent() {
     new Date().toLocaleDateString('ar-EG', { weekday:'long', year:'numeric', month:'long', day:'numeric' });
 }
 
+/* ── أزرار المدى الزمني ── */
+function setSalesToday(){
+  const d = window.businessDay ? businessDay() : new Date().toISOString().slice(0,10);
+  const f = document.getElementById('salesDateFrom');
+  const t = document.getElementById('salesDateTo');
+  if (f) f.value = d;
+  if (t) t.value = d;
+  renderSalesContent();
+}
+function clearSalesDates(){
+  const f = document.getElementById('salesDateFrom');
+  const t = document.getElementById('salesDateTo');
+  if (f) f.value = '';
+  if (t) t.value = '';
+  renderSalesContent();
+}
+
 /* ================================================================
    قائمة الفواتير
    ================================================================ */
@@ -320,7 +355,7 @@ function buildInvoiceList(all, filtered, printed, open, cancelled) {
     { key:'all',       label:'الكل',      count: all.length },
     { key:'printed',   label:'مطبوعة',    count: printed.length },
     { key:'open',      label:'مفتوحة',    count: open.length },
-    { key:'table',     label:'🍽️ طاولة',  count: all.filter(i=>i.type==='table').length },
+    { key:'table',     label:'🍽️ طاولة',  count: all.filter(i=>alfaOrderType(i)==='table').length },
     { key:'takeaway',  label:'🥡 سفري',   count: all.filter(i=>i.type==='takeaway').length },
     { key:'delivery',  label:'🛵 توصيل',  count: all.filter(i=>i.type==='delivery').length },
     { key:'cash',      label:'💵 نقدي',   count: printed.filter(i=>i.pay_type==='cash').length },
@@ -360,8 +395,8 @@ function buildInvoiceList(all, filtered, printed, open, cancelled) {
             role="button" tabindex="0">
             <span class="sales-inv-id">${e(inv.id)}</span>
             <span>
-              <span class="mgr-badge ${inv.type==='table'?'blue':inv.type==='delivery'?'gold':'muted'}">
-                ${inv.type==='table'?'🍽️ طاولة':inv.type==='delivery'?'🛵 توصيل':'🥡 سفري'}
+              <span class="mgr-badge ${alfaOrderType(inv)==='table'?'blue':alfaOrderType(inv)==='delivery'?'gold':'muted'}">
+                ${alfaOrderTypeLabel(inv)}
               </span>
             </span>
             <span class="col-ref sales-ref">
@@ -459,13 +494,14 @@ function openInvModal(id) {
   if (!inv) return;
 
   const PAY      = { cash:'نقدي', partial:'جزئي', deferred:'آجل', wallet:'محفظة' };
-  const typeIcon = inv.type==='table'?'🍽️':inv.type==='delivery'?'🛵':'🥡';
-  const typeLabel= inv.type==='table'
+  const _t = alfaOrderType(inv);
+  const typeIcon = _t==='table'?'🍽️':_t==='delivery'?'🛵':'🥡';
+  const typeLabel= _t==='table'
     ? `طاولة — ${e(inv.table_label||inv.hall)}`
-    : inv.type==='delivery' ? 'توصيل' : 'سفري';
+    : _t==='delivery' ? 'توصيل' : 'سفري';
 
-  const statusClass = inv.status==='open'?'green':inv.status==='cancelled'?'red':'muted';
-  const statusLabel = inv.status==='open'?'مفتوحة':inv.status==='cancelled'?'ملغاة':'مطبوعة';
+  const statusClass = inv.status==='open'?'green':inv.status==='cancelled'?'red':inv.status==='modified'?'gold':'muted';
+  const statusLabel = inv.status==='open'?'مفتوحة':inv.status==='cancelled'?'ملغاة':inv.status==='modified'?'معدّلة':'مغلقة';
 
   document.getElementById('invModalHead').innerHTML = `
     <div class="inv-modal-title">
@@ -561,3 +597,10 @@ function setSection(sec) {
 
 /* ── تشغيل ── */
 (window.alfaStart||function(fn){fn();})(renderApp);
+
+/* ══ إعادة الربط بعد السحب من السحابة ══
+   الشاشة تقرأ DATA.invoices عند كل رسم، لكنها لم تكن تعيد الرسم بعد
+   أن يستبدل السحب المصفوفة — فتظهر المبيعات القديمة حتى تحديث يدوي. */
+window.alfaAutoRefresh(function () {
+  if (salesSection === 'list') renderSalesContent(); else renderApp();
+}, 30000);

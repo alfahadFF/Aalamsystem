@@ -175,6 +175,51 @@ function renderCatRow(){
   document.getElementById('costCatRow').innerHTML = chips;
 }
 
+/* ══════════════════════════════════════════════════════════════
+   نسبة الربح المستهدفة
+   ──────────────────────────────────────────────────────────────
+   مخزّنة في جدول settings تحت المفتاح profit_pct، لأن جدول items
+   لا يحتوي عموداً للربح (إضافته تتطلب ALTER TABLE).
+   البنية: { default: <رقم>, items: { <item_id>: <رقم> } }
+   النسبة تُقرأ مع التكلفة من الجدول ذاته فيُشتق منها السعر المقترح.
+   العميل يضبط القيم لاحقاً من هذا العمود.
+   ══════════════════════════════════════════════════════════════ */
+function profitStore(){
+  const D = (window.DATA = window.DATA || {});
+  if (!D.profit_pct) D.profit_pct = { default: 0, items: {} };
+  const s = D.profit_pct;
+  if (typeof s.default !== 'number' || !isFinite(s.default)) s.default = 0;
+  if (!s.items || typeof s.items !== 'object') s.items = {};
+  return s;
+}
+function profitPctOf(id){
+  const s = profitStore();
+  const v = s.items[String(id)];
+  return (typeof v === 'number' && isFinite(v)) ? v : s.default;
+}
+function setProfitPct(id, pct){
+  const s = profitStore();
+  if (pct === null || pct === '' || pct === undefined || !isFinite(Number(pct))) delete s.items[String(id)];
+  else s.items[String(id)] = Math.max(0, Math.min(95, Number(pct)));
+  commitProfit();
+}
+function setDefaultProfitPct(pct){
+  profitStore().default = Math.max(0, Math.min(95, Number(pct) || 0));
+  commitProfit();
+}
+function commitProfit(){
+  const D = window.DATA;
+  D.profit_pct = JSON.parse(JSON.stringify(profitStore()));
+  if (window.AlfaOutbox && AlfaOutbox.commitRows) AlfaOutbox.commitRows('settings', [{ key: 'profit_pct', value: D.profit_pct }]);
+  else if (window.SettingsSync && SettingsSync.pushSoon) SettingsSync.pushSoon();
+}
+/* السعر المقترح لتحقيق نسبة الربح المستهدفة على تكلفة الصنف */
+function suggestedPrice(cost, pct){
+  if (!(cost > 0) || !(pct > 0)) return 0;
+  return Math.round(cost / (1 - Math.min(95, pct) / 100));
+}
+window.alfaSuggestedPrice = suggestedPrice;
+
 function pctColor(p){
   if(p < 0)  return '#991B1B';
   if(p < 60) return '#B45309';
@@ -186,7 +231,7 @@ function renderTable(){
   const list = filteredItems();
   const body = document.getElementById('costBody');
   if(!list.length){
-    body.innerHTML = `<tr><td colspan="8" style="text-align:center;padding:30px;color:var(--text-muted)">لا توجد أصناف مطابقة.</td></tr>`;
+    body.innerHTML = `<tr><td colspan="9" style="text-align:center;padding:30px;color:var(--text-muted)">لا توجد أصناف مطابقة.</td></tr>`;
     return;
   }
   body.innerHTML = list.map(i=>{
@@ -205,6 +250,10 @@ function renderTable(){
       <td><div class="cost-pct-bar">
           <div class="cost-pct-track"><div class="cost-pct-fill" style="width:${Math.max(0,Math.min(100,p))}%;background:${pctColor(p)}"></div></div>
           <span class="cost-num ${marginCls}">${c>0?p+'%':'—'}</span></div></td>
+      <td class="cost-num"><input type="number" class="cost-pct-input" min="0" max="95" step="1"
+            value="${profitPctOf(i.id)||''}" placeholder="${profitStore().default||0}"
+            title="${c>0?'السعر المقترح لتحقيقها: '+fmtNum(suggestedPrice(c, profitPctOf(i.id)))+' ل.س':'أدخل التكلفة أولاً'}"
+            onchange="setProfitPct('${e(i.id)}', this.value)"></td>
       <td class="cost-num">${i.order_count||0}</td>
       <td><span class="cost-eng ${eng.key}">${eng.icon} ${eng.label}</span></td>
       <td>
@@ -322,4 +371,23 @@ function renderOffersCost(){
   buildNav();
   renderAll();
   renderOffersCost();
+});
+
+/* ══ إعادة الربط بعد كل سحب من السحابة ══
+   الشاشة كانت تربط menuItems مرة واحدة عند الإقلاع — قبل وصول
+   البيانات — فيتعلّق المرجع بمصفوفة البذرة الفارغة، ويبقى الجدول
+   «لا توجد أصناف مطابقة» رغم وجودها فعلاً في قاعدة البيانات.
+   نفس العطب صُلح سابقاً في cash_reports.js. */
+function costRebind(){
+  bindCostData();
+  try { renderAll(); } catch (e) {}
+  try { renderOffersCost(); } catch (e) {}
+}
+window.addEventListener('alfa:cloud-ready', function () {
+  /* لا نعيد الرسم أثناء كتابة المستخدم في حقل نسبة الربح */
+  try {
+    const a = document.activeElement;
+    if (a && (a.tagName === 'INPUT' || a.tagName === 'TEXTAREA' || a.tagName === 'SELECT')) return;
+  } catch (e) {}
+  costRebind();
 });

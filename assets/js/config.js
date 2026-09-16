@@ -101,8 +101,11 @@ window.ALFA_CONFIG = {
        title اسم المطعم · sub العنوان/الهاتف · noLabel «رقم الطلب:» · no الرقم
        date سطر التاريخ · cust سطر الزبون · th رؤوس الأعمدة · td خلايا الجدول
        note الملاحظات · sum المجاميع · thanks سطر الشكر */
-    fonts: { title: 20, sub: 14, noLabel: 26, no: 26, date: 14, cust: 12.5,
+    fonts: { title: 20, sub: 14, address: 14, noLabel: 26, no: 26, date: 14, cust: 12.5,
              th: 9.5, td: 12, name: 11, note: 11, sum: 12.5, thanks: 16 },
+    addressLine: '',     // سطر العنوان المستقل في الترويسة
+    showLogo: true,      // إظهار اللوغو من عدمه — اختياري للعميل
+    showQr:   true,      // إظهار صورة QR من عدمها
     feedMm: 3,           // مساحة السحب بعد آخر سطر (كانت 8 مم)
 
     autoAfterSale: true, // طباعة تلقائية بعد كل عملية بيع (كاشير + مطبخ)
@@ -153,6 +156,38 @@ try {
     window.ALFA_CONFIG.restaurantName = __b.name;
     window.ALFA_CONFIG.thermal.restaurantName = __b.name;
   }
+  /* إعدادات الترويسة والتذييل المحدودة — لا تغيّر بنية الجدول */
+  let __local = {};
+  try { __local = JSON.parse(localStorage.getItem('alfaprosys_invoice_print_settings') || 'null') || {}; } catch (e2) {}
+  const __cloud = (window.DEMO_DATA && window.DEMO_DATA.invoice_print_settings) || {};
+  /* السحابة تتقدّم على النسخة المحلية: تُضبط مرة على أي جهاز وتعمّ البقية */
+  const __p = Object.assign({}, __local, __cloud);
+  if (Object.keys(__p).length) {
+    const t = window.ALFA_CONFIG.thermal;
+    t.restaurantName = __p.restaurant_name || t.restaurantName;
+    t.brandingDescription = __p.description_line || '';
+    t.addressLine = __p.address_line || '';
+    t.logoUrl = __p.logo_url || '';
+    t.qrImageUrl = __p.qr_image_url || '';
+    t.showLogo = __p.show_logo !== false;   /* اللوغو اختياري: يُخفى بطلب العميل */
+    t.showQr   = __p.show_qr   !== false;
+    t.footerTitle = __p.footer_title || '';
+    t.thankYou = __p.thank_you || 'شكرا لزيارتكم';
+    t.fonts = { ...t.fonts,
+      title: Number(__p.restaurant_name_font_size) || t.fonts.title,
+      sub: Number(__p.description_font_size) || t.fonts.sub,
+      no: Number(__p.order_number_font_size) || t.fonts.no,
+      date: Number(__p.order_date_font_size) || t.fonts.date,
+      cust: Number(__p.customer_data_font_size) || t.fonts.cust,
+      note: Number(__p.order_notes_font_size) || t.fonts.note,
+      thanks: Number(__p.thank_you_font_size) || t.fonts.thanks,
+      /* حجم خط جدول الأصناف: يضبط الخط داخل الجدول فقط، أما عرض الأعمدة
+         والجدران ومخطط الجدول فثابتة لا تتأثر بهذا الرقم */
+      ...(()=>{ const it = Number(__p.items_font_size) || t.fonts.td;
+        return { td: it, th: Math.max(7, it - 2.5), name: Math.max(7, it - 1) }; })()
+    };
+    window.ALFA_CONFIG.branding.address = t.addressLine || t.brandingDescription;
+  }
 } catch (e) {}
 
 
@@ -160,6 +195,13 @@ try {
 (function() {
   const role = sessionStorage.getItem('alfaprosys_role');
   const path = window.location.pathname.split('/').pop() || 'index.html';
+
+  /* ── صفحات عامة: لا تحتاج جلسة دخول ──
+     track.html = رابط تتبع الطلب الذي يُرسل للزبون؛ كان الحاجز يطرده
+     إلى شاشة الدخول فيبدو الرابط «غير صالح» دائماً.
+     (qz-key.html مضافة للتوثيق ولأي تحميل لاحق) */
+  const PUBLIC_PAGES = ['track.html', 'qz-key.html'];
+  if (PUBLIC_PAGES.indexOf(path) >= 0) return;
 
   // إذا كنا في شاشة الدخول (index.html) والمستخدم مسجل دخوله بالفعل
   if (path === 'index.html' || path === '') {

@@ -735,7 +735,7 @@ function renderItemPicker() {
         <input id="itemPickerSearch" type="text" inputmode="search"
           placeholder="ابحث عن صنف..."
           value="${e(itemPickerSearch)}"
-          oninput="itemPickerSearch=this.value;document.getElementById('conItemPicker').innerHTML=renderItemPicker();document.getElementById('itemPickerSearch').focus()" />
+          oninput="alfaLiveInput(this, function(v){ itemPickerSearch = v; }, function(){ document.getElementById('conItemPicker').innerHTML = renderItemPicker(); })" />
       </div>
       <div class="con-picker-list">
         ${!list.length

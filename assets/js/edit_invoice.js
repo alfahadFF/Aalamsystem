@@ -42,6 +42,23 @@ function commitInv(inv){
   }
   if (window.InvoiceSync) InvoiceSync.pushSoon(inv);
 }
+/* أي تعديل على فاتورة مُصدَرة («مطبوعة») يحوّلها إلى «معدّلة». الفواتير
+   تُغلق فور الإصدار الآن، فهذه الحالة هي الأثر الوحيد الدالّ على أن الفاتورة
+   تغيّرت بعد دفعها — وبدونها تتغيّر المجاميع بصمت بلا أثر في التقارير. */
+function markAmended(inv){
+  if (!inv) return;
+  if (inv.status === 'printed') inv.status = 'modified';
+  inv.modified_at = new Date().toISOString();
+  if (!Array.isArray(inv.modifications)) inv.modifications = [];
+}
+/* إشعار المطبخ: التعديلات تُكتب في inv.modifications لأن شاشة المطبخ تراقب
+   نموّ هذه المصفوفة لتنبيه الطبّاخ وعرض الأصناف المضافة. بدونها يُضاف
+   الصنف على الفاتورة ولا يراه المطبخ أبداً — فلا يُحضَّر. */
+function logMod(inv, type, detail){
+  if (!inv) return;
+  if (!Array.isArray(inv.modifications)) inv.modifications = [];
+  inv.modifications.push({ type: type, detail: detail, time: new Date().toISOString() });
+}
 function nowTime(){ return new Date().toLocaleTimeString('ar-EG',{hour:'2-digit',minute:'2-digit'}); }
 
 /* ── بحث ── */
@@ -69,7 +86,10 @@ function itemTitle(item){
    ================================================================ */
 const STATUS_MAP = {
   open:      { label:'مفتوحة',  icon:'🟢', cls:'status-open'      },
-  printed:   { label:'منتهية',  icon:'✅', cls:'status-printed'   },
+  /* «مطبوعة» = الفاتورة أُصدِرت وأُغلقت فوراً (الدفع مباشرة) */
+  printed:   { label:'مغلقة',   icon:'✅', cls:'status-printed'   },
+  /* «معدّلة» = أُضيفت أصناف/حُذف منها بعد الإصدار، عبر شاشة التعديل */
+  modified:  { label:'معدّلة',  icon:'✏️', cls:'status-modified'  },
   cancelled: { label:'ملغية',   icon:'🔴', cls:'status-cancelled' },
   pending:   { label:'معلقة',   icon:'⏸️', cls:'status-pending'   },
 };
@@ -126,9 +146,12 @@ function render(){
               <p>ابحث برقم الفاتورة أو اسم العميل أو الحالة.</p>
             </div>
             <input class="invoice-search-input"
+              id="editInvoiceSearch"
               value="${e(query)}"
               placeholder="رقم الفاتورة / الاسم / الحالة"
-              oninput="query=this.value; selectedId=''; addMode=false; render()">
+              autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"
+              enterkeyhint="search" inputmode="search"
+              oninput="alfaLiveInput(this, function(v){ query = v; selectedId=''; addMode=false; }, render)">
 
             <div class="inv-status-filter" id="statusFilter">
               ${['','open','pending','printed','cancelled'].map(s => `
@@ -181,9 +204,14 @@ function filteredResults(list){
    ================================================================ */
 function renderInvoiceEditor(inv){
   recalc(inv);
-  const locked = inv.status === 'cancelled' || inv.status === 'printed' || isOnlineInv(inv);
+  /* «مطبوعة» لم تعد حالة مقفولة: الفواتير تُصدر مغلقة الآن، والإضافة تتم
+     بالتعديل. يبقى القفل للملغاة ولطلبات أونلاين فقط. */
+  const locked = inv.status === 'cancelled' || isOnlineInv(inv);
   const isPending = inv.status === 'pending';
   const isOpen    = inv.status === 'open';
+  const isIssued  = inv.status === 'printed' || inv.status === 'modified';
+  /* قابلة للتعديل: مفتوحة/معلقة (بيانات قديمة) أو مُصدَرة (الوضع الجديد) */
+  const canAmend  = isOpen || isPending || isIssued;
   const si = statusInfo(inv.status);
 
   return `
@@ -200,13 +228,13 @@ function renderInvoiceEditor(inv){
 
     <!-- شريط الإجراءات حسب الحالة -->
     <div class="inv-action-bar">
-      ${isOpen || isPending ? `
+      ${canAmend ? `
         <button class="inv-act-btn inv-act-add"
           onclick="toggleAddMode()" ${addMode?'style="opacity:.6"':''}>
           ${addMode ? '✖ إغلاق' : '➕ إضافة صنف'}
         </button>` : ''}
 
-      ${isOpen || isPending ? `
+      ${canAmend ? `
         <button class="inv-act-btn inv-act-print"
           onclick="printEditNotice('${e(invNoLabel(inv))}')">
           🖨️ طباعة تعديل
@@ -224,7 +252,7 @@ function renderInvoiceEditor(inv){
           🟢 إعادة فتح
         </button>` : ''}
 
-      ${isOpen || isPending ? `
+      ${canAmend ? `
         <button class="inv-act-btn inv-act-cancel"
           onclick="openCancelModal()">
           🔴 إلغاء
@@ -506,6 +534,11 @@ function addItemToInvoice(qty){
   inv.items.push(line);
   recalc(inv);
   if (inv.stock_applied && window.Stock) Stock.deduct([line]);
+  markAmended(inv);
+  logMod(inv, 'add', qty + '× ' + title);
+  /* إن كان الطلب قد أُنجز في المطبخ ثم أُضيف إليه صنف، أعده للطابور
+     ليُحضَّر — وإلا بقيت إضافته غير مرئية للمطبخ تماماً. */
+  if (inv.kitchen_status === 'done') inv.kitchen_status = 'new';
   commitInv(inv);
   editLogs.push({ invoice_id:inv.id, text:`➕ إضافة ${qty}× ${title}`, time:nowTime() });
   pendingItemId=null;
@@ -522,6 +555,8 @@ function decreaseInvoiceItem(idx){
   item.total=Math.round(unit*item.qty);
   recalc(inv);
   if (inv.stock_applied && window.Stock) Stock.delta(item, -1);
+  markAmended(inv);
+  logMod(inv, 'decrease', '−1 من ' + item.name + ' (الكمية الجديدة: ' + item.qty + ')');
   commitInv(inv);
   editLogs.push({ invoice_id:inv.id, text:`➖ إنقاص 1 من ${item.name}`, time:nowTime() });
   render();
@@ -532,7 +567,10 @@ function removeInvoiceItem(idx){
   const item=inv.items[idx];
   if(!confirm(`حذف كامل الصنف من الفاتورة؟\n${item?.name||''}`)) return;
   if (inv.stock_applied && window.Stock) Stock.restore([item]);
+  const oldQty = Number(item && item.qty || 0);
   inv.items.splice(idx,1); recalc(inv);
+  markAmended(inv);
+  logMod(inv, 'remove', oldQty + '× ' + (item?.name || 'صنف'));
   commitInv(inv);
   editLogs.push({ invoice_id:inv.id, text:`🗑️ حذف ${item?.name||'صنف'}`, time:nowTime() });
   render();
@@ -544,6 +582,9 @@ function openReplaceItem(idx){
   if(!confirm(`استبدال الصنف؟\nسيتم حذف: ${item.name}\nثم اختر البديل من قائمة الإضافة.`)) return;
   if (inv.stock_applied && window.Stock) Stock.restore([item]);
   inv.items.splice(idx,1); recalc(inv);
+  markAmended(inv);
+  logMod(inv, 'replace', 'حُذف: ' + item.name + ' ← بانتظار البديل');
+  commitInv(inv);
   editLogs.push({ invoice_id:inv.id, text:`↔️ استبدال ${item.name}`, time:nowTime() });
   addMode=true; activeCategoryId=null; activeFamily=null; render();
 }

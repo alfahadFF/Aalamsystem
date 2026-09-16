@@ -87,3 +87,8 @@ function render() {
   render();
   if (window.AlfaLive) AlfaLive.start(8000, render);
 });
+
+/* ══ إعادة الرسم بعد السحب من السحابة ══
+   TableSync.pull() يستبدل DATA.tables (أسماء الطاولات) وInvoiceSync
+   يستبدل DATA.invoices (حالة الشغور) — وكلاهما يحدث بعد هذا الرسم الأول. */
+window.alfaAutoRefresh(function () { render(); });

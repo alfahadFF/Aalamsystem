@@ -128,4 +128,24 @@ function render() {
   `;
 }
 
-(window.alfaStart||function(fn){fn();})(render);
+/* ══ تحديث صفحة التتبع ══
+   هذه صفحة عامة: لا جلسة، ولا نسخة محلية على هاتف الزبون. لذلك:
+     1) إن وُجدت الفاتورة محلياً نرسمها فوراً.
+     2) وإلا نجلب فاتورته وحدها من السحابة (InvoiceSync.fetchOne) بدل
+        سحب جدول الفواتير كاملاً إلى متصفحه — ثم نرسم.
+   سابقاً كانت تُرسم مرة واحدة من بذرة فارغة فيظهر «رابط غير صالح» دائماً. */
+function trackRefresh() {
+  const params = new URLSearchParams(location.search);
+  const id = params.get('id') || '';
+  const found = id && (window.DEMO_DATA && window.DEMO_DATA.invoices || [])
+    .find(function (i) { return String(i.id) === String(id); });
+
+  if (found || !id || !window.InvoiceSync || !InvoiceSync.fetchOne) { render(); return; }
+
+  InvoiceSync.fetchOne(id).then(function () { render(); }).catch(function () { render(); });
+}
+
+(window.alfaStart||function(fn){fn();})(trackRefresh);
+
+/* إعادة المحاولة بعد اكتمال السحب، ثم دورياً كل 15 ثانية لمتابعة الحالة */
+window.alfaAutoRefresh(trackRefresh, 15000);

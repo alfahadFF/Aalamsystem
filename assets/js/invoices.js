@@ -190,10 +190,13 @@ function render(){
           <!-- شريط البحث -->
           <div class="inv-search-bar">
             <input type="search" dir="rtl"
+              id="invSearchInput"
               class="inv-search-input"
               placeholder="رقم فاتورة / اسم عميل / صالة..."
               value="${e(searchQuery)}"
-              oninput="searchQuery=this.value; render()">
+              autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"
+              enterkeyhint="search" inputmode="search"
+              oninput="alfaLiveInput(this, function(v){ searchQuery = v; }, render)">
             ${searchQuery ? `<button class="inv-search-clear" onclick="searchQuery=''; render()">×</button>` : ''}
           </div>
 
@@ -816,7 +819,15 @@ function reopenInvoice(){
   render();
 }
 
-function printEditNotice(id){ alert(`طباعة إشعار تعديل: ${id}`); }
+function printEditNotice(id){
+  const inv = invoices.find(x => x.id === id) || invoices.find(x => String(invNoLabel(x)) === String(id));
+  if (!inv) return showToast('لم يتم العثور على الفاتورة','⚠️');
+  if (window.ThermalPrint && ThermalPrint.isActive && ThermalPrint.isActive()) {
+    ThermalPrint.print(inv).catch(function(e){ showToast('تعذر الطباعة الصامتة: ' + (e.message || e), '⚠️'); });
+  } else {
+    showToast('طابعة الكاشير غير متصلة — لم تفتح نافذة متصفح','⚠️');
+  }
+}
 
 /* ── طباعة إشعار التعديل للمطبخ ── */
 function printKitchenModification(invId) {
@@ -887,10 +898,12 @@ body{font-family:'Courier New',monospace;width:72mm;margin:0 auto;padding:4mm;fo
 </div>
 </body></html>`;
 
-  const win = window.open('', '_blank', 'width=320,height=600');
-  win.document.write(html);
-  win.document.close();
-  setTimeout(() => { win.print(); }, 300);
+  if (window.ThermalPrint && ThermalPrint.printModification && ThermalPrint.isActive && ThermalPrint.isActive()) {
+    ThermalPrint.printModification(inv).catch(function(e){ showToast('تعذر الطباعة الصامتة: ' + (e.message || e), '⚠️'); });
+  } else {
+    showToast('طابعة الكاشير غير متصلة — لم يتم فتح نافذة متصفح', '⚠️');
+    return;
+  }
 
   /* مسح التعديلات بعد الطباعة (ستُجمع تعديلات جديدة) */
   inv.modifications = [];
@@ -907,9 +920,15 @@ body{font-family:'Courier New',monospace;width:72mm;margin:0 auto;padding:4mm;fo
 (window.alfaStart||function(fn){fn();})(function () {
   invoices = DATA.invoices || [];
   render();
-  if (window.AlfaLive) AlfaLive.start(10000, function () {
-    invoices = DATA.invoices || invoices;
+  if (window.InvoiceSync && InvoiceSync.pull) InvoiceSync.pull().then(function () {
+    invoices = DATA.invoices || [];
     render();
+  }).catch(function () {});
+  if (window.AlfaLive) AlfaLive.start(30000, function () {
+    if (window.InvoiceSync && InvoiceSync.pull) InvoiceSync.pull().then(function () {
+      invoices = DATA.invoices || invoices;
+      render();
+    }).catch(function () {});
   });
 });
 

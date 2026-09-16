@@ -86,3 +86,8 @@ function renderAudit(){
   </nav>`;
 }
 (window.alfaStart||function(fn){fn();})(renderAudit);
+
+/* ══ إعادة الرسم بعد السحب من السحابة ══
+   AuditSync.pull() (ضمن ManagerSync عند الإقلاع) يستبدل DATA.audit_log،
+   والشاشة كانت تُرسم مرة واحدة قبل اكتمال السحب فلا تُحدَّث أبداً. */
+window.alfaAutoRefresh(function () { renderAudit(); });

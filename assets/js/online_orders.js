@@ -104,7 +104,7 @@ async function acceptOrder(id){
   const o = orders().find(x=>x.id===id); if(!o) return;
   const ref = nextInvoiceRef();
   ref.no = window.reserveInvoiceNo ? await window.reserveInvoiceNo() : ref.no;
-  ref.id = ref.date + '-' + (window.padNo ? window.padNo(ref.no) : String(ref.no).padStart(3, '0'));
+  ref.id = window.nextInvoiceId ? window.nextInvoiceId(ref.no) : ref.date + '-' + (window.padNo ? window.padNo(ref.no) : String(ref.no).padStart(3, '0'));
   ref.label = window.padNo ? window.padNo(ref.no) : String(ref.no).padStart(3, '0');
   o.status = 'done';
   o.invoice_id = ref.id;
@@ -181,7 +181,9 @@ function printReceipt(o, invId){
 
 /* ── تحديث: من مصدر خارجي إن ضُبط، وإلا محلي ── */
 async function refreshOrders(){
-  const cfg = (window.ALFA_CONFIG||{}).onlineOrders || {};
+  /* الإعداد المحفوظ في قاعدة البيانات أولاً، ثم config.js كاحتياط
+     — حتى لا يبقى الرابط مقفولاً داخل ملف الكود. */
+  const cfg = (window.DATA && window.DATA.online_orders) || (window.ALFA_CONFIG||{}).onlineOrders || {};
   if(cfg.endpoint){
     const ctrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
     const t = ctrl ? setTimeout(function () { try { ctrl.abort(); } catch (e) {} }, 15000) : null;
@@ -193,9 +195,8 @@ async function refreshOrders(){
     }catch(err){ showToast('تعذّر الاتصال بالمصدر الخارجي', '⚠️'); }finally{ if (t) clearTimeout(t); }
   } else if (window.AlfaSB && AlfaSB.enabled && AlfaSB.enabled()) {
     try {
-      const remote = await AlfaSB.get('online_orders', '?select=*&order=created_at.desc');
-      if (Array.isArray(remote)) {
-        DATA.online_orders = remote;
+      if (window.OnlineOrderSync && OnlineOrderSync.pull) {
+        await OnlineOrderSync.pull();
         if (window.alfaPersist) window.alfaPersist();
         showToast('تم التحديث من قاعدة البيانات', '☁️');
       }
@@ -229,6 +230,6 @@ function demoIncoming(){
     setInterval(function () {
       if (navigator.onLine === false) return;
       OnlineOrderSync.pull().then(function () { renderAll(); if (window.Notify) Notify.check(false); }).catch(function () {});
-    }, 8000);
+    }, 30000);
   }
 });

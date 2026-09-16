@@ -1,12 +1,12 @@
 /* ================================================================
-   open_invoices.js — الفواتير المفتوحة والمعلقة — alfaprosys
+   open_invoices.js — فواتير اليوم (بكل حالاتها) — alfaprosys
    ================================================================ */
 
 const DATA    = window.DEMO_DATA;
 let invoices  = DATA.invoices || [];
 
 /* أول فاتورة مفتوحة أو معلقة */
-let selectedInvoiceId = (invoices.find(i => i.status === 'open' || i.status === 'pending') || {}).id || '';
+let selectedInvoiceId = '';   /* يُحدَّد بعد تحميل البيانات (فواتير اليوم) */
 let addMode           = false;
 let activeCategoryId  = null;
 let activeFamily      = null;
@@ -20,9 +20,19 @@ function uniq(arr){ return [...new Set(arr.filter(Boolean))]; }
 function selectedInvoice(){ return invoices.find(i => i.id === selectedInvoiceId); }
 function nowTime(){ return new Date().toLocaleTimeString('ar-EG',{hour:'2-digit',minute:'2-digit'}); }
 
-/* ── الفواتير المفتوحة والمعلقة ── */
+/* ── فواتير اليوم ──
+   سياسة المطعم: لا توجد فواتير مفتوحة — كل فاتورة تُغلق فور إصدارها والدفع
+   يتم مباشرة. لذا تعرض هذه الشاشة فواتير اليوم بكل حالاتها (الأحدث أولاً)
+   بدل قائمة «مفتوحة» تبقى فارغة دائماً. */
+function todayKey(){
+  return window.businessDay ? businessDay() : new Date().toISOString().slice(0,10);
+}
 function activeInvoices(){
-  return invoices.filter(i => i.status === 'open' || i.status === 'pending');
+  const today = todayKey();
+  return invoices
+    .filter(i => (i.date || '') === today)
+    .sort((a,b) => String(b.created_at||'').localeCompare(String(a.created_at||''))
+                || String(b.time||'').localeCompare(String(a.time||'')));
 }
 
 /* ── القائمة ── */
@@ -38,8 +48,11 @@ function recalc(inv){ inv.total=(inv.items||[]).reduce((s,x)=>s+Number(x.total||
 
 /* ── شارة الحالة ── */
 function statusBadge(status){
-  if(status === 'open')    return `<span class="oi-badge oi-badge-open">🟢 مفتوحة</span>`;
-  if(status === 'pending') return `<span class="oi-badge oi-badge-pending">⏸️ معلقة</span>`;
+  if(status === 'open')      return `<span class="oi-badge oi-badge-open">🟢 مفتوحة</span>`;
+  if(status === 'pending')   return `<span class="oi-badge oi-badge-pending">⏸️ معلقة</span>`;
+  if(status === 'printed')   return `<span class="oi-badge" style="background:#e8f1fb;color:#166534">🧾 مغلقة</span>`;
+  if(status === 'modified')  return `<span class="oi-badge" style="background:#fef3c7;color:#92400e">✏️ معدّلة</span>`;
+  if(status === 'cancelled') return `<span class="oi-badge" style="background:#fee2e2;color:#991b1b">🔴 ملغاة</span>`;
   return '';
 }
 
@@ -55,7 +68,7 @@ function render(){
       <header class="simple-topbar">
         <div>
           <div class="pos-brand">alfaprosys</div>
-          <div class="pos-subtitle">الفواتير المفتوحة والمعلقة</div>
+          <div class="pos-subtitle">فواتير اليوم — مغلقة ومعدّلة وملغاة</div>
         </div>
         <button class="back-to-pos-btn" onclick="goPOS()">رجوع للبيع</button>
       </header>
@@ -88,7 +101,7 @@ function render(){
           ` : `
             <!-- قائمة كاملة عند لا يوجد تحديد -->
             <div class="simple-card-head">
-              <h1>📂 الفواتير المفتوحة والمعلقة</h1>
+              <h1>📂 فواتير اليوم</h1>
               <p>${list.length} فاتورة نشطة — اختر فاتورة للتعديل</p>
             </div>
 
@@ -111,24 +124,23 @@ function render(){
 
 /* ── تجميع الفواتير بالحالة ── */
 function renderInvoiceGroups(list){
-  const open    = list.filter(i => i.status === 'open');
-  const pending = list.filter(i => i.status === 'pending');
+  if(!list.length) return `<div class="empty-customers">لا توجد فواتير لهذا اليوم</div>`;
 
-  if(!list.length) return `<div class="empty-customers">لا توجد فواتير مفتوحة أو معلقة</div>`;
+  /* ترتيب المجموعات: ما يحتاج انتباهاً أولاً */
+  const groups = [
+    ['🟢 مفتوحة', list.filter(i => i.status === 'open')],
+    ['⏸️ معلقة',  list.filter(i => i.status === 'pending')],
+    ['✏️ معدّلة', list.filter(i => i.status === 'modified')],
+    ['🧾 مغلقة',  list.filter(i => i.status === 'printed')],
+    ['🔴 ملغاة',  list.filter(i => i.status === 'cancelled')],
+  ];
 
   let html = '';
-
-  if(open.length){
-    html += `<div class="oi-group-label">🟢 مفتوحة (${open.length})</div>`;
+  for (const g of groups){
+    if(!g[1].length) continue;
+    html += `<div class="oi-group-label">${g[0]} (${g[1].length})</div>`;
     html += `<div class="open-invoice-list">
-      ${open.map(x => renderInvoiceRow(x)).join('')}
-    </div>`;
-  }
-
-  if(pending.length){
-    html += `<div class="oi-group-label">⏸️ معلقة (${pending.length})</div>`;
-    html += `<div class="open-invoice-list">
-      ${pending.map(x => renderInvoiceRow(x)).join('')}
+      ${g[1].map(x => renderInvoiceRow(x)).join('')}
     </div>`;
   }
 
@@ -377,7 +389,7 @@ function printAddition(label){
 
 (window.alfaStart||function(fn){fn();})(function () {
   invoices = DATA.invoices || [];
-  selectedInvoiceId = (invoices.find(i => i.status === 'open' || i.status === 'pending') || {}).id || selectedInvoiceId;
+  selectedInvoiceId = (activeInvoices()[0] || {}).id || selectedInvoiceId;
   render();
   if (window.AlfaLive) AlfaLive.start(10000, function () {
     invoices = DATA.invoices || invoices;

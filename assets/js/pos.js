@@ -22,14 +22,31 @@ let selectedTable = '';
 let selectedHall = 'صالة داخلية';
 let deliveryInfo = { name: '', phone: '', address: '' };
 let orderNotes = '';
+function isWeightItem(it){ return !!(it && /شاورما\s*بالكيلو|سمك\s*بالكيلو/i.test(String(it.name||''))); }
 function parseDeliveryText(text) {
   const raw = String(text || '').trim();
   const m = raw.match(/(?:\+?\d[\d\s-]{6,}\d)/);
-  if (!m) return { name: raw, phone: deliveryInfo.phone || '', address: deliveryInfo.address || '' };
+  /* لا نورّث هاتفاً أو عنواناً من زبون سابق: إن لم يكتب الكاشير رقماً في
+     هذا السطر فالحقل فارغ، لا بيانات آخر زبون. التوريث هنا كان يجعل
+     كل زبون جديد يرث هاتف و عنوان من سبقه بمجرد كتابة اسمه فقط. */
+  if (!m) return { name: raw, phone: '', address: '' };
   const phone = m[0].replace(/[\s-]/g, '');
   const before = raw.slice(0, m.index).trim();
   const after = raw.slice(m.index + m[0].length).trim();
   return { name: before, phone: phone, address: after };
+}
+/* البحث عن زبون محفوظ — يُستدعى فقط بفعل صريح من الكاشير (زر ✦)،
+   لا تلقائياً أثناء الكتابة. */
+function findDeliveryCustomer(text) {
+  const q = String(text || '').trim().toLowerCase();
+  if (q.length < 2) return null;
+  const digits = q.replace(/\D/g, '');
+  return (DATA.customers || []).find(c => {
+    const n  = String(c.name  || '').trim().toLowerCase();
+    const ph = String(c.phone || '').replace(/\D/g, '');
+    return (n && (n === q || n.startsWith(q)))
+        || (digits.length >= 5 && ph.endsWith(digits));
+  }) || null;
 }
 let calcOpen = false;
 let calcPaid = '';
@@ -379,7 +396,8 @@ document.addEventListener('keydown', function (e) {
 
 /* رقم الفاتورة القادم (نظام الترقيم اليومي: يبدأ 001 ويتجدد 8 صباحاً) */
 function nextInvoiceLabel() {
-  if (window.nextDailyNo && window.padNo) return window.padNo(window.nextDailyNo());
+  /* نظرة فقط — لا تحجز رقماً، وإلا استُهلك رقم عند كل رسم للشاشة */
+  if (window.nextDailyNo && window.padNo) return window.padNo(window.nextDailyNo(true));
   return '001';
 }
 function posModeLabel() {
@@ -485,7 +503,7 @@ function renderPOS() {
               🛵 أونلاين${onlinePendingCount() ? ` <span class="online-pending-badge">${onlinePendingCount()}</span>` : ''}
             </a>
           </div>
-          ${orderType === 'dinein' ? `<div class="hall-strip">${['صالة خارجية','صالة داخلية','صالة العائلات'].map(h => `<button class="hall-chip ${selectedHall===h?'selected':''}" type="button" data-action="hall" data-value="${escapeHtml(h)}">${escapeHtml(h)}</button>`).join('')}</div>` : ''}
+          ${orderType === 'dinein' ? `<div class="hall-strip">${['صالة خارجية','صالة داخلية','صالة العائلات'].map(h => `<button class="hall-chip ${selectedHall===h?'selected':''}" type="button" data-action="hall" data-value="${escapeHtml(h)}">${escapeHtml(h)}</button>`).join('')}${selectedTable ? `<button class="hall-chip table-chip" type="button" data-action="hall" data-value="${escapeHtml(selectedHall)}" title="اضغط لتغيير الطاولة">🪑 ${escapeHtml(selectedTable)} ✎</button>` : ''}</div>` : ''}
           ${orderType === 'delivery' ? renderDeliveryFields() : ''}
           ${orderType === 'contract' ? renderContractPanel() : ''}
 
@@ -549,6 +567,7 @@ function renderDirectPOS(total, count) {
               ${DATA.orderTypes.map(t => `<button class="ot-btn ${orderType===t.id?'active':''}" type="button" data-action="order-type" data-value="${escapeHtml(t.id)}">${t.icon} ${t.label}</button>`).join('')}
               <button class="ot-btn" type="button" data-action="tables">🗺️ الطاولات</button>
               <button class="ot-btn online-ot-btn" type="button" data-action="online-orders">🛵 أونلاين${onlinePendingCount() ? ` <span class="online-pending-badge">${onlinePendingCount()}</span>` : ''}</button>
+              ${orderType === 'dinein' ? `<button class="ot-btn hall-indicator${selectedTable?' picked':''}" type="button" data-action="hall" data-value="${escapeHtml(selectedHall||'')}" title="اضغط لتغيير الصالة أو الطاولة">${selectedHall ? '🏛️ ' + escapeHtml(selectedHall) : '🏛️ اختر الصالة'}${selectedTable ? ' · 🪑 ' + escapeHtml(selectedTable) : ''}</button>` : ''}
             </div>
             <div class="d-cats" aria-label="التصنيفات الرئيسية">
               ${cats.map(c => `<button class="d-cat ${activeCategoryId===c.id?'active':''}" type="button" data-action="category" data-value="${escapeHtml(c.id)}"><span>${c.icon}</span>${escapeHtml(c.name)}</button>`).join('')}
@@ -557,6 +576,8 @@ function renderDirectPOS(total, count) {
             <div class="d-note-actions" style="display:flex;gap:6px;padding:8px 4px;flex-wrap:wrap;">
               <button class="d-note-btn" type="button" data-action="order-note" style="flex:1;min-width:120px;padding:10px;border:1px solid #cbd5e1;border-radius:8px;background:#fff;cursor:pointer;font-weight:700;">📝 ملاحظات الطلب</button>
               <button class="d-note-btn" type="button" data-action="selected-note" style="flex:1;min-width:120px;padding:10px;border:1px solid #cbd5e1;border-radius:8px;background:#fff;cursor:pointer;font-weight:700;">🍽️ ملاحظات الصنف</button>
+              <button class="d-note-btn" type="button" data-action="emergency-price" style="flex:1;min-width:120px;padding:10px;border:1px solid #d97706;border-radius:8px;background:#fff7ed;color:#9a3412;cursor:pointer;font-weight:700;">💰 سعر طارئ</button>
+
             </div>
           </aside>
 
@@ -624,8 +645,13 @@ function renderDirectAuxModal() {
     body = `<div class="d-aux-hint">اكتب جزءًا من الملاحظة وستظهر الاقتراحات السابقة تلقائيًا</div>
       <input id="orderNoteInput" class="note-modal-text" list="orderNoteSuggestions" value="${escapeHtml(orderNotes)}" placeholder="ملاحظة الطلب العامة" autocomplete="off">
       <datalist id="orderNoteSuggestions">${known.map(n => `<option value="${escapeHtml(n)}"></option>`).join('')}</datalist>
-      <div class="note-suggestions-grid">${known.map(n => `<button type="button" class="note-suggestion" data-action="order-note-pick" data-value="${escapeHtml(n)}">${escapeHtml(n)}</button>`).join('')}</div>
       <div style="display:flex;gap:8px;margin-top:10px;"><button type="button" class="d-aux-done" style="flex:1" data-action="order-note-save">حفظ</button><button type="button" class="d-aux-done" style="flex:1" data-action="close-direct-aux">إلغاء</button></div>`;
+  } else if (directAuxModal === 'weight-edit') {
+    const wr=cart.find(x=>x.id===directSelectedId);
+    body=`<div class="d-aux-hint">${escapeHtml(wr?wr.name:'')} — السعر محسوب لكل كيلو</div><input id="weightGrams" type="number" min="1" step="1" inputmode="numeric" value="${wr&&wr.weight_grams||500}" placeholder="الوزن بالجرام" style="width:100%;padding:12px;border:1px solid #cbd5e1;border-radius:9px;font-size:18px;text-align:center"><div style="display:flex;gap:8px;margin-top:12px"><button class="d-aux-done" style="flex:1" data-action="weight-save">موافقة</button><button class="d-aux-done" style="flex:1" data-action="close-direct-aux">إلغاء</button></div>`;
+  } else if (directAuxModal === 'emergency-price') {
+    const rr = cart.find(x => x.id === directSelectedId && !x.locked);
+    body = `<div class="d-aux-hint">${escapeHtml(rr ? rr.name : '')}</div><input id="emergencyPriceInput" type="number" min="0" inputmode="numeric" value="${rr ? Number(rr.price)||0 : 0}" style="width:100%;padding:12px;border:1px solid #cbd5e1;border-radius:9px;font-size:18px;text-align:center;"><div style="display:flex;gap:8px;margin-top:12px;"><button type="button" class="d-aux-done" style="flex:1" data-action="emergency-price-save">موافقة</button><button type="button" class="d-aux-done" style="flex:1" data-action="close-direct-aux">إلغاء</button></div>`;
   } else if (directAuxModal === 'services') {
     const st = Number(orderServices.table) || 0;
     const sd = Number(orderServices.delivery) || 0;
@@ -666,7 +692,7 @@ function renderDirectInvoice(total, count) {
   const dp0 = discountParts();
   const disc = dp0.total;
   /* الأصناف المخفوضة تُعرض صافية في صفوفها، وخصم الفاتورة يظهر في التذييل */
-  const serviceCartRows = (serviceSelected.table ? [{id:'service_table',name:'خدمة طاولة',qty:1,price:Number(orderServices.table)||0,note:''}] : []).concat(serviceSelected.delivery ? [{id:'service_delivery',name:'خدمة توصيل',qty:1,price:Number(orderServices.delivery)||0,note:''}] : []);
+  const serviceCartRows = (serviceSelected.table ? [{id:'service_table',name:'خدمة طاولة',qty:1,price:Number(orderServices.table)||0,note:'',is_service:true}] : []).concat(serviceSelected.delivery ? [{id:'service_delivery',name:'خدمة توصيل',qty:1,price:Number(orderServices.delivery)||0,note:'',is_service:true}] : []);
   const rows = cart.concat(serviceCartRows).map((c, idx) => `
     <div class="dinv-row ${directSelectedId===c.id?'selected':''}">
       <span class="dinv-c dinv-n">${idx + 1}</span>
@@ -676,7 +702,7 @@ function renderDirectInvoice(total, count) {
       <span class="dinv-c dinv-disc">${c.offer_disc ? 'خصم عرض' : c.is_free ? '🎁 مجاني' : (c.locked ? 'عرض' : (itemDiscRule(c.id) ? `−${fmtNum(itemDiscRule(c.id).pct)}%` : '—'))}</span>
       <span class="dinv-c dinv-total">${c.locked ? fmtCur(c.price) : fmtCur(itemNet(c) * c.qty)}</span>
       <span class="dinv-c dinv-note ${c.note ? '' : 'muted'}" title="ملاحظة الصنف — استخدم زر ملاحظات الصنف">${c.note ? escapeHtml(c.note) : '—'}</span>
-      <button class="dinv-del" type="button" data-action="remove-item" data-id="${escapeHtml(c.id)}" title="حذف الصنف">✕</button>
+      <button class="dinv-del" type="button" data-action="${c.is_service ? 'remove-service' : 'remove-item'}" data-id="${escapeHtml(c.id)}" title="حذف ${c.is_service ? 'الخدمة' : 'الصنف'}">✕</button>
     </div>`).join('');
 
   const TOTAL_ROWS = 7;
@@ -945,7 +971,7 @@ function toggleCardsDrawer() {
 
 function renderDeliveryFields() {
   const combined = [deliveryInfo.name, deliveryInfo.phone, deliveryInfo.address].filter(Boolean).join(' ');
-  return `<div class="delivery-card"><div class="delivery-card-title">🛵 بيانات التوصيل</div><div class="delivery-fields"><div class="delivery-field-row"><input type="text" data-action="delivery-combined" value="${escapeHtml(combined)}" placeholder="الاسم ثم رقم الهاتف ثم العنوان"><span title="تمييز تلقائي">✦</span></div></div></div>`;
+  return `<div class="delivery-card"><div class="delivery-card-title">🛵 بيانات التوصيل</div><div class="delivery-fields"><div class="delivery-field-row"><input type="text" list="deliveryCustomerSuggestions" data-action="delivery-combined" value="${escapeHtml(combined)}" placeholder="اكتب اسم العميل أو الهاتف ثم أكمل"><datalist id="deliveryCustomerSuggestions">${(DATA.customers||[]).slice(0,200).map(c=>`<option value="${escapeHtml([c.name,c.phone,c.address].filter(Boolean).join(' '))}"></option>`).join('')}</datalist><button type="button" class="delivery-smart-btn" data-action="smart-delivery-fill" title="إكمال من سجل الزبائن (اختياري)">✦</button></div></div></div>`;
 }
 
 /* ================================================================
@@ -1576,9 +1602,7 @@ function renderQtyModal() {
         </div>
         <button type="button" data-action="close-qty">✕</button>
       </div>
-      <div class="qty-number-grid">
-        ${nums.map(n => `<button type="button" data-action="qty-pick" data-value="${n}">${n}</button>`).join('')}
-      </div>
+      ${isWeightItem(item) ? `<div class="qedit-tabs"><b>الكمية</b><b class="active">الأوزان</b></div><div class="qty-number-grid weight-keys">${[50,100,150,200,250,300,350,400,450,500,600,700,800,900,1000].map(g => `<button type="button" data-action="weight-add" data-value="${g}">${g} غ</button>`).join('')}</div>` : `<div class="qty-number-grid">${nums.map(n => `<button type="button" data-action="qty-pick" data-value="${n}">${n}</button>`).join('')}</div>`}
       <div class="qty-custom-row">
         <input id="customQtyInput" type="number" inputmode="numeric" min="26" placeholder="كمية أكبر من 25">
         <button type="button" data-action="qty-custom">إضافة</button>
@@ -1727,8 +1751,7 @@ function renderQtyEditModal() {
     <div class="qedit-modal" role="dialog" aria-label="تعديل الكمية">
       <div class="qedit-head"><strong>🔢 تعديل الكمية</strong><button type="button" data-action="qty-edit-close">✕</button></div>
       <div class="qedit-item">${escapeHtml(row.name)}</div>
-      <div class="qedit-display"><small>القديمة: ${fmtNum(row.qty)}</small><b id="qeditDisplay">${qtyEditBuf === '' ? '—' : escapeHtml(qtyEditBuf)}</b></div>
-      <div class="qedit-keys">${keys.map(k => `<button type="button" class="qedit-key${k === 'C' ? ' danger' : ''}" data-action="qty-edit-key" data-value="${k}">${k}</button>`).join('')}</div>
+      ${isWeightItem(row) ? `<div class="qedit-tabs"><b>الكمية</b><b class="active">الأوزان</b></div><div class="qedit-keys weight-keys">${[50,100,150,200,250,300,350,400,450,500,600,700,800,900,1000].map(g => `<button type="button" class="qedit-key" data-action="weight-pick" data-value="${g}">${g} غ</button>`).join('')}</div>` : `<div class="qedit-display"><small>القديمة: ${fmtNum(row.qty)}</small><b id="qeditDisplay">${qtyEditBuf === '' ? '—' : escapeHtml(qtyEditBuf)}</b></div><div class="qedit-keys">${keys.map(k => `<button type="button" class="qedit-key${k === 'C' ? ' danger' : ''}" data-action="qty-edit-key" data-value="${k}">${k}</button>`).join('')}</div>`}
       <div class="qedit-hint">الرقم الجديد يستبدل القديم · 0 = حذف السطر · فارغ = إلغاء</div>
       <div class="svc-actions">
         <button type="button" class="svc-save" data-action="qty-edit-apply">✔ تطبيق</button>
@@ -1865,6 +1888,23 @@ function handleAction(action, value, el, ev) {
     case 'order-note-save': { const x=document.getElementById('orderNoteInput'); orderNotes=(x&&x.value||'').trim(); directAuxModal=null; return renderPOS(); }
     case 'order-note-pick': { const x=document.getElementById('orderNoteInput'); if(x) x.value=value; return; }
     case 'selected-note': { if (!directSelectedId) return showToast('حدد صنفًا أولًا','⚠️'); return openNoteModal(directSelectedId); }
+    case 'weight-edit': { const r=cart.find(x=>x.id===directSelectedId); if(!r||!isWeightItem(r)) return showToast('حدد صنفًا يباع بالكيلو','⚠️'); directAuxModal='weight-edit'; return renderPOS(); }
+    case 'weight-save': { const r=cart.find(x=>x.id===directSelectedId); const g=Number(document.getElementById('weightGrams')?.value); if(!r||!isWeightItem(r)||!Number.isFinite(g)||g<=0) return showToast('أدخل وزنًا صحيحًا','⚠️'); r.weight_grams=Math.round(g); r.qty=r.weight_grams/1000; r.weight_label=r.weight_grams+' غرام'; directAuxModal=null; return renderPOS(); }
+    case 'emergency-price': {
+      const r = cart.find(x => x.id === directSelectedId && !x.locked);
+      if (!r) return showToast('حدد صنفًا أولًا','⚠️');
+      directAuxModal = 'emergency-price'; return renderPOS();
+    }
+    case 'emergency-price-save': {
+      const r = cart.find(x => x.id === directSelectedId && !x.locked);
+      const input = document.getElementById('emergencyPriceInput');
+      const price = Math.round(Number(input && input.value));
+      if (!r || !Number.isFinite(price) || price < 0) return showToast('أدخل قيمة صحيحة','⚠️');
+      const original = Number(r.original_price != null ? r.original_price : r.price) || 0;
+      r.original_price = original; r.price = price; r.price_override = true; r.override_reason = '';
+      if (window.AlfaAudit && AlfaAudit.log) AlfaAudit.log('invoices','تعديل سعر طارئ',`${r.name}: ${original} → ${price}`,(DATA.cashierSession&&DATA.cashierSession.cashier_name)||'الكاشير');
+      directAuxModal = null; showToast('تم تعديل السعر لهذه الفاتورة فقط','💰'); return renderPOS();
+    }
     case 'close-services': return closeServices();
     case 'service-select': { const k=el.dataset.service; serviceSelected[k]=true; const id=k==='table'?'svcTable':'svcDelivery'; const x=document.getElementById(id); if(x){x.focus();x.select();} renderPOS(); return; }
     case 'save-services': return saveServices();
@@ -1873,6 +1913,8 @@ function handleAction(action, value, el, ev) {
     case 'qty-inc': { const r=cart.find(x=>x.id===el.dataset.id&&!x.locked); if(r){r.qty++; renderPOS();} return; }
     case 'qty-dec': { const r=cart.find(x=>x.id===el.dataset.id&&!x.locked); if(r){r.qty=Math.max(1,r.qty-1); renderPOS();} return; }
     case 'qty-input': { const r=cart.find(x=>x.id===el.dataset.id&&!x.locked); const q=Math.max(1,Number(el.value)||1); if(r){r.qty=q; renderPOS();} return; }
+    case 'weight-add': { const g=Number(value); const it=DATA.items.find(x=>x.id===pendingItemId); if(it&&g>0){ const ex=cart.find(x=>x.id===it.id&&!x.locked&&x.weight_grams===g); if(ex) ex.qty+=g/1000; else cart.push({id:it.id,name:it.name,price:it.price,qty:g/1000,weight_grams:g,weight_label:g+' غرام',note:''}); pendingItemId=null; return renderPOS(); } return; }
+    case 'weight-pick': { const r=cart.find(x=>x.id===qtyEditId); const g=Number(value); if(r&&isWeightItem(r)&&g>0){r.weight_grams=g;r.qty=g/1000;r.weight_label=g+' غرام';qtyEditId=null;qtyEditBuf='';return renderPOS();} return; }
     case 'qty-edit-key': return qtyEditKey(value);
     case 'qty-edit-apply': return applyQtyEdit();
     case 'qty-edit-close': return closeQtyEdit();
@@ -1889,25 +1931,25 @@ function handleAction(action, value, el, ev) {
       return renderPOS();
     }
     case 'delivery-field': deliveryInfo[el.dataset.field] = el.value; return;
+    /* ما يكتبه الكاشير هو الحقيقة: نحلّل النص ونحفظه كما كُتب، دون أي
+       ملء تلقائي. الإكمال من سجل الزبائن صار فعلاً صريحاً بزر «✦».
+       السبب: الملء التلقائي أثناء الكتابة كان (1) يستبدل بيانات زبون
+       جديد ببيانات زبون محفوظ يحمل نفس الاسم، و(2) يعيد كتابة الحقل مع
+       كل حرف فيقفز مؤشر الكتابة ويصير الاسم غير قابل للتحرير أو الحذف. */
     case 'delivery-combined': {
       const p = parseDeliveryText(el.value);
       deliveryInfo.name = p.name; deliveryInfo.phone = p.phone; deliveryInfo.address = p.address;
-      const q = String(el.value || '').trim().toLowerCase();
-      if (q.length >= 2) {
-        const hit = (DATA.customers || []).find(c => {
-          const n = String(c.name || '').trim().toLowerCase();
-          const ph = String(c.phone || '').replace(/\D/g, '');
-          const digits = q.replace(/\D/g, '');
-          return (n && n.includes(q)) || (digits.length >= 5 && ph.endsWith(digits));
-        });
-        if (hit) {
-          deliveryInfo.name = hit.name || deliveryInfo.name;
-          deliveryInfo.phone = hit.phone || deliveryInfo.phone;
-          deliveryInfo.address = hit.address || deliveryInfo.address;
-          el.value = [deliveryInfo.name, deliveryInfo.phone, deliveryInfo.address].filter(Boolean).join(' ');
-        }
-      }
       return;
+    }
+    case 'smart-delivery-fill': {
+      const inp = document.querySelector('[data-action="delivery-combined"]');
+      const hit = findDeliveryCustomer(inp ? inp.value : (deliveryInfo.name || ''));
+      if (!hit) { showToast('لا يوجد زبون محفوظ بهذا الاسم أو الرقم','⚠️'); return; }
+      deliveryInfo.name    = hit.name    || deliveryInfo.name;
+      deliveryInfo.phone   = hit.phone   || deliveryInfo.phone;
+      deliveryInfo.address = hit.address || deliveryInfo.address;
+      showToast('تم الإكمال من سجل الزبائن','✦');
+      return renderPOS();
     }
     case 'open-calc': calcOpen = true; return renderPOS();
     case 'close-calc': calcOpen = false; calcPaid = ''; return renderPOS();
@@ -1919,6 +1961,7 @@ function handleAction(action, value, el, ev) {
     case 'select-family': return selectFamily(value);
     case 'open-qty': return openQtyModal(el.dataset.id);
     case 'remove-item': return removeFromCart(el.dataset.id);
+    case 'remove-service': serviceSelected[el.dataset.id === 'service_table' ? 'table' : 'delivery'] = false; if (el.dataset.id === 'service_table') orderServices.table = 0; else orderServices.delivery = 0; return renderPOS();
     case 'note-open': return openNoteModal(el.dataset.id);
     case 'note-toggle': return toggleNoteSuggestion(value);
     case 'note-save': return saveNoteModal();
@@ -1942,9 +1985,14 @@ function handleAction(action, value, el, ev) {
     case 'kitchen': return openPosScreen('kitchen.html', 'شاشة المطبخ');
     case 'queue':   return openPosScreen('queue.html', 'شاشة النداء');
     case 'tables':
-      if (!cart.length) return showToast('أضف الأصناف أولًا ثم اختر الطاولة','⚠️');
+      if (!cart.length) return openPosScreen('tables.html', 'خريطة الطاولات');
       orderType = 'dinein'; directAuxModal = 'hall'; return renderPOS();
-    case 'online-orders': return openPosScreen('online_orders.html', 'الطلبات الأونلاين');
+
+case 'online-orders': return openPosScreen('online_orders.html', 'الطلبات الأونلاين');
+    /* ── شاشة العميل ──
+       الوسائط محلية (قرار المرحلة): تُخزَّن على الجهاز الذي تُضاف عليه.
+       لذا إن كانت شاشة الزبون جهازاً مستقلاً، يجب فتح هذه الصفحة عليه
+       لا على جهاز الكاشير، وإلا أُضيفت الوسائط هنا ولم تظهر هناك. */
     case 'delivery-screen': return openPosScreen('delivery.html', 'شاشة التوصيل');
     case 'close-pos-embed': return closePosEmbed();
     case 'placeholder': closeCashierNav(); return showToast(`سنضيف ${el.dataset.msg} لاحقًا`, el.dataset.icon || 'ℹ️');
@@ -2222,12 +2270,27 @@ async function submitOrder(){
     }
   }
   const now   = new Date();
+  /* رمز سحب مستقل: 8 أرقام عشوائية، ولا علاقة له برقم الفاتورة.
+     المولّد المشترك في utils.js — نفسه الذي تستخدمه إعادة المحاولة عند
+     تضارب الرمز مع جهاز آخر في السحابة. */
+  const newDrawCode = window.alfaNewDrawCode || function () {
+    const a = new Uint32Array(1);
+    if (window.crypto && crypto.getRandomValues) crypto.getRandomValues(a);
+    else a[0] = Math.floor(Math.random() * 0xFFFFFFFF);
+    return String(a[0] % 100000000).padStart(8, '0');
+  };
+  let drawCode = newDrawCode();
+  const usedDrawCodes = new Set((DATA.invoices || []).map(x => String(x.draw_code || '')).filter(Boolean));
+  /* سقف محاولات: يمنع حلقة لا نهائية إن امتلأت المساحة نظرياً */
+  for (let _g = 0; usedDrawCodes.has(drawCode) && _g < 200; _g++) drawCode = newDrawCode();
   const invNo   = window.reserveInvoiceNo ? await reserveInvoiceNo() : (window.nextDailyNo ? nextDailyNo() : 1);
   const invDate = window.businessDay ? businessDay() : '';
   const inv = {
     // تم حجز invNo أعلاه؛ لا تستدعِ nextInvoiceId هنا حتى لا يُحجز رقم ثانٍ.
-    id: invDate + '-' + String(invNo).padStart(3, '0'),
+    id: window.nextInvoiceId ? nextInvoiceId(invNo) : (invDate + '-' + String(invNo).padStart(3, '0')),
     no: invNo,
+    draw_code: drawCode,
+    invoice_cycle: (function(){ try { return localStorage.getItem('alfaprosys_invoice_cycle_' + invDate) || 'legacy'; } catch(e){ return 'legacy'; } })(),
     date: invDate,
     type: orderType,
     hall: orderType==='dinein' ? selectedHall : '',
@@ -2235,8 +2298,24 @@ async function submitOrder(){
     customer_name: orderType==='delivery' ? deliveryInfo.name : '',
     phone: orderType==='delivery' ? deliveryInfo.phone : '',
     customer_address: orderType==='delivery' ? deliveryInfo.address : '',
+    /* معلومات التوصيل تُنشأ مع الفاتورة: بذلك يصبح رابط تتبع الزبون ذا
+       معنى فور الإصدار، وتستطيع شاشة التوصيل تحديث الحالة لاحقاً
+       (إسناد ← في الطريق ← تم التوصيل). سابقاً كان الحقل يبدأ null
+       فتبقى حالة الطلب «قيد الاستلام» للأبد ولا تتقدم خطوة واحدة. */
+    delivery_info: orderType === 'delivery' ? {
+      status: 'pending',
+      name:    deliveryInfo.name    || '',
+      phone:   deliveryInfo.phone   || '',
+      address: deliveryInfo.address || '',
+      fee: 0, agent_id: '', agent_name: '', agent_type: '',
+      assigned_at: '', delivered_at: '', customer_feedback: '',
+    } : null,
     cashier: (DATA.cashierSession && DATA.cashierSession.cashier_name) || 'الكاشير',
-    status: orderType === 'dinein' ? 'open' : 'printed',
+    /* سياسة المطعم: لا توجد فاتورة «مفتوحة/نشطة». أي فاتورة تُصدر تُغلق
+       فوراً بحالة «مطبوعة» — الدفع يتم مباشرة عند الطلب. الإضافات اللاحقة
+       لا تتم بفتح فاتورة تبقى نشطة أياماً، بل من شاشة «تعديل الفاتورة»
+       فتتحول حالتها إلى «معدّلة» ليظهر الأثر في التقارير. */
+    status: 'printed',
     kitchen_status: 'new',
     stock_applied: true,
     pay_type: payMethod,
@@ -2260,6 +2339,11 @@ async function submitOrder(){
       offer_id: c.offer_id || null,      // ربط كل بند بعرضه (فارغ للأصناف العادية)
       is_free:  !!c.is_free,             // المقدَّم مجاناً: يخصم مخزوناً بلا إيراد
       offer_disc: !!c.offer_disc,        // سطر خصم العرض (مالي فقط — لا يظهر للمطبخ)
+      original_price: c.original_price || null,
+      price_override: !!c.price_override,
+      override_reason: c.override_reason || '',
+      weight_grams: c.weight_grams || null,
+      weight_label: c.weight_label || ''
     })).concat((serviceSelected.table ? [{id:'service_table', name:'خدمة طاولة', qty:1, price:svcT, total:svcT, note:'', is_service:true}] : []), (serviceSelected.delivery ? [{id:'service_delivery', name:'خدمة توصيل', qty:1, price:svcD, total:svcD, note:'', is_service:true}] : [])), 
   };
   if(orderType==='takeaway' || orderType==='delivery') inv.queue_no = invNo; // الدور = رقم الفاتورة نفسه
@@ -2331,7 +2415,15 @@ async function submitOrder(){
   showToast(orderType==='takeaway' || orderType==='delivery'
     ? `فاتورة ${_lbl} · دورك ${_lbl} → المطبخ`
     : `فاتورة ${_lbl} → المطبخ`,'🍳');
-  cart=[]; orderServices = { table: 0, delivery: 0 }; renderPOS();
+  /* تنظيف بيانات الطلب بعد كل إصدار: بدون هذا يرث الزبون التالي اسمَ وهاتفَ
+     وعنوانَ الزبون السابق، فتصدر كل فواتير التوصيل باسم واحد مهما اختلف
+     الزبائن — وتبقى الطاولة مختارة بعد أن صارت فاتورتها مغلقة. */
+  cart=[];
+  orderServices = { table: 0, delivery: 0 };
+  deliveryInfo  = { name: '', phone: '', address: '' };
+  orderNotes    = '';
+  selectedTable = '';
+  renderPOS();
   // طباعة حرارية تلقائية (كاشير + مطبخ) — قابلة للإطفاء من config.js
   try {
     const _th = window.ALFA_CONFIG && window.ALFA_CONFIG.thermal || {};

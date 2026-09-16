@@ -20,7 +20,7 @@
      عدّلها من config.js → thermal.fonts إن أراد صاحب المطعم تغييراً. */
   const FONTS = () => Object.assign({
     title: 20, sub: 12.5, noLabel: 26, no: 26, date: 12, cust: 12.5,
-    th: 12.5, td: 12, note: 11, sum: 13, thanks: 15,
+    th: 12.5, td: 12, name: 11, note: 11, sum: 13, thanks: 15, address: 12.5,
   }, CFG().fonts || {});
   const FEED = () => Number(CFG().feedMm) || 3;
   const RESTAURANT = () => CFG().restaurantName || 'alfaprosys';
@@ -241,7 +241,7 @@
 
     // سطر التعريف تحت الاسم: العنوان + الهاتف (بلا كلمة «هاتف:»)
     const brand = (window.ALFA_CONFIG && ALFA_CONFIG.branding) || {};
-    const subLine = [brand.address, brand.phone].filter(Boolean).join(' ');
+    const subLine = (CFG().brandingDescription || [brand.address, brand.phone].filter(Boolean).join(' ')).trim();
 
     // سطر الزبون المدمج: الاسم الهاتف العنوان خارجي
     // (حُذف [الرقم] — كان تكراراً لرقم الطلب الظاهر أعلاه)
@@ -294,7 +294,7 @@
       const nameCell = nm.map((ln, ix) => `${ix === 0 && it.offer_id ? '🎟️ ' : ''}${ix === 0 && it.is_free ? '🎁 ' : ''}${esc(ln)}`).join('<br>');
       let h = `<tr>
           <td style="${TD}text-align:center;font-size:${F.name || F.td}px;">${nameCell}</td>
-          <td style="${TD}text-align:center;">${(Number(it.qty) || 1).toFixed(2)}</td>
+          <td style="${TD}text-align:center;">${it.weight_label ? esc(it.weight_label) : (Number(it.qty) || 1).toFixed(2)}</td>
           <td style="${TD}text-align:center;">${fmtN(it.price)}</td>
           <td style="${TD}text-align:center;">${fmtN((Number(it.price) || 0) * (Number(it.qty) || 1))}</td>`
         + `\n          <td style="${TD}text-align:center;font-weight:normal;font-size:${F.note}px;">${esc(inline)}</td>`
@@ -320,8 +320,10 @@
     return `
       <div style="display:flow-root;${MINH() && !opts.kitchen ? `min-height:${MINH()}mm;` : ''}width:${w}mm;max-width:${w}mm;min-width:${w}mm;margin:0 auto;padding:0;font-family:Tahoma,Arial,sans-serif;color:#000;direction:rtl;text-align:right;box-sizing:border-box;line-height:1.25;background:#fff;">
         <div style="min-height:${isDlv ? 60 : 64}mm;display:flex;flex-direction:column;justify-content:space-evenly;margin:1mm 0 2mm;">
+          ${CFG().logoUrl && CFG().showLogo !== false ? `<div style="text-align:center;"><img src="${esc(CFG().logoUrl)}" style="max-width:35mm;max-height:22mm;object-fit:contain;"></div>` : ''}
           <div style="font-size:${F.title}px;font-weight:900;text-align:center;">${esc(RESTAURANT())}</div>
           ${subLine ? `<div style="font-size:${F.sub}px;font-weight:bold;text-align:center;">${esc(subLine)}</div>` : ''}
+          ${CFG().addressLine ? `<div style="font-size:${F.address || F.sub}px;font-weight:bold;text-align:center;">${esc(CFG().addressLine)}</div>` : ''}
           <div style="font-size:${F.noLabel}px;font-weight:900;text-align:center;">رقم الطلب: <span style="font-size:${F.no}px;line-height:1.1;">${esc(no)}</span></div>
           <div style="font-size:${F.date}px;font-weight:bold;text-align:center;">تاريخ الطلب: ${esc(inv.date || '')} ${esc(to12h(inv.time))}</div>
           ${isDlv
@@ -330,7 +332,7 @@
           ${typeAr ? `<div style="font-size:${F.date}px;font-weight:900;text-align:center;">${esc(typeAr)}</div>` : ''}
           ${inv.type === 'dinein' && inv.hall ? `<div style="font-size:14px;font-weight:900;text-align:center;">طاولة — ${esc(inv.hall)}</div>` : ''}
         </div>
-        ${inv.notes ? `<div style="font-size:14px;font-weight:900;text-align:right;border:1px solid #000;padding:3px 5px;margin:0 auto 3mm;width:calc(100% - 1mm);">ملاحظات الطلب: ${esc(inv.notes)}</div>` : ''}
+        ${inv.notes ? `<div style="font-size:${F.note}px;font-weight:900;text-align:right;margin:0 auto 3mm;width:calc(100% - 1mm);line-height:1.3;border:0 !important;outline:0 !important;box-shadow:none !important;background:transparent !important;padding:0 !important;">ملاحظات الطلب: ${esc(inv.notes)}</div>` : ''}
 
         <table style="width:calc(100% - 1mm);border-collapse:collapse;border:1px solid #000;margin:0 auto 10mm;table-layout:fixed;">
           <thead><tr>${headCols}</tr></thead>
@@ -344,7 +346,8 @@
           <tr><td style="${SUM}text-align:right;padding-inline-start:12px;">الصافي</td><td style="${SUM}text-align:center;">${fmtN(total)}</td></tr>
         </table>
 
-        <div style="font-size:${F.thanks}px;font-weight:bold;text-align:center;padding-bottom:${FEED()}mm;">شكرا لزيارتكم</div>
+        ${inv.draw_code ? `<div style="border:1px dashed #000;text-align:center;margin:1mm auto;padding:2mm;width:calc(100% - 2mm);"><div style="font-size:11px;font-weight:bold;">رمز السحب</div><div style="font-size:20px;letter-spacing:2px;font-weight:900;direction:ltr;">${esc(inv.draw_code)}</div><div style="font-size:9px;">احتفظ بالفاتورة للمشاركة في السحب</div></div>` : ''}
+        <div style="font-size:${F.thanks}px;font-weight:bold;text-align:center;padding-bottom:${FEED()}mm;">${esc(CFG().footerTitle || '')}${CFG().footerTitle && CFG().thankYou ? '<br>' : ''}${esc(CFG().thankYou || 'شكرا لزيارتكم')}</div>${CFG().qrImageUrl && CFG().showQr !== false ? `<div style="text-align:center;padding-bottom:${FEED()}mm;"><img src="${esc(CFG().qrImageUrl)}" style="width:25mm;height:25mm;object-fit:contain;"></div>` : ''}
       </div>`;
   }
 
@@ -478,6 +481,12 @@ html, body { margin: 0 !important; padding: 0 !important; background: #fff; }
         const data = [{ type: 'pixel', format: 'html', flavor: 'plain', data: doc }];
         const config = qz.configs.create(opts.kitchen ? PRINTER_KITCHEN() : PRINTER_CASHIER(), printOptions);
         await qz.print(config, data);
+        if (!opts.kitchen && CFG().openDrawer !== false) {
+          try {
+            const drawerConfig = qz.configs.create(PRINTER_CASHIER(), { units:'in', margins:0 });
+            await qz.print(drawerConfig, [{ type:'raw', format:'plain', data:'\x1B\x70\x00\x19\xFA' }]);
+          } catch (drawerErr) { console.warn('[ThermalPrint] drawer failed:', drawerErr); }
+        }
         return 'qz';
       } catch (err) {
         console.error('QZ print failed:', err);
@@ -510,6 +519,11 @@ html, body { margin: 0 !important; padding: 0 !important; background: #fff; }
     connect,
     reconnect: () => connect(true),   // إعادة محاولة كاملة يدوياً (زر/إعدادات)
     print,
+    printModification: async function(inv){
+      const mods = inv.modifications || [];
+      const copy = Object.assign({}, inv, { items: mods.map(function(m){ return { name: (m.type || 'تعديل') + ': ' + (m.detail || ''), qty: 1, price: 0, note: 'إشعار تعديل' }; }), total: 0, notes: 'إشعار تعديل على الفاتورة ' + (inv.id || '') });
+      return print(copy, { kitchen: true });
+    },
     afterSale,
     receiptHtml,
     isActive,

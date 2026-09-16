@@ -196,3 +196,12 @@ function renderShield(){
   renderShield();
 });
 
+/* ══ إعادة الربط بعد السحب من السحابة ══
+   كانت الشاشة تلتقط مرجعي invoices و session مرة واحدة عند الإقلاع،
+   فتبقى تعرض بيانات قديمة بعد أن يستبدل السحب المصفوفات. */
+window.alfaAutoRefresh(function () {
+  invoices = DATA.invoices || [];
+  session  = DATA.cashierSession || {};
+  renderShield();
+});
+

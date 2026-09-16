@@ -53,7 +53,29 @@ function renderApp() {
   const expenses = expensesArr.reduce((sum, x) => sum + (x.amount || 0), 0);
   const totalOut   = purchases + expenses;
   const netCash    = openCash + totalSales - totalOut;
-  const estProfit  = Math.round(totalSales * 0.32);
+  /* ── الربح: من التكاليف الفعلية لا من نسبة ثابتة ──
+     كان هنا: Math.round(totalSales * 0.32) — نسبة مشفَّرة تُعرض للمدير
+     كأنها ربح محسوب. الآن نحسب تكلفة البضاعة المباعة من أسعار المواد
+     (أو التكلفة اليدوية).
+     حماية: إن كانت الوصفات ناقصة (أقل من نصف الأصناف المباعة لها
+     تكلفة مسجّلة) نعود للتقدير ونُسمّيه «تقديري» صراحةً، لأن حساباً
+     مبنياً على بيانات ناقصة يظهر ربحاً وهمياً أكبر من الواقع. */
+  const itemsById = {};
+  (DATA.items || []).forEach(function (it) { itemsById[String(it.id)] = it; });
+  let soldCost = 0, soldLines = 0, costedLines = 0;
+  closed.forEach(function (inv) {
+    (inv.items || []).forEach(function (line) {
+      const it = itemsById[String(line.id)] || itemsById[String(line.item_id)] || null;
+      const c  = window.alfaItemCost ? alfaItemCost(it) : 0;
+      const q  = Number(line.qty) || 0;
+      soldLines += 1;
+      if (c > 0) { costedLines += 1; soldCost += c * q; }
+    });
+  });
+  const coverage   = soldLines ? (costedLines / soldLines) : 0;
+  const hasCostData = soldCost > 0 && coverage >= 0.5;
+  const estProfit   = Math.round(hasCostData ? (totalSales - soldCost) : totalSales * 0.32);
+  const marginPct   = totalSales > 0 ? Math.round((estProfit / totalSales) * 100) : 0;
 
   document.getElementById('mgrApp').innerHTML = `
     <div class="mgr-layout">
@@ -117,9 +139,13 @@ function renderApp() {
               </div>
             </div>
             <div class="mgr-stat-card green">
-              <div class="mgr-stat-lbl">ربح تقديري</div>
+              <div class="mgr-stat-lbl">${hasCostData ? 'الربح' : 'ربح تقديري'}</div>
               <div class="mgr-stat-val">${fmtNum(estProfit)}</div>
-              <div class="mgr-stat-sub">~32% هامش</div>
+              <div class="mgr-stat-sub">${
+                hasCostData
+                  ? 'هامش ' + marginPct + '% — تكلفة بضاعة ' + fmtNum(Math.round(soldCost)) + ' ل.س'
+                  : '~32% هامش تقديري · تغطية التكاليف ' + Math.round(coverage * 100) + '%'
+              }</div>
             </div>
             <div class="mgr-stat-card">
               <div class="mgr-stat-lbl">الوردية</div>
@@ -173,8 +199,8 @@ function renderApp() {
                 <div class="mgr-row-main">
                   <div class="mgr-row-title">
                     ${e(inv.id)}
-                    <span class="mgr-badge ${inv.type === 'table' ? 'blue' : inv.type === 'delivery' ? 'gold' : 'muted'}">
-                      ${inv.type === 'table' ? '🍽️ طاولة' : inv.type === 'delivery' ? '🛵 توصيل' : '🥡 سفري'}
+                    <span class="mgr-badge ${alfaOrderType(inv) === 'table' ? 'blue' : alfaOrderType(inv) === 'delivery' ? 'gold' : 'muted'}">
+                      ${alfaOrderTypeLabel(inv)}
                     </span>
                     <span class="mgr-badge ${inv.status === 'open' ? 'green' : inv.status === 'cancelled' ? 'red' : 'muted'}">
                       ${inv.status === 'open' ? 'مفتوحة' : inv.status === 'cancelled' ? 'ملغاة' : 'مطبوعة'}

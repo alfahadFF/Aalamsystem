@@ -113,6 +113,71 @@ function filteredExpenses(from, to) {
 }
 
 /* ================================================================
+   صفوف التقرير الموحّدة: ورديات مغلقة + أيام مشتقة من الفواتير
+   ----------------------------------------------------------------
+   المشكلة التي يُصلحها هذا: التقارير كانت مبنية حصرياً على
+   shifts_history (الورديات المغلقة). فإن لم تُغلق وردية — أو أُغلقت
+   ولم تُزامن — ظهر التقرير كله أصفاراً رغم وجود فواتير حقيقية،
+   لأن filteredInvoices() كان يُحسب ثم لا يُستخدم إطلاقاً.
+
+   القاعدة الآن: الفاتورة هي المصدر الأساس. الوردية المغلقة أوثق
+   لليوم الذي تغطيه، وما عداها يُشتق من الفواتير والمصروفات.
+   ================================================================ */
+function reportRows(from, to) {
+  const blank = (d) => ({
+    date: d, sales_total: 0, invoices_count: 0, cancelled_count: 0,
+    by_type:    { table: 0, takeaway: 0, delivery: 0 },
+    by_payment: { cash: 0, deferred: 0, partial: 0 },
+    expenditures: 0, cashiers: [], isShift: false,
+  });
+
+  const byDay = {};
+
+  /* 1) الورديات المغلقة — تُعتمد كما هي لليوم الذي تغطيه */
+  filteredShifts(from, to).forEach(function (s) {
+    const d = String(s.date || '').substring(0, 10);
+    if (!d) return;
+    const row = byDay[d] || (byDay[d] = blank(d));
+    row.isShift = true;
+    row.sales_total     += Number(s.sales_total) || 0;
+    row.invoices_count  += Number(s.invoices_count) || 0;
+    row.cancelled_count += Number(s.cancelled_count) || 0;
+    row.expenditures    += Number(s.expenditures) || 0;
+    ['table', 'takeaway', 'delivery'].forEach(k => { row.by_type[k]    += Number((s.by_type || {})[k]) || 0; });
+    ['cash', 'deferred', 'partial'].forEach(k => { row.by_payment[k]   += Number((s.by_payment || {})[k]) || 0; });
+    if (s.cashier && row.cashiers.indexOf(s.cashier) < 0) row.cashiers.push(s.cashier);
+    if (!row.cashier) row.cashier = s.cashier || '';
+  });
+
+  /* 2) الفواتير — لكل يوم لا تغطيه وردية مغلقة */
+  filteredInvoices(from, to).forEach(function (inv) {
+    const d = String(inv.date || inv.created_at || '').substring(0, 10);
+    if (!d) return;
+    const row = byDay[d] || (byDay[d] = blank(d));
+    if (row.isShift) return;                       // الوردية المغلقة أوثق
+    const total     = Number(inv.total) || 0;
+    const cancelled = inv.status === 'cancelled';
+    row.invoices_count += 1;
+    if (cancelled) { row.cancelled_count += 1; return; }
+    row.sales_total += total;
+    row.by_type[window.alfaOrderType(inv)] += total;
+    const p = inv.pay_type === 'cash' ? 'cash' : (inv.pay_type === 'deferred' ? 'deferred' : 'partial');
+    row.by_payment[p] += total;
+    if (inv.cashier && row.cashiers.indexOf(inv.cashier) < 0) row.cashiers.push(inv.cashier);
+  });
+
+  /* 3) المصروفات تُضاف للأيام غير المغلقة (الوردية تحمل مصروفاتها بنفسها) */
+  filteredExpenses(from, to).forEach(function (ex) {
+    const d = String(ex.date || '').substring(0, 10);
+    if (!d) return;
+    const row = byDay[d] || (byDay[d] = blank(d));
+    if (!row.isShift) row.expenditures += Number(ex.amount) || 0;
+  });
+
+  return Object.keys(byDay).sort().map(k => byDay[k]);
+}
+
+/* ================================================================
    ضبط الفلتر
    ================================================================ */
 function setPreset(btn, preset) {
@@ -247,14 +312,11 @@ function renderTab(tab, from, to) {
    📊 تبويب الملخص
    ================================================================ */
 function renderSummary(from, to) {
-  const sh   = filteredShifts(from, to);
-  const invs = filteredInvoices(from, to);
-  const exps = filteredExpenses(from, to);
+  /* صفوف موحّدة: ورديات مغلقة + أيام مشتقة من الفواتير (لا أصفار بلا سبب) */
+  const sh   = reportRows(from, to);
 
-  /* ── إجماليات من الورديات (أكثر دقة) ── */
   const totalSales    = sh.reduce((s, x) => s + (x.sales_total || 0), 0);
-  const totalExp      = sh.reduce((s, x) => s + (x.expenditures || 0), 0)
-                       + exps.reduce((s, x) => s + (x.amount || 0), 0);
+  const totalExp      = sh.reduce((s, x) => s + (x.expenditures || 0), 0);
   const totalCash     = sh.reduce((s, x) => s + (x.by_payment?.cash || 0), 0);
   const totalDeferred = sh.reduce((s, x) => s + (x.by_payment?.deferred || 0), 0);
   const totalPartial  = sh.reduce((s, x) => s + (x.by_payment?.partial || 0), 0);
@@ -384,9 +446,9 @@ function renderSummary(from, to) {
    🧾 تبويب المبيعات
    ================================================================ */
 function renderSales(from, to) {
-  const sh = filteredShifts(from, to);
+  const sh = reportRows(from, to);
 
-  if (!sh.length) return emptyState('لا توجد بيانات مبيعات في هذه الفترة');
+  if (!sh.length) return emptyState('لا توجد فواتير في هذه الفترة — جرّب «هذا الأسبوع» أو حدّد نطاقاً مخصصاً');
 
   /* تجميع يومي */
   const byDay = {};
@@ -657,16 +719,27 @@ function renderItems(from, to) {
 function renderEmployees(from, to) {
   if (!employees.length) return emptyState('لا يوجد موظفون مسجلون');
 
-  const sh = filteredShifts(from, to);
+  const sh = reportRows(from, to);
 
-  /* إحصاء ورديات لكل كاشير */
+  /* إحصاء لكل كاشير: من الورديات المغلقة عند توفرها، وإلا من الفواتير */
   const cashierStats = {};
+  const slot = (n) => (cashierStats[n] || (cashierStats[n] = { shifts:0, sales:0, invoices:0 }));
   sh.forEach(s => {
-    const c = s.cashier;
-    if (!cashierStats[c]) cashierStats[c] = { shifts:0, sales:0, invoices:0 };
-    cashierStats[c].shifts++;
-    cashierStats[c].sales    += s.sales_total || 0;
-    cashierStats[c].invoices += s.invoices_count || 0;
+    if (s.isShift) {
+      const st = slot(s.cashier || '—');
+      st.shifts   += 1;
+      st.sales    += s.sales_total || 0;
+      st.invoices += s.invoices_count || 0;
+      return;
+    }
+    /* يوم مشتق من الفواتير: وزّع على كاشيري اليوم */
+    const list = (s.cashiers || []).filter(Boolean);
+    if (!list.length) return;
+    list.forEach(n => {
+      const st = slot(n);
+      st.sales    += (s.sales_total || 0) / list.length;
+      st.invoices += (s.invoices_count || 0) / list.length;
+    });
   });
 
   /* رواتب في الفترة */
@@ -810,7 +883,7 @@ function buildDailySalesLine(sh, from, to) {
   });
 
   const days = Object.keys(byDay).sort();
-  if (!days.length) return '<div class="rpt-chart-empty">لا توجد بيانات</div>';
+  if (!days.length) return '<div class="rpt-chart-empty">لا توجد مبيعات في هذه الفترة — جرّب «هذا الأسبوع» أو نطاقاً مخصصاً</div>';
 
   const W = 600, H = 160, PAD = 40;
   const vals  = days.map(d => byDay[d]);
@@ -921,6 +994,11 @@ function init() {
 }
 
 (window.alfaStart||function(fn){fn();})(init);
+
+/* ══ إعادة الربط بعد السحب من السحابة ══
+   بدون هذا السطر تبقى الشاشة على البذرة المحلية للأبد: bindReportData()
+   التقطت مراجع المصفوفات مرة واحدة، والسحب يستبدلها بمصفوفات جديدة. */
+window.alfaAutoRefresh(function () { bindReportData(); applyFilter(); }, 30000);
 
 /* ================================================================
    ⚖️ مقارنة الفترات — أي فترتين تختارهما (يوم/أسبوع/شهر/متماثلان/مخصص)
@@ -1082,7 +1160,9 @@ function renderCompare(){
    ================================================================ */
 function buildCurve30(){
   const byDay = {};
-  shifts.forEach(s => { byDay[s.date] = (byDay[s.date] || 0) + (s.sales_total || 0); });
+  /* من الصفوف الموحّدة (فواتير + ورديات) لا من الورديات وحدها */
+  reportRows(ymd(new Date(Date.now() - 29 * 864e5)), ymd(new Date()))
+    .forEach(s => { byDay[s.date] = (byDay[s.date] || 0) + (s.sales_total || 0); });
   const days = [], vals = [];
   for (let i = 29; i >= 0; i--) {
     const d = ymd(new Date(Date.now() - i * 864e5));
