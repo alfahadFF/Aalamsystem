@@ -3270,7 +3270,51 @@ window.DEMO_DATA.price_settings = window.DEMO_DATA.price_settings || {
         }
       } catch (e) {}
       navigator.serviceWorker.register('sw.js').catch(() => {});
+      /* ══════════════════════════════════════════════════════════
+         تنبيه «نسخة جديدة متاحة»
+         ──────────────────────────────────────────────────────────
+         العامل يثبّت النسخة الجديدة في الخلفية، لكن التبويب
+         المفتوح يظل يشغّل الكود القديم في الذاكرة ولا شيء يتغيّر
+         ولا أحد يُخبر المستخدم — فيبدو «الإصلاح لم يعمل». هذا
+         الشريط يطلب منه إعادة التحميل.
+         ══════════════════════════════════════════════════════════ */
+      try {
+        navigator.serviceWorker.addEventListener('controllerchange', function () {
+          if (window.__alfaSwReloading) return;
+          alfaShowUpdateBar();
+        });
+        navigator.serviceWorker.getRegistration().then(function (reg) {
+          if (!reg) return;
+          reg.addEventListener('updatefound', function () {
+            var nw = reg.installing; if (!nw) return;
+            nw.addEventListener('statechange', function () {
+              if (nw.state === 'installed' && navigator.serviceWorker.controller) alfaShowUpdateBar();
+            });
+          });
+        }).catch(function () {});
+      } catch (e) {}
     });
+
+  /* شريط عائم يخبر المستخدم بوجود نسخة أحدث */
+  function alfaShowUpdateBar() {
+    if (document.getElementById('alfaUpdateBar')) return;
+    var b = document.createElement('div');
+    b.id = 'alfaUpdateBar';
+    b.innerHTML = '🔄 نسخة جديدة من النظام متاحة — اضغط للتحديث';
+    b.style.cssText = 'position:fixed;left:12px;right:12px;bottom:12px;z-index:99999;' +
+      'background:#0b2942;color:#fff;border:2px solid #fbbf24;border-radius:12px;' +
+      'padding:14px 16px;font-weight:800;font-size:14px;text-align:center;cursor:pointer;' +
+      'box-shadow:0 6px 20px rgba(0,0,0,.45);font-family:Tahoma,Arial,sans-serif';
+    b.onclick = function () {
+      window.__alfaSwReloading = true;
+      b.textContent = '⏳ جارٍ التحديث…';
+      try {
+        if (navigator.serviceWorker.controller) navigator.serviceWorker.controller.postMessage('SKIP_WAITING');
+      } catch (e) {}
+      setTimeout(function () { location.reload(true); }, 400);
+    };
+    document.body.appendChild(b);
+  }
   }
 
   let readyResolve;
