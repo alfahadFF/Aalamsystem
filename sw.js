@@ -7,7 +7,7 @@
    - أصول أخرى (js/css/أيقونات): كاش أولًا ثم شبكة.
    - خطوط خارجية: كاش أولًا بعد أول تحميل (تعمل أوفلاين لاحقًا).
    ============================================================ */
-const VERSION = 'alfaprosys-v77'; /* v77: إصلاح جلب الطلبات الأونلاين — سحب فوري عند الإقلاع بدل انتظار ٣٠ ثانية + فك تصادم اسم online_orders */
+const VERSION = 'alfaprosys-v78'; /* v78: تنبيه «نسخة جديدة متاحة» — كان التحديث يثبّت في الخلفية ويبقى المستخدم على الكود القديم بلا أي إشعار */
 
 /* ملفات تُجلب دائماً من الشبكة أولاً (لا كاش-أولاً أبداً)
    أضف هنا أي ملف إعدادات حسّاس مستقبلاً بنفس الطريقة */
@@ -76,6 +76,11 @@ const CORE = [
   'assets/css/invoices.css','assets/css/menu_admin.css','assets/css/online.css',
   'assets/css/tables.css','assets/css/delivery.css',
 ];
+
+/* عند ضغط شريط «نسخة جديدة متاحة» نفعّل العامل الجديد فوراً */
+self.addEventListener('message', function (e) {
+  if (e && e.data === 'SKIP_WAITING') { self.skipWaiting(); }
+});
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
