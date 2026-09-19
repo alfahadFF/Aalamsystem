@@ -265,6 +265,15 @@ function restoreDraft() {
 function posDirty() { return !!(cart.length || heldOrders.length); }
 function openPosScreen(url, title) {
   if (displayMode === 'direct') {
+    /* ════════════════════════════════════════════════════════
+       الإطار (iframe) مستند مستقل بنافذته وبياناته الخاصة:
+       يعيد تحميل التطبيق من الصفر، فتظهر الشاشة فارغة حتى
+       يكتمل سحبها — وتُظهر «جديدة ٠» إن بطؤ الاتصال، بينما
+       شاشة البيع ترى الطلبات فعلاً (ولذلك يومض الزر ولا يظهر
+       شيء عند فتحه).
+       إن كانت الفاتورة فارغة فالانتقال المباشر أوثق وأسرع.
+       ════════════════════════════════════════════════════════ */
+    if (!cart.length) return guardLeave(url);
     posEmbed = { url, title: title || url };
     return renderPOS();
   }
@@ -277,9 +286,33 @@ function renderPosEmbed() {
     <div class="d-embed-scrim" data-action="close-pos-embed"></div>
     <div class="d-embed-modal" role="dialog" aria-label="${escapeHtml(posEmbed.title)}">
       <div class="d-embed-head"><strong>${escapeHtml(posEmbed.title)}</strong><button type="button" data-action="close-pos-embed">✕</button></div>
-      <iframe class="d-embed-frame" src="${escapeHtml(posEmbed.url)}" title="${escapeHtml(posEmbed.title)}"></iframe>
+      <iframe class="d-embed-frame" src="${escapeHtml(posEmbed.url)}" title="${escapeHtml(posEmbed.title)}" onload="wireEmbedData(this)"></iframe>
     </div>`;
 }
+
+/* ══════════════════════════════════════════════════════════════
+   تمرير البيانات الجاهزة إلى الشاشة المدمجة
+   ──────────────────────────────────────────────────────────────
+   الإطار مستند مستقل يعيد سحب بياناته من الصفر، فتظهر شاشة
+   الطلبات فارغة («جديدة ٠») رغم أن نقطة البيع ترى الطلبات فعلاً
+   (ولذلك يومض الزر). نحقن ما لدينا ونطلب إعادة الرسم فوراً.
+   ══════════════════════════════════════════════════════════════ */
+function wireEmbedData(fr) {
+  try {
+    var w = fr.contentWindow;
+    if (!w || !w.DEMO_DATA) return;
+    var mine = DATA.online_orders || [];
+    if (!mine.length) return;
+    var local = w.DEMO_DATA.online_orders || [];
+    /* ادمج دون إسقاط الحالات النهائية المحلية عند الابن */
+    var byId = {}; local.forEach(function (o) { if (o && o.id) byId[String(o.id)] = o; });
+    mine.forEach(function (o) { if (o && o.id && !byId[String(o.id)]) byId[String(o.id)] = o; });
+    w.DEMO_DATA.online_orders = Object.keys(byId).map(function (k) { return byId[k]; });
+    if (w.__ooRender) { try { w.__ooRender(); } catch (e) {} }
+  } catch (e) { /* نطاق مختلف origin — نتجاهل */ }
+}
+window.wireEmbedData = wireEmbedData;
+
 function guardLeave(url) {
   if (!posDirty()) { window.location.href = url; return; }
   leaveTargetUrl = url;
