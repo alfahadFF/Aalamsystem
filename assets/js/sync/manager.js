@@ -600,7 +600,7 @@
     function pull() {
       if (!on()) return Promise.resolve({ skipped: true });
       return Promise.all([
-        sb.get('settings', '?select=key,value&key=in.(price,loyalty,discount,invoice_print,branding,profit_pct,online_orders)').catch(function () { return []; }),
+        sb.get('settings', '?select=key,value&key=in.(price,loyalty,discount,invoice_print,branding,profit_pct,online_orders_cfg,pos_rules)').catch(function () { return []; }),
         sb.get('loyalty_ledger', '?select=*&order=id.desc').catch(function () { return []; }),
       ]).then(function (pack) {
         (pack[0] || []).forEach(function (r) {
@@ -612,11 +612,22 @@
               items: r.value.items || [],
             };
           }
-          if (r.key === 'invoice_print' && r.value) D().invoice_print_settings = r.value;
+          if (r.key === 'invoice_print' && r.value) {
+            D().invoice_print_settings = r.value;
+            try { if (window.alfaApplyInvoicePrint) window.alfaApplyInvoicePrint(r.value); } catch (e) {}
+          }
           if (r.key === 'branding' && r.value) D().branding = r.value;
           /* نسبة الربح المستهدفة للأصناف — يضبطها العميل من شاشة التكاليف */
           if (r.key === 'profit_pct' && r.value) D().profit_pct = r.value;
-          if (r.key === 'online_orders' && r.value) D().online_orders = r.value;
+          if (r.key === 'online_orders_cfg' && r.value) D().online_orders_cfg = r.value;
+          if (r.key === 'pos_rules' && r.value) {
+            D().pos_rules = r.value;
+            try {
+              if (r.value.require_shift != null) {
+                localStorage.setItem('alfaprosys_require_shift', r.value.require_shift ? '1' : '0');
+              }
+            } catch (e) {}
+          }
         });
         D().loyalty_ledger = pack[1] || [];
         var max = 0;
@@ -668,8 +679,12 @@
         { key: 'price', value: D().price_settings || {} },
         { key: 'loyalty', value: D().loyalty || {} },
         { key: 'profit_pct', value: D().profit_pct || { default: 0, items: {} } },
-        { key: 'online_orders', value: D().online_orders || { endpoint: '', pin: '' } },
+        { key: 'online_orders_cfg', value: D().online_orders_cfg || { endpoint: '', pin: '' } },
+        { key: 'pos_rules', value: D().pos_rules || { require_shift: false } },
       ];
+      /* invoice_print / branding تُرفع عبر saveKV عند الحفظ من مودال التصميم */
+      if (D().invoice_print_settings) rows.push({ key: 'invoice_print', value: D().invoice_print_settings });
+      if (D().branding) rows.push({ key: 'branding', value: D().branding });
       return sb.upsert('settings', rows, 'key')
         .then(function () { return pushOffers(); })
         .then(function () { return { pushed: true }; });
@@ -716,6 +731,19 @@
       if (rows['discount']) D().discount_settings = rows['discount'].value;
       if (rows['price']) D().price_settings = rows['price'].value;
       if (rows['loyalty']) D().loyalty = rows['loyalty'].value;
+      if (rows['invoice_print']) {
+        D().invoice_print_settings = rows['invoice_print'].value;
+        try { if (window.alfaApplyInvoicePrint) window.alfaApplyInvoicePrint(rows['invoice_print'].value); } catch (e) {}
+      }
+      if (rows['branding']) D().branding = rows['branding'].value;
+      if (rows['pos_rules']) {
+        D().pos_rules = rows['pos_rules'].value;
+        try {
+          if (rows['pos_rules'].value && rows['pos_rules'].value.require_shift != null) {
+            localStorage.setItem('alfaprosys_require_shift', rows['pos_rules'].value.require_shift ? '1' : '0');
+          }
+        } catch (e) {}
+      }
       try { if (window.alfaPersist) window.alfaPersist(); } catch (e) {}
     }
     function applyOffersBox(b) {
@@ -737,11 +765,15 @@
     }
     function commitAll() {
       if (!window.AlfaOutbox) return;
-      AlfaOutbox.commitRows('settings', [
+      const pack = [
         { key: 'discount', value: D().discount_settings || { invoice_pct: 0, items: [] } },
         { key: 'price', value: D().price_settings || {} },
         { key: 'loyalty', value: D().loyalty || {} },
-      ]);
+        { key: 'pos_rules', value: D().pos_rules || { require_shift: false } },
+      ];
+      if (D().invoice_print_settings) pack.push({ key: 'invoice_print', value: D().invoice_print_settings });
+      if (D().branding) pack.push({ key: 'branding', value: D().branding });
+      AlfaOutbox.commitRows('settings', pack);
       AlfaOutbox.commitRows('offers', D().offers || []);
     }
     function pushCommitted() {
@@ -761,8 +793,20 @@
       if (!on()) return Promise.reject(new Error('offline'));
       return sb.upsert('settings', [{ key: key, value: value }], 'key')
         .then(function () {
-          if (key === 'invoice_print') D().invoice_print_settings = value;
+          if (key === 'invoice_print') {
+            D().invoice_print_settings = value;
+            try { if (window.alfaApplyInvoicePrint) window.alfaApplyInvoicePrint(value); } catch (e) {}
+          }
           if (key === 'branding') D().branding = value;
+          if (key === 'pos_rules') {
+            D().pos_rules = value;
+            try {
+              if (value && value.require_shift != null) {
+                localStorage.setItem('alfaprosys_require_shift', value.require_shift ? '1' : '0');
+              }
+            } catch (e) {}
+          }
+          if (key === 'price') D().price_settings = value;
           try { if (window.alfaPersist) window.alfaPersist(); } catch (e) {}
           return { pushed: true };
         });

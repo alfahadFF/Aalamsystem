@@ -737,6 +737,12 @@ window.InvoiceSync = (function () {
       dd = Object.assign({}, dd);
       delete dd._delivery;
     }
+    var printNo = null;
+    if (dd && dd._print != null) {
+      printNo = Number(dd._print) || null;
+      dd = Object.assign({}, dd);
+      delete dd._print;
+    }
     /* خدمات الطلب (طاولة/توصيل) تُرحَّل داخل discount_detail وتُعاد هنا لحقول مباشرة */
     var svcT = (dd && Number(dd.service_table)) || 0;
     var svcD = (dd && Number(dd.service_delivery)) || 0;
@@ -787,6 +793,7 @@ window.InvoiceSync = (function () {
       is_online: !!row.is_online,
       is_new_customer: !!row.is_new_customer,
       created_at: row.created_at,
+      print_no: printNo,
       items: (lines || []).map(fromLine),
     };
   }
@@ -803,6 +810,9 @@ window.InvoiceSync = (function () {
        لاحقاً تُقرأ القيمة منه مباشرة (انظر fromInv). */
     if (Number(inv.prep_minutes) > 0) {
       dd._prep = { minutes: Number(inv.prep_minutes), set_at: inv.prep_set_at || null };
+    }
+    if (Number(inv.print_no) > 0) {
+      dd._print = Number(inv.print_no);
     }
     if (!Object.keys(dd).length) dd = null;
     return {
@@ -1038,27 +1048,33 @@ window.alfaMergeOnlineOrders = function (localList, remoteList) {
     if (!cur) { byId[id] = row; return; }
     var cr = rank(cur.status), rr = rank(row.status);
     if (cr > 0 && rr === 0) {
-      /* الحالي نهائي والجديد new — احتفظ بالنهائي */
+      /* الحالي نهائي والجديد new — احتفظ بالنهائي + print_no */
       byId[id] = Object.assign({}, row, {
         status: cur.status,
         invoice_id: cur.invoice_id || row.invoice_id || null,
         no: cur.no != null ? cur.no : row.no,
+        print_no: cur.print_no != null ? cur.print_no : row.print_no,
         date: cur.date || row.date || null
       });
       return;
     }
     if (rr > 0 && cr === 0) {
       /* الوارد نهائي والمحلي new — خذ النهائي */
-      byId[id] = Object.assign({}, cur, row);
+      byId[id] = Object.assign({}, cur, row, {
+        print_no: row.print_no != null ? row.print_no : cur.print_no
+      });
       return;
     }
     if (preferTerminal && cr > 0 && rr > 0) {
       /* كلاهما نهائي: فضّل من لديه فاتورة */
       var keep = (cur.invoice_id && !row.invoice_id) ? cur : Object.assign({}, cur, row);
+      if (keep.print_no == null) keep.print_no = cur.print_no != null ? cur.print_no : row.print_no;
       byId[id] = keep;
       return;
     }
-    byId[id] = Object.assign({}, cur, row);
+    byId[id] = Object.assign({}, cur, row, {
+      print_no: (row.print_no != null ? row.print_no : cur.print_no)
+    });
   }
   (localList || []).forEach(function (x) { put(Object.assign({}, x), true); });
   (remoteList || []).forEach(function (x) { put(Object.assign({}, x), false); });
@@ -1101,13 +1117,14 @@ window.PosSync = (function () {
       pullOffers().catch(function () { return []; }),
       sb.get('contracts', '?select=*').catch(function () { return []; }),
       sb.get('online_orders', '?select=*').catch(function () { return []; }),
-      sb.get('settings', '?select=key,value&key=eq.discount').catch(function () { return []; }),
+      /* إعدادات الكاشير الحية: خصم + تصميم فاتورة + قواعد بيع + أسعار */
+      sb.get('settings', '?select=key,value&key=in.(discount,invoice_print,branding,pos_rules,price)').catch(function () { return []; }),
       sb.get('contract_installments', '?select=*').catch(function () { return []; }),
     ]).then(function (pack) {
       const offers = pack[0] || [];
       var contracts = pack[1] || [];
       const online = pack[2] || [];
-      const discRows = pack[3] || [];
+      const setRows = pack[3] || [];
       const inst = pack[4] || [];
       if (inst.length && contracts.length) {
         const by = {};
@@ -1129,13 +1146,31 @@ window.PosSync = (function () {
         DEMO_DATA.online_orders = (window.alfaMergeOnlineOrders || function (a, b) {
           return (b && b.length) ? b : (a || []);
         })(DEMO_DATA.online_orders || [], online);
-        const disc = (discRows[0] && discRows[0].value) || { invoice_pct: 0, items: [] };
         const liveIds = {};
         (DEMO_DATA.items || []).forEach(function (i) { liveIds[String(i.id)] = true; });
-        DEMO_DATA.discount_settings = {
-          invoice_pct: Number(disc.invoice_pct) || 0,
-          items: (disc.items || []).filter(function (r) { return liveIds[String(r.item_id)]; }),
-        };
+        (setRows || []).forEach(function (r) {
+          if (!r || !r.key) return;
+          if (r.key === 'discount' && r.value) {
+            DEMO_DATA.discount_settings = {
+              invoice_pct: Number(r.value.invoice_pct) || 0,
+              items: (r.value.items || []).filter(function (x) { return liveIds[String(x.item_id)]; }),
+            };
+          }
+          if (r.key === 'invoice_print' && r.value) {
+            DEMO_DATA.invoice_print_settings = r.value;
+            try { if (window.alfaApplyInvoicePrint) window.alfaApplyInvoicePrint(r.value); } catch (e) {}
+          }
+          if (r.key === 'branding' && r.value) DEMO_DATA.branding = r.value;
+          if (r.key === 'pos_rules' && r.value) {
+            DEMO_DATA.pos_rules = r.value;
+            try {
+              if (r.value.require_shift != null) {
+                localStorage.setItem('alfaprosys_require_shift', r.value.require_shift ? '1' : '0');
+              }
+            } catch (e) {}
+          }
+          if (r.key === 'price' && r.value) DEMO_DATA.price_settings = r.value;
+        });
       }
       return { pulled: true, offers: offers.length, contracts: contracts.length, online: online.length };
     }).catch(function (e) {
@@ -1162,6 +1197,19 @@ window.PosSync = (function () {
     if (rows['discount']) DEMO_DATA.discount_settings = rows['discount'].value;
     if (rows['price']) DEMO_DATA.price_settings = rows['price'].value;
     if (rows['loyalty']) DEMO_DATA.loyalty = rows['loyalty'].value;
+    if (rows['invoice_print']) {
+      DEMO_DATA.invoice_print_settings = rows['invoice_print'].value;
+      try { if (window.alfaApplyInvoicePrint) window.alfaApplyInvoicePrint(rows['invoice_print'].value); } catch (e) {}
+    }
+    if (rows['branding']) DEMO_DATA.branding = rows['branding'].value;
+    if (rows['pos_rules']) {
+      DEMO_DATA.pos_rules = rows['pos_rules'].value;
+      try {
+        if (rows['pos_rules'].value && rows['pos_rules'].value.require_shift != null) {
+          localStorage.setItem('alfaprosys_require_shift', rows['pos_rules'].value.require_shift ? '1' : '0');
+        }
+      } catch (e) {}
+    }
   }
   function persistAll() { try { if (window.alfaPersist) window.alfaPersist(); } catch (e) {} }
   function pullGuarded() {
@@ -1341,6 +1389,8 @@ window.OnlineOrderSync = (function () {
       source: o.source || 'online',
       invoice_id: o.invoice_id || null,
       no: o.no == null ? null : o.no,
+      /* رقم الطباعة المستمر — نفس تسلسل فواتير الكاشير بلا أصفار */
+      print_no: o.print_no == null ? null : Number(o.print_no) || null,
       date: o.date || null,
     };
   }
