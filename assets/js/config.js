@@ -6,10 +6,9 @@ window.ALFA_CONFIG = {
   // prod   = عميل حقيقي
   mode: 'prod',
 
-  /* ── هوية المطعم (الترويسة على الفواتير) ──
-     هذه القيم الافتراضية تظهر على كل جهاز بلا أي إعداد.
-     ملاحظة: إن ضُبطت الهوية من صفحة الإعدادات على جهازٍ ما (localStorage
-     باسم alfaprosys_branding) فإنها تتقدم على هذه الافتراضيات على ذلك الجهاز. */
+  /* ── هوية المطعم (افتراضيات فقط) ──
+     المصدر الحي: مفتاح invoice_print في جدول settings (سحابة).
+     تُحدَّث عبر alfaApplyInvoicePrint بعد السحب — بلا localStorage. */
   restaurantName: 'عالم الفواكه',
   branding: { name: 'عالم الفواكه', address: 'قسيم الحريري', phone: '0983831671' },
 
@@ -128,7 +127,7 @@ window.ALFA_CONFIG = {
        date سطر التاريخ · cust سطر الزبون · th رؤوس الأعمدة · td خلايا الجدول
        note الملاحظات · sum المجاميع · thanks سطر الشكر */
     fonts: { title: 20, sub: 14, address: 14, noLabel: 26, no: 26, date: 14, cust: 12.5,
-             th: 9.5, td: 12, name: 11, note: 11, sum: 12.5, thanks: 16 },
+             th: 9.5, td: 12, name: 11, note: 14, itemNote: 11, sum: 12.5, thanks: 16 },
     addressLine: '',     // سطر العنوان المستقل في الترويسة
     showLogo: true,      // إظهار اللوغو من عدمه — اختياري للعميل
     showQr:   true,      // إظهار صورة QR من عدمها
@@ -167,52 +166,87 @@ ct0NdzgIQRWJFfJ77QECqub1eU4S
   },
 };
 
-/* هوية المطعم — تُحرر من الإعدادات وتُطبق هنا على كل الشاشات والإيصالات */
-try {
-  const __b = JSON.parse(localStorage.getItem('alfaprosys_branding') || 'null') || {};
-  const __d = window.ALFA_CONFIG.branding || {};
-  /* دمج لا استبدال: كل حقل يأخذ قيمة الإعدادات إن وُجدت، وإلا فالافتراضي —
-     فلا تُفرَّغ الترويسة بهوية قديمة ناقصة محفوظة على جهاز ما */
-  window.ALFA_CONFIG.branding = {
-    name: __b.name || __d.name,
-    address: __b.address || __d.address,
-    phone: __b.phone || __d.phone,
-  };
-  if (__b.name) {
-    window.ALFA_CONFIG.restaurantName = __b.name;
-    window.ALFA_CONFIG.thermal.restaurantName = __b.name;
-  }
-  /* إعدادات الترويسة والتذييل المحدودة — لا تغيّر بنية الجدول */
-  let __local = {};
-  try { __local = JSON.parse(localStorage.getItem('alfaprosys_invoice_print_settings') || 'null') || {}; } catch (e2) {}
-  const __cloud = (window.DEMO_DATA && window.DEMO_DATA.invoice_print_settings) || {};
-  /* السحابة تتقدّم على النسخة المحلية: تُضبط مرة على أي جهاز وتعمّ البقية */
-  const __p = Object.assign({}, __local, __cloud);
-  if (Object.keys(__p).length) {
-    const t = window.ALFA_CONFIG.thermal;
-    t.restaurantName = __p.restaurant_name || t.restaurantName;
-    t.brandingDescription = __p.description_line || '';
-    t.addressLine = __p.address_line || '';
-    t.logoUrl = __p.logo_url || '';
-    t.qrImageUrl = __p.qr_image_url || '';
-    t.showLogo = __p.show_logo !== false;   /* اللوغو اختياري: يُخفى بطلب العميل */
-    t.showQr   = __p.show_qr   !== false;
-    t.footerTitle = __p.footer_title || '';
-    t.thankYou = __p.thank_you || 'شكرا لزيارتكم';
-    t.fonts = { ...t.fonts,
-      title: Number(__p.restaurant_name_font_size) || t.fonts.title,
-      sub: Number(__p.description_font_size) || t.fonts.sub,
-      no: Number(__p.order_number_font_size) || t.fonts.no,
-      date: Number(__p.order_date_font_size) || t.fonts.date,
-      cust: Number(__p.customer_data_font_size) || t.fonts.cust,
-      note: Number(__p.order_notes_font_size) || t.fonts.note,
-      thanks: Number(__p.thank_you_font_size) || t.fonts.thanks,
-      /* حجم خط جدول الأصناف: يضبط الخط داخل الجدول فقط، أما عرض الأعمدة
-         والجدران ومخطط الجدول فثابتة لا تتأثر بهذا الرقم */
-      ...(()=>{ const it = Number(__p.items_font_size) || t.fonts.td;
-        return { td: it, th: Math.max(7, it - 2.5), name: Math.max(7, it - 1) }; })()
+/* هوية + تصميم الفاتورة — مصدر الحقيقة السحابة (DEMO_DATA بعد السحب).
+   لا localStorage كمصدر دائم: النظام سحابي/هجين. تُطبَّق القيم عند
+   وصول invoice_print / branding من SettingsSync، وأيضاً هنا إن كانت
+   البيانات محمّلة مسبقاً في الذاكرة. */
+window.alfaApplyInvoicePrint = function (p) {
+  try {
+    if (!p || typeof p !== 'object') return;
+    const t = window.ALFA_CONFIG.thermal = window.ALFA_CONFIG.thermal || {};
+    if (p.restaurant_name) {
+      t.restaurantName = p.restaurant_name;
+      window.ALFA_CONFIG.restaurantName = p.restaurant_name;
+    }
+    t.brandingDescription = p.description_line != null ? p.description_line : (t.brandingDescription || '');
+    t.addressLine = p.address_line != null ? p.address_line : (t.addressLine || '');
+    if (p.logo_url != null) t.logoUrl = p.logo_url;
+    if (p.qr_image_url != null) t.qrImageUrl = p.qr_image_url;
+    t.showLogo = p.show_logo !== false;
+    t.showQr = p.show_qr !== false;
+    t.showDrawCode = !!p.show_draw_code;
+    t.footerTitle = p.footer_title != null ? p.footer_title : (t.footerTitle || '');
+    t.thankYou = p.thank_you != null ? p.thank_you : (t.thankYou || 'شكرا لزيارتكم');
+    if (p.font_family) t.fontFamily = p.font_family;
+    if (p.logo_max_mm != null) t.logoMaxMm = Number(p.logo_max_mm) || 22;
+    if (p.qr_size_mm != null) t.qrSizeMm = Number(p.qr_size_mm) || 25;
+    t.show = {
+      name: p.show_name !== false,
+      description: p.show_description !== false,
+      address: p.show_address !== false,
+      orderNo: p.show_order_no !== false,
+      date: p.show_date !== false,
+      customer: p.show_customer !== false,
+      orderNotes: p.show_order_notes !== false,
+      footerTitle: p.show_footer_title !== false,
+      thankYou: p.show_thank_you !== false,
+      logo: p.show_logo !== false,
+      qr: p.show_qr !== false,
+      drawCode: !!p.show_draw_code,
     };
-    window.ALFA_CONFIG.branding.address = t.addressLine || t.brandingDescription;
+    const base = t.fonts || {};
+    const it = Number(p.items_font_size) || base.td || 12;
+    const thSz = (p.items_header_font_size != null && p.items_header_font_size !== '')
+      ? Number(p.items_header_font_size) : (base.th != null ? base.th : Math.max(7, it - 2.5));
+    const nameSz = (p.items_name_font_size != null && p.items_name_font_size !== '')
+      ? Number(p.items_name_font_size) : (base.name != null ? base.name : Math.max(7, it - 1));
+    const itemNoteSz = (p.items_note_font_size != null && p.items_note_font_size !== '')
+      ? Number(p.items_note_font_size) : (base.itemNote != null ? base.itemNote : Math.max(7, it - 1));
+    t.fonts = Object.assign({}, base, {
+      title: Number(p.restaurant_name_font_size) || base.title || 20,
+      sub: Number(p.description_font_size) || base.sub || 14,
+      address: Number(p.address_font_size) || base.address || 14,
+      no: Number(p.order_number_font_size) || base.no || 26,
+      noLabel: Number(p.order_number_font_size) || base.noLabel || 26,
+      date: Number(p.order_date_font_size) || base.date || 14,
+      cust: Number(p.customer_data_font_size) || base.cust || 12.5,
+      note: Number(p.order_notes_font_size) || base.note || 14, /* ملاحظات الطلب فوق الجدول */
+      thanks: Number(p.thank_you_font_size) || base.thanks || 16,
+      footerTitle: Number(p.footer_title_font_size) || base.footerTitle || base.sub || 14,
+      sum: Number(p.sum_font_size) || base.sum || 12.5,
+      td: it,
+      th: thSz || 9.5,
+      name: nameSz || 11,
+      itemNote: itemNoteSz || 11, /* ملاحظات الصنف داخل الجدول */
+    });
+    window.ALFA_CONFIG.branding = Object.assign({}, window.ALFA_CONFIG.branding || {}, {
+      name: p.restaurant_name || (window.ALFA_CONFIG.branding && window.ALFA_CONFIG.branding.name) || '',
+      address: p.address_line || p.description_line || (window.ALFA_CONFIG.branding && window.ALFA_CONFIG.branding.address) || '',
+      phone: p.phone || (window.ALFA_CONFIG.branding && window.ALFA_CONFIG.branding.phone) || '',
+      footer: p.thank_you || (window.ALFA_CONFIG.branding && window.ALFA_CONFIG.branding.footer) || '',
+    });
+  } catch (e) {}
+};
+try {
+  const __cloudPrint = (window.DEMO_DATA && window.DEMO_DATA.invoice_print_settings) || null;
+  const __cloudBrand = (window.DEMO_DATA && window.DEMO_DATA.branding) || null;
+  if (__cloudBrand && __cloudBrand.name) {
+    window.ALFA_CONFIG.branding = Object.assign({}, window.ALFA_CONFIG.branding || {}, __cloudBrand);
+    window.ALFA_CONFIG.restaurantName = __cloudBrand.name;
+    window.ALFA_CONFIG.thermal.restaurantName = __cloudBrand.name;
+  }
+  if (__cloudPrint && typeof __cloudPrint === 'object') {
+    window.alfaApplyInvoicePrint(__cloudPrint);
   }
 } catch (e) {}
 

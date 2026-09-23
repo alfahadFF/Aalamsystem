@@ -63,10 +63,31 @@
      عدّلها من config.js → thermal.fonts إن أراد صاحب المطعم تغييراً. */
   const FONTS = () => Object.assign({
     title: 20, sub: 12.5, noLabel: 26, no: 26, date: 12, cust: 12.5,
-    th: 12.5, td: 12, name: 11, note: 11, sum: 13, thanks: 15, address: 12.5,
+    th: 9.5, td: 12, name: 11, note: 14, itemNote: 11, sum: 13, thanks: 15, address: 12.5,
   }, CFG().fonts || {});
   const FEED = () => Number(CFG().feedMm) || 3;
   const RESTAURANT = () => CFG().restaurantName || 'alfaprosys';
+  const FONT_FAMILY = () => CFG().fontFamily || 'Tahoma,Arial,sans-serif';
+  /* أعلام إظهار عناصر الترويسة/التذييل — من invoice_print في السحابة */
+  const SHOW = () => {
+    const s = CFG().show || {};
+    return {
+      logo: CFG().showLogo !== false && s.logo !== false,
+      name: s.name !== false,
+      description: s.description !== false,
+      address: s.address !== false,
+      orderNo: s.orderNo !== false,
+      date: s.date !== false,
+      customer: s.customer !== false,
+      orderNotes: s.orderNotes !== false,
+      footerTitle: s.footerTitle !== false,
+      thankYou: s.thankYou !== false,
+      qr: CFG().showQr !== false && s.qr !== false,
+      drawCode: !!(CFG().showDrawCode || s.drawCode),
+    };
+  };
+  const LOGO_MAX = () => Number(CFG().logoMaxMm) || 22;
+  const QR_SIZE = () => Number(CFG().qrSizeMm) || 25;
 
   /* ── الشهادة العامة فقط — تُوضع في config.js
      المفتاح الخاص لا يُوضع في الموقع أبداً. خياران للتوقيع:
@@ -232,16 +253,33 @@
 
   /* استعلام الطابعات المتاحة ومطابقة المرشّحين (محلي + مشترك) */
   async function listPrinterNames() {
+    const names = [];
+    const push = function (n) {
+      n = String(n || '').trim();
+      if (!n) return;
+      if (names.some(function (x) { return x.toLowerCase() === n.toLowerCase(); })) return;
+      names.push(n);
+    };
     try {
       if (qz.printers && typeof qz.printers.find === 'function') {
         const found = await qz.printers.find();
-        if (Array.isArray(found)) return found.map(String);
-        if (typeof found === 'string' && found) return [found];
+        if (Array.isArray(found)) found.forEach(push);
+        else if (typeof found === 'string' && found) push(found);
       }
     } catch (e) {
       console.warn('[ThermalPrint] printers.find failed:', e && e.message || e);
     }
-    return [];
+    /* details أحياناً تكشف UNC لا يظهر في find بنفس الصيغة */
+    try {
+      if (qz.printers && typeof qz.printers.details === 'function') {
+        const det = await qz.printers.details();
+        (Array.isArray(det) ? det : (det ? [det] : [])).forEach(function (d) {
+          if (!d) return;
+          push(d.name || d.printer || '');
+        });
+      }
+    } catch (e2) {}
+    return names;
   }
 
   /* ── تصنيف اسم الطابعة: مشاركة شبكة أم محلي ──
@@ -382,27 +420,29 @@
       if (!nm || /fax/i.test(String(nm))) return;
       if (!nameMatchesCandidates(nm, candidates)) return;
       const d = (detailsMap && (detailsMap[nm] || detailsMap[String(nm).toLowerCase()])) || null;
-      const usb = isUsbLive(d);
-      const net = !usb && (isNetworkPrinterName(nm) || isDetailNetwork(d));
-      matches.push({ name: nm, network: net, usb: !!usb });
+      /* الشبكة من الاسم (UNC/على) أولاً — لا تُلغى حتى لو details قالت USB على الاسم القصير */
+      const byNameNet = isNetworkPrinterName(nm);
+      const usb = !byNameNet && isUsbLive(d);
+      const net = byNameNet || (!usb && isDetailNetwork(d));
+      matches.push({ name: nm, network: !!net, usb: !!usb, byNameNet: !!byNameNet });
     });
     if (!matches.length) return null;
 
-    const usbHit = matches.find(function (m) { return m.usb; });
-    if (usbHit) return usbHit.name;
-
-    const nets = matches.filter(function (m) { return m.network; });
+    /* 1) إن وُجد أي مسار شبكة للدور — فضّله دائماً (يحل: كاشير قصير + مطبخ \\SERVER) */
+    const nets = matches.filter(function (m) { return m.network || m.byNameNet; });
     if (nets.length) {
-      /* فضّل UNC \\SERVER\… ثم «على …» ثم أي شبكة */
       const unc = nets.find(function (m) { return /^[\/\\]{2}/.test(String(m.name).trim()); });
       if (unc) return unc.name;
-      const arabic = nets.find(function (m) { return /\sعلى\s+/i.test(String(m.name)); });
+      const arabic = nets.find(function (m) { return /\sعلى\s+/i.test(String(m.name)) || /\son\s+/i.test(String(m.name)); });
       if (arabic) return arabic.name;
       return nets[0].name;
     }
 
-    const locs = matches.filter(function (m) { return !m.network; });
-    if (locs.length) return locs[0].name;
+    /* 2) لا شبكة: USB حي إن وُجد (الجهاز الموصول مباشرة) */
+    const usbHit = matches.find(function (m) { return m.usb; });
+    if (usbHit) return usbHit.name;
+
+    /* 3) محلي بالاسم القصير */
     return matches[0].name;
   }
 
@@ -411,15 +451,72 @@
     return pickBestForRole(available, candidates, {});
   }
 
+  /* من اسم شبكة مثل \\SERVER\RONGTA … أو «… على SERVER» استخرج بادئة الخادم */
+  function networkServerPrefix(name) {
+    const s = String(name || '').trim();
+    const unc = s.match(/^([\/\\]{2}[^\/\\]+[\/\\])/);
+    if (unc) return unc[1].replace(/\//g, '\\');
+    const ar = s.match(/\sعلى\s+(\S+)\s*$/i);
+    if (ar) return '\\\\' + ar[1] + '\\';
+    const en = s.match(/\son\s+(\S+)\s*$/i);
+    if (en) return '\\\\' + en[1] + '\\';
+    return '';
+  }
+
+  /* إن وُجدت طابعة شبكة لدور واحد فقط: ابنِ مسار UNC للدور الآخر من اسمه القصير + نفس الخادم
+     (الكونسول: kitchen=\\SERVER\Series… يطبع، cashier=RONGTA 80mm 2 لا — لأن UNC الكاشير قد لا يظهر في find) */
+  function synthesizeNetworkName(shortName, serverPrefix) {
+    if (!shortName || !serverPrefix) return null;
+    if (isNetworkPrinterName(shortName)) return shortName;
+    const base = stripShareSuffix(shortName) || shortName;
+    const pref = serverPrefix.endsWith('\\') ? serverPrefix : serverPrefix + '\\';
+    return pref + base;
+  }
+
   async function resolvePrinters(force) {
-    /* كاش أقصر (8ث): بعد تصحيح الأسماء لا نُبقي اختياراً قديماً دقيقة كاملة */
     if (!force && resolved.cashier && resolved.kitchen && resolved.host === linkHost && (Date.now() - resolved.at) < 8000) {
       return resolved;
     }
     const available = await listPrinterNames();
     const detailsMap = await printerDetailsMap();
-    const cash = pickBestForRole(available, cashierCandidates(), detailsMap);
-    const kit = pickBestForRole(available, kitchenCandidates(), detailsMap);
+    let cash = pickBestForRole(available, cashierCandidates(), detailsMap);
+    let kit = pickBestForRole(available, kitchenCandidates(), detailsMap);
+
+    const cashNet = cash && isNetworkPrinterName(cash);
+    const kitNet = kit && isNetworkPrinterName(kit);
+    /* إن أحدهما شبكة والآخر لا — أكمل الناقص بنفس الخادم */
+    if (kitNet && cash && !cashNet) {
+      const pref = networkServerPrefix(kit);
+      const syn = synthesizeNetworkName(cash, pref);
+      if (syn) {
+        console.info('[ThermalPrint] synthesize cashier network:', syn, 'from kitchen', kit);
+        cash = syn;
+      }
+    } else if (cashNet && kit && !kitNet) {
+      const pref = networkServerPrefix(cash);
+      const syn = synthesizeNetworkName(kit, pref);
+      if (syn) {
+        console.info('[ThermalPrint] synthesize kitchen network:', syn, 'from cashier', cash);
+        kit = syn;
+      }
+    } else if (!cashNet && !kitNet) {
+      /* لا شبكة في الاختيار لكن القائمة فيها UNC — حاول التقاط أي \\SERVER\ */
+      let pref = '';
+      (available || []).forEach(function (n) {
+        if (!pref && isNetworkPrinterName(n)) pref = networkServerPrefix(n);
+      });
+      if (pref) {
+        if (cash) {
+          const syn = synthesizeNetworkName(cash, pref);
+          if (syn) cash = syn;
+        }
+        if (kit) {
+          const syn = synthesizeNetworkName(kit, pref);
+          if (syn) kit = syn;
+        }
+      }
+    }
+
     resolved = {
       cashier: cash || null,
       kitchen: kit || null,
@@ -579,11 +676,11 @@
   function receiptHtml(inv, opts = {}) {
     const w = WIDTH();
     const F = FONTS();
-    /* رقم الفاتورة للطباعة: دائماً ثلاثي 001 (التمييز بين الأجهزة في no عند الرفع فقط) */
+    /* رقم الفاتورة للطباعة: بلا أصفار بادئة (1، 2، 15…) — طلب العميل */
     const no = String(
       window.invoiceNo ? window.invoiceNo(inv)
-        : (inv.no != null && window.displayInvoiceNo ? window.displayInvoiceNo(inv.no)
-          : (inv.no != null ? String(inv.no).padStart(3, '0') : (inv.id || '')))
+        : (inv.no != null && window.displayInvoiceNo ? window.displayInvoiceNo(inv.no, inv)
+          : (inv.no != null ? String(Number(inv.no)) : (inv.id || '')))
     );
     const items = inv.items || [];
     const sub = items.reduce((s, x) => s + (Number(x.price) || 0) * (Number(x.qty) || 0), 0);
@@ -591,17 +688,24 @@
     const total = Number(inv.total != null ? inv.total : Math.max(0, sub - disc));
 
     // سطر التعريف تحت الاسم: العنوان + الهاتف (بلا كلمة «هاتف:»)
-    const brand = (window.ALFA_CONFIG && ALFA_CONFIG.branding) || {};
-    const subLine = (CFG().brandingDescription || [brand.address, brand.phone].filter(Boolean).join(' ')).trim();
+    const brand = (window.ALFA_CONFIG && window.ALFA_CONFIG.branding) || {};
+    const S = SHOW();
+    const subLine = S.description
+      ? (CFG().brandingDescription || [brand.address, brand.phone].filter(Boolean).join(' ')).trim()
+      : '';
+    const addrLine = S.address ? (CFG().addressLine || '') : '';
 
     // سطر الزبون المدمج: الاسم الهاتف العنوان خارجي
     // (حُذف [الرقم] — كان تكراراً لرقم الطلب الظاهر أعلاه)
     const isDlv = inv.type === 'delivery';
-    const cust = [inv.customer_name, inv.phone, inv.customer_address].filter(Boolean).join(' ')
-      + (isDlv ? ' خارجي' : '');
+    const cust = S.customer
+      ? ([inv.customer_name, inv.phone, inv.customer_address].filter(Boolean).join(' ') + (isDlv ? ' خارجي' : ''))
+      : '';
     /* التوصيل: سطر الاسم والهاتف + سطر العنوان (بقية الأنواع: سطر واحد كما هو) */
-    const cust1 = [inv.customer_name, inv.phone].filter(Boolean).join(' ');
-    const cust2 = ([inv.customer_address].filter(Boolean).join(' ') + (isDlv ? ' خارجي' : '')).trim();
+    const cust1 = S.customer ? [inv.customer_name, inv.phone].filter(Boolean).join(' ') : '';
+    const cust2 = S.customer
+      ? ([inv.customer_address].filter(Boolean).join(' ') + (isDlv ? ' خارجي' : '')).trim()
+      : '';
     /* نوع الطلب قبل الجدول: كلمة عارية بلا عنوان (طاولة/سفري/خارجي/أونلاين) */
     const TYPE_AR = { dinein: 'طاولة', table: 'طاولة', takeaway: 'خارجي', delivery: 'خارجي', online: 'أونلاين', contract: 'عقد' };
     const typeAr = inv.source === 'online' ? 'أونلاين' : (inv.type === 'dinein' ? '' : (TYPE_AR[inv.type] || ''));
@@ -624,7 +728,7 @@
           <td style="${TD}text-align:center;">1.00</td>
           <td style="${TD}text-align:center;">${fmtN(amt)}</td>
           <td style="${TD}text-align:center;">${fmtN(amt)}</td>
-          <td style="${TD}text-align:center;font-weight:normal;font-size:${F.note}px;"></td>
+          <td style="${TD}text-align:center;font-weight:normal;font-size:${F.itemNote || F.note}px;"></td>
         </tr>`;
     let svcRows = '';
     if (!opts.kitchen && !items.some(x => x.is_service)) {
@@ -648,9 +752,9 @@
           <td style="${TD}text-align:center;">${it.weight_label ? esc(it.weight_label) : (Number(it.qty) || 1).toFixed(2)}</td>
           <td style="${TD}text-align:center;">${fmtN(it.price)}</td>
           <td style="${TD}text-align:center;">${fmtN((Number(it.price) || 0) * (Number(it.qty) || 1))}</td>`
-        + `\n          <td style="${TD}text-align:center;font-weight:normal;font-size:${F.note}px;">${esc(inline)}</td>`
+        + `\n          <td style="${TD}text-align:center;font-weight:normal;font-size:${F.itemNote || F.note}px;">${esc(inline)}</td>`
         + `\n         </tr>`;
-      if (note.length > 10) h += `<tr><td colspan="5" style="${TD}text-align:right;font-weight:normal;font-size:${F.note}px;">▸ ${esc(note)}</td></tr>`;
+      if (note.length > 10) h += `<tr><td colspan="5" style="${TD}text-align:right;font-weight:normal;font-size:${F.itemNote || F.note}px;">▸ ${esc(note)}</td></tr>`;
       return h;
     }).join('');
 
@@ -668,22 +772,51 @@
        الاسم · الاسم والهاتف · رقم الطلب كبير + نوع الطلب · التاريخ والوقت · الزبون */
     const SUM = `border:1px solid #000;padding:2px 6px;font-size:${F.sum}px;line-height:1.2;font-weight:bold;`;
 
+    const footerTitleTxt = (S.footerTitle && CFG().footerTitle) ? String(CFG().footerTitle) : '';
+    const thankTxt = (S.thankYou) ? String(CFG().thankYou || 'شكرا لزيارتكم') : '';
+    const fTitleSize = Number(F.footerTitle || F.sub || 14) || 14;
+    const fThanksSize = Number(F.thanks || 16) || 16;
+    const footerBlock = (footerTitleTxt || thankTxt)
+      ? `<div style="text-align:center;padding-bottom:${FEED()}mm;font-weight:bold;">${footerTitleTxt ? `<div style="font-size:${fTitleSize}px;">${esc(footerTitleTxt)}</div>` : ''}${thankTxt ? `<div style="font-size:${fThanksSize}px;">${esc(thankTxt)}</div>` : ''}</div>`
+      : '';
+    const drawBlock = (S.drawCode && inv.draw_code && !opts.kitchen)
+      ? `<div style="font-size:${Math.max(10, (F.date || 12))}px;font-weight:900;text-align:center;padding:1mm 0;">رمز السحب: ${esc(inv.draw_code)}</div>`
+      : '';
+    const qrBlock = (S.qr && CFG().qrImageUrl)
+      ? `<div style="text-align:center;padding-bottom:${FEED()}mm;"><img src="${esc(CFG().qrImageUrl)}" style="width:${QR_SIZE()}mm;height:${QR_SIZE()}mm;object-fit:contain;"></div>`
+      : '';
+    const logoBlock = (S.logo && CFG().logoUrl)
+      ? `<div style="text-align:center;"><img src="${esc(CFG().logoUrl)}" style="max-width:35mm;max-height:${LOGO_MAX()}mm;object-fit:contain;"></div>`
+      : '';
+    const nameBlock = S.name
+      ? `<div style="font-size:${F.title}px;font-weight:900;text-align:center;">${esc(RESTAURANT())}</div>`
+      : '';
+    const noBlock = S.orderNo
+      ? `<div style="font-size:${F.noLabel}px;font-weight:900;text-align:center;">رقم الطلب: <span style="font-size:${F.no}px;line-height:1.1;">${esc(no)}</span></div>`
+      : '';
+    const dateBlock = S.date
+      ? `<div style="font-size:${F.date}px;font-weight:bold;text-align:center;">تاريخ الطلب: ${esc(inv.date || '')} ${esc(to12h(inv.time))}</div>`
+      : '';
+    const notesBlock = (S.orderNotes && inv.notes)
+      ? `<div style="font-size:${F.note}px;font-weight:900;text-align:right;margin:0 auto 3mm;width:calc(100% - 1mm);line-height:1.3;border:0 !important;outline:0 !important;box-shadow:none !important;background:transparent !important;padding:0 !important;">ملاحظات الطلب: ${esc(inv.notes)}</div>`
+      : '';
+
     return `
-      <div style="display:flow-root;${MINH() && !opts.kitchen ? `min-height:${MINH()}mm;` : ''}width:${w}mm;max-width:${w}mm;min-width:${w}mm;margin:0 auto;padding:0;font-family:Tahoma,Arial,sans-serif;color:#000;direction:rtl;text-align:right;box-sizing:border-box;line-height:1.25;background:#fff;">
+      <div style="display:flow-root;${MINH() && !opts.kitchen ? `min-height:${MINH()}mm;` : ''}width:${w}mm;max-width:${w}mm;min-width:${w}mm;margin:0 auto;padding:0;font-family:${esc(FONT_FAMILY())};color:#000;direction:rtl;text-align:right;box-sizing:border-box;line-height:1.25;background:#fff;">
         <div style="min-height:${isDlv ? 60 : 64}mm;display:flex;flex-direction:column;justify-content:space-evenly;margin:1mm 0 2mm;">
-          ${CFG().logoUrl && CFG().showLogo !== false ? `<div style="text-align:center;"><img src="${esc(CFG().logoUrl)}" style="max-width:35mm;max-height:22mm;object-fit:contain;"></div>` : ''}
-          <div style="font-size:${F.title}px;font-weight:900;text-align:center;">${esc(RESTAURANT())}</div>
+          ${logoBlock}
+          ${nameBlock}
           ${subLine ? `<div style="font-size:${F.sub}px;font-weight:bold;text-align:center;">${esc(subLine)}</div>` : ''}
-          ${CFG().addressLine ? `<div style="font-size:${F.address || F.sub}px;font-weight:bold;text-align:center;">${esc(CFG().addressLine)}</div>` : ''}
-          <div style="font-size:${F.noLabel}px;font-weight:900;text-align:center;">رقم الطلب: <span style="font-size:${F.no}px;line-height:1.1;">${esc(no)}</span></div>
-          <div style="font-size:${F.date}px;font-weight:bold;text-align:center;">تاريخ الطلب: ${esc(inv.date || '')} ${esc(to12h(inv.time))}</div>
+          ${addrLine ? `<div style="font-size:${F.address || F.sub}px;font-weight:bold;text-align:center;">${esc(addrLine)}</div>` : ''}
+          ${noBlock}
+          ${dateBlock}
           ${isDlv
             ? `${cust1 ? `<div style="font-size:${F.cust}px;font-weight:bold;text-align:center;">${esc(cust1)}</div>` : ''}${cust2 ? `<div style="font-size:${F.cust}px;font-weight:bold;text-align:center;">${esc(cust2)}</div>` : ''}`
             : `${cust ? `<div style="font-size:${F.cust}px;font-weight:bold;text-align:center;">${esc(cust)}</div>` : ''}`}
           ${typeAr ? `<div style="font-size:${F.date}px;font-weight:900;text-align:center;">${esc(typeAr)}</div>` : ''}
           ${inv.type === 'dinein' && inv.hall ? `<div style="font-size:14px;font-weight:900;text-align:center;">طاولة — ${esc(inv.hall)}</div>` : ''}
         </div>
-        ${inv.notes ? `<div style="font-size:${F.note}px;font-weight:900;text-align:right;margin:0 auto 3mm;width:calc(100% - 1mm);line-height:1.3;border:0 !important;outline:0 !important;box-shadow:none !important;background:transparent !important;padding:0 !important;">ملاحظات الطلب: ${esc(inv.notes)}</div>` : ''}
+        ${notesBlock}
 
         <table style="width:calc(100% - 1mm);border-collapse:collapse;border:1px solid #000;margin:0 auto 10mm;table-layout:fixed;">
           <thead><tr>${headCols}</tr></thead>
@@ -697,8 +830,9 @@
           <tr><td style="${SUM}text-align:right;padding-inline-start:12px;">الصافي</td><td style="${SUM}text-align:center;">${fmtN(total)}</td></tr>
         </table>
 
-        ${/* رمز السحب ورقمه وملاحظة «احتفظ بالفاتورة للمشاركة في السحب» — معلّق حالياً */ ''}
-        <div style="font-size:${F.thanks}px;font-weight:bold;text-align:center;padding-bottom:${FEED()}mm;">${esc(CFG().footerTitle || '')}${CFG().footerTitle && CFG().thankYou ? '<br>' : ''}${esc(CFG().thankYou || 'شكرا لزيارتكم')}</div>${CFG().qrImageUrl && CFG().showQr !== false ? `<div style="text-align:center;padding-bottom:${FEED()}mm;"><img src="${esc(CFG().qrImageUrl)}" style="width:25mm;height:25mm;object-fit:contain;"></div>` : ''}
+        ${drawBlock}
+        ${footerBlock}
+        ${qrBlock}
       </div>`;
   }
 

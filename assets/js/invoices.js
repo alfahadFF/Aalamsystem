@@ -917,7 +917,20 @@ body{font-family:'Courier New',monospace;width:72mm;margin:0 auto;padding:4mm;fo
   render();
 }
 
+function applyInvoicePrintDesign(){
+  try {
+    const ip = (window.DEMO_DATA && DEMO_DATA.invoice_print_settings) || null;
+    if (ip && window.alfaApplyInvoicePrint) window.alfaApplyInvoicePrint(ip);
+  } catch (e) {}
+}
+if (typeof window !== 'undefined' && window.addEventListener) {
+  window.addEventListener('alfa:cloud-ready', function () {
+    applyInvoicePrintDesign();
+  });
+}
+
 (window.alfaStart||function(fn){fn();})(function () {
+  applyInvoicePrintDesign();
   invoices = DATA.invoices || [];
   render();
   if (window.InvoiceSync && InvoiceSync.pull) InvoiceSync.pull().then(function () {

@@ -2300,11 +2300,9 @@ window.DEMO_DATA.customers = window.DEMO_DATA.customers || [
   },
 ];
 
-/* ── الترقيم اليومي ──
-   الدور = رقم الفاتورة. رقم مجرد فقط (001) بلا أحرف.
-   اليوم الإداري يبدأ 08:00 صباحاً وينتهي 05:00 فجراً:
-   أي طلب قبل الساعة 8 يتبع تسلسل اليوم الإداري السابق،
-   وعند الساعة 8 صباحاً يبدأ التسلسل من جديد من 001 تلقائياً. */
+  /* ── الترقيم اليومي ──
+   الدور = رقم الفاتورة. رقم ظاهر بلا أصفار بادئة (1، 2، 15…).
+   اليوم الإداري يبدأ 05:00 فجراً (انظر businessDay). */
 const _alfaBD = function (offsetDays) {
   const p = function (n) { return String(n).padStart(2, '0'); };
   const s = new Date(Date.now() - 8 * 3600e3 - (offsetDays || 0) * 86400e3);
@@ -3080,32 +3078,69 @@ window.DEMO_DATA.price_settings = window.DEMO_DATA.price_settings || {
     return s.getFullYear() + '-' + p(s.getMonth() + 1) + '-' + p(s.getDate());
   };
   /* padNo: حشو عام للرقم كما هو (يُستخدم في معرّف الفاتورة id عند الحاجة).
-     للعرض والطباعة استخدم displayInvoiceNo / invoiceNo — دائماً ثلاثي 001. */
+     للعرض والطباعة: displayInvoiceNo بلا أصفار. padNo يبقى لمعرّف id الداخلي فقط. */
   window.padNo = function (n) { return String(Number(n || 0)).padStart(3, '0'); };
 
   /* ══════════════════════════════════════════════════════════════
-     عرض/طباعة = رقم ثلاثي يومي (001، 002، …)
-     التمييز بين الأجهزة = فقط في القيمة المخزّنة/المرفوعة (no):
-       جهاز1: 1..999 · جهاز2: 1001..1999 · جهاز3: 2001..2999
-     على الورقة والشاشة يظهر دائماً التسلسل داخل الشريحة كثلاثي:
-       1 → 001 · 1001 → 001 · 2005 → 005
+     عرض/طباعة = رقم يومي مستمر بلا أصفار بادئة (1، 2، 3…) عبر كل الأجهزة.
+     لا نُسقط الشريحة بـ % 1000 وإلا جهاز2 (no=1001) يطبع 001 كجهاز1.
+
+     التمييز عند الرفع (offline): قيمة no في الشريحة
+       جهاز1: 1..999 · جهاز2: 1001..1999 …
+     عند الاتصال: تسلسل موحّد max+1 من كل فواتير اليوم (بلا قفز للشريحة).
+     print_no اختياري على الفاتورة = الرقم الظاهر إن وُجد.
      ══════════════════════════════════════════════════════════════ */
   window.invoiceSeqNo = function (n) {
-    n = Number(n) || 0;
-    if (n <= 0) return 0;
-    const span = Number(window.ALFA_SLOT_SPAN) || 1000;
-    let seq = n % span;
-    if (seq === 0) seq = span; /* حدّ الشريحة */
-    return seq;
+    return Number(n) || 0;
   };
-  window.displayInvoiceNo = function (n) {
-    return String(window.invoiceSeqNo(n)).padStart(3, '0');
+  /* الرقم الظاهر: print_no إن وُجد، وإلا ترتيب مستمر من no بدون modulo */
+  /* عرض/طباعة: رقم طبيعي بلا أصفار بادئة (طلب العميل): 1، 2، 15… لا 001 */
+  window.displayInvoiceNo = function (n, inv) {
+    if (inv && inv.print_no != null && Number(inv.print_no) > 0) {
+      return String(Number(inv.print_no));
+    }
+    n = Number(n) || 0;
+    if (n <= 0) return '0';
+    return String(n);
   };
   window.invoiceNo = function (inv) {
     if (!inv) return '';
-    if (inv.no != null) return window.displayInvoiceNo(inv.no);
+    if (inv.print_no != null && Number(inv.print_no) > 0) return window.displayInvoiceNo(inv.print_no, inv);
+    if (inv.no != null) return window.displayInvoiceNo(inv.no, inv);
     const m = /(\d+)\s*$/.exec(String(inv.id || ''));
-    return m ? window.displayInvoiceNo(+m[1]) : '—';
+    return m ? window.displayInvoiceNo(+m[1], inv) : '—';
+  };
+
+  /* ══════════════════════════════════════════════════════════════
+     رقم الطباعة الظاهر — متسلسل عبر كل الأجهزة (مطلب العميل):
+     لو تعطل الجهاز 1 واشتغل 2 → يكمل 007 بعد 006 ولا يبدأ من 001.
+     المصدر: أعلى print_no (أو no إن كان تسلسلاً يومياً < شريحة) من
+     فواتير اليوم المسحوبة من السحابة + المحلي + حجز localStorage.
+     ══════════════════════════════════════════════════════════════ */
+  window.nextPrintNo = function (peek) {
+    const today = window.businessDay ? window.businessDay() : '';
+    let maxP = 0;
+    function consider(inv) {
+      if (!inv) return;
+      const d = inv.date || (inv.created_at && window.businessDay ? window.businessDay(inv.created_at) : null);
+      if (today && d && d !== today) return;
+      const p = Number(inv.print_no) || 0;
+      if (p > maxP) maxP = p;
+      const n = Number(inv.no) || 0;
+      /* no اليومي المتصل (1..999 عادة، أو أي تسلسل موحّد دون شريحة) */
+      if (!p && n > 0 && n < 1000 && n > maxP) maxP = n;
+      /* شريحة أوفلاين 1001+ بلا print_no: لا تُستخدم وحدها كرقم ظاهر */
+    }
+    (window.DEMO_DATA && DEMO_DATA.invoices || []).forEach(consider);
+    (window.DEMO_DATA && DEMO_DATA.online_orders || []).forEach(consider);
+    let reserved = 0;
+    try { reserved = Number(localStorage.getItem('alfaprosys_print_no_' + today) || 0) || 0; } catch (e) {}
+    if (reserved > maxP) maxP = reserved;
+    const next = maxP + 1;
+    if (!peek) {
+      try { localStorage.setItem('alfaprosys_print_no_' + today, String(next)); } catch (e) {}
+    }
+    return next;
   };
   window.invNoLabel = function (inv) {
     return window.invoiceNo ? window.invoiceNo(inv) : String((inv && inv.id) || '');
@@ -3132,7 +3167,8 @@ window.DEMO_DATA.price_settings = window.DEMO_DATA.price_settings || {
   /* why: عمود no عدد صحيح، فـ«01» و«001» و«1ب» كلها إما تصادم أو مرفوضة.
      التمييز بين الأجهزة عند الرفع فقط (قيمة no في القاعدة):
        الجهاز ١ → 1..999    الجهاز ٢ → 1001..1999    الجهاز ٣ → 2001..2999
-     أما الطباعة والعرض فدائماً رقم ثلاثي عبر displayInvoiceNo (001…). */
+     عند الاتصال الترقيم موحّد ومستمر؛ أوفلاين تُستخدم الشرائح لمنع تصادم الرفع.
+     الطباعة: displayInvoiceNo / print_no مستمر بلا أصفار بادئة. */
   window.ALFA_SLOT_SPAN = 1000;  // سعة شريحة الجهاز الواحد في اليوم
   window.ALFA_SLOT_MAX  = 9;     // عدد الأجهزة المدعومة
 
@@ -3165,24 +3201,40 @@ window.DEMO_DATA.price_settings = window.DEMO_DATA.price_settings || {
     let reserved = 0, cycle = '';
     try { reserved = Number(localStorage.getItem(key) || 0) || 0; cycle = localStorage.getItem('alfaprosys_invoice_cycle_' + today) || ''; } catch (e) {}
     let max = reserved;
-    let maxAll = 0;   // أعلى رقم في اليوم كله — يُستخدم عند تجاوز الشريحة
+    let maxAll = 0;
+    let maxInSlot = 0;
+    const span = window.ALFA_SLOT_SPAN;
+    const base = (window.alfaDeviceSlot ? window.alfaDeviceSlot() : 0) * span;
+    const online = navigator.onLine !== false && window.AlfaSB && AlfaSB.enabled && AlfaSB.enabled();
+
     (window.DEMO_DATA.invoices || []).forEach(function (i) {
       const d = i.date || (i.created_at ? window.businessDay(i.created_at) : null);
       if (d !== today) return;
       const n = Number(i.no) || 0;
       if (n > maxAll) maxAll = n;
       if ((!cycle || i.invoice_cycle === cycle) && n > max) max = n;
+      if (n >= base + 1 && n < base + span && n > maxInSlot) maxInSlot = n;
     });
     (window.DEMO_DATA.online_orders || []).forEach(function (o) {
-      if (o.date === today && Number(o.no) > maxAll) maxAll = Number(o.no);
-      if (o.date === today && Number(o.no) > max) max = Number(o.no);
+      if (o.date !== today) return;
+      const n = Number(o.no) || 0;
+      if (n > maxAll) maxAll = n;
+      if (n > max) max = n;
+      if (n >= base + 1 && n < base + span && n > maxInSlot) maxInSlot = n;
     });
 
-    const span = window.ALFA_SLOT_SPAN;
-    const base = (window.alfaDeviceSlot ? window.alfaDeviceSlot() : 0) * span;
-    let next = Math.max(max + 1, base + 1);
-    /* تجاوز الشريحة (جهاز واحد أنشأ أكثر من سعتها): خذ رقماً بعد الكل */
-    if (next >= base + span) next = Math.max(maxAll + 1, base + 1);
+    let next;
+    if (online) {
+      /* متصل: تسلسل يومي موحّد مستمر لكل الأجهزة (1،2،3…) — التمييز عند الرفع ليس ضرورياً */
+      next = Math.max(maxAll, reserved) + 1;
+      /* تجنّب القفز داخل شريحة جهاز أوفلاين أخرى إن وُجدت أرقام شرائح فقط:
+         إن كانت كل الأرقام < 1000 نتابع؛ إن وُجدت شرائح نأخذ maxAll+1 أيضاً (فريد) */
+    } else {
+      /* أوفلاين: شريحة الجهاز حتى لا يتصادم (date,no) عند الرفع لاحقاً */
+      next = Math.max(maxInSlot, base) + 1;
+      if (next < base + 1) next = base + 1;
+      if (next >= base + span) next = Math.max(maxAll + 1, base + 1);
+    }
     if (!peek) { try { localStorage.setItem(key, String(next)); } catch (e) {} }
     return next;
   };
@@ -3216,20 +3268,19 @@ window.DEMO_DATA.price_settings = window.DEMO_DATA.price_settings || {
     const today = window.businessDay();
     const span = window.ALFA_SLOT_SPAN || 1000;
     const base = (window.alfaDeviceSlot ? window.alfaDeviceSlot() : 0) * span;
-    if (navigator.onLine !== false && window.AlfaSB && AlfaSB.enabled && AlfaSB.enabled() && AlfaSB.rpc) {
+    const online = navigator.onLine !== false && window.AlfaSB && AlfaSB.enabled && AlfaSB.enabled();
+    if (online && AlfaSB.rpc) {
       let cycle = ''; try { cycle = localStorage.getItem('alfaprosys_invoice_cycle_' + today) || ''; } catch (e) {}
       return AlfaSB.rpc(cycle ? 'reserve_cycle_invoice_no' : 'reserve_invoice_no', cycle ? { p_cycle_id: cycle } : { p_business_day: today })
         .then(function (n) {
           n = Number(Array.isArray(n) ? n[0] : n);
           if (!n) throw new Error('invalid invoice number');
-          /* الخادم لا يعرف شرائح الأجهزة: قد يُعطي رقماً يقع في نطاق جهاز
-             آخر يعمل أوفلاين فيتصادمان. نرفض ما يخرج عن شريحة هذا الجهاز
-             ونستخدم الرقم المحلي الآمن بدلاً منه. */
-          if (n < base + 1 || n >= base + span) n = window.nextDailyNo();
+          /* متصل: نقبل رقم الخادم كما هو (تسلسل موحّد مستمر بين الأجهزة) */
           try { localStorage.setItem('alfaprosys_invoice_reservation_' + today, String(n)); } catch (e) {}
           return n;
         }).catch(function () { return window.nextDailyNo(); });
     }
+    /* أوفلاين: شريحة الجهاز */
     return Promise.resolve(window.nextDailyNo());
   };
   window.nextInvoiceId = function (n) {
@@ -3375,6 +3426,14 @@ window.DEMO_DATA.price_settings = window.DEMO_DATA.price_settings || {
     let __bgResolve = function () {};
     window.__ALFA_BG_P = new Promise(function (r) { __bgResolve = r; });
     const bgDone = function () {
+      try {
+        const ip = base.invoice_print_settings || (window.DEMO_DATA && DEMO_DATA.invoice_print_settings);
+        if (ip && window.alfaApplyInvoicePrint) window.alfaApplyInvoicePrint(ip);
+        const pr = base.pos_rules || (window.DEMO_DATA && DEMO_DATA.pos_rules);
+        if (pr && pr.require_shift != null) {
+          try { localStorage.setItem('alfaprosys_require_shift', pr.require_shift ? '1' : '0'); } catch (e2) {}
+        }
+      } catch (e) {}
       __bgResolve();
       try { window.dispatchEvent(new Event('alfa:cloud-ready')); } catch (e) {}
     };

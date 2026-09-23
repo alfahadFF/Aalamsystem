@@ -8,7 +8,7 @@ const DATA = window.DEMO_DATA;
 
 const orders = () => DATA.online_orders || [];
 
-/* ── الترقيم المشترك مع فواتير شاشة البيع (نظام الترقيم اليومي: 001 وتجدد 8 صباحاً) ── */
+/* ── الترقيم المشترك مع فواتير شاشة البيع (print_no مستمر بلا أصفار بادئة) ── */
 function nextInvoiceRef(){
   const today = window.businessDay ? businessDay() : '';
   const no    = 0; // يُحجز مرة واحدة داخل acceptOrder، من قاعدة البيانات عند الاتصال أو محليًا عند انقطاعه
@@ -16,9 +16,12 @@ function nextInvoiceRef(){
   return { id: today + '-' + pad, no, date: today, label: pad };
 }
 function invoiceLabelOf(o){
-  if (o && o.no != null && window.displayInvoiceNo) return displayInvoiceNo(o.no);
-  if (o && o.no != null && window.padNo) return padNo(o.no);
-  if (o && o.invoice_id && window.invoiceNo) return invoiceNo({ id: o.invoice_id });
+  /* الرقم الظاهر = print_no المستمر بلا أصفار — نفس تسلسل فواتير الكاشير */
+  if (o && window.displayInvoiceNo) {
+    if (o.print_no != null && Number(o.print_no) > 0) return displayInvoiceNo(o.print_no, o);
+    if (o.no != null) return displayInvoiceNo(o.no, o);
+  }
+  if (o && o.invoice_id && window.invoiceNo) return invoiceNo({ id: o.invoice_id, print_no: o.print_no, no: o.no });
   return (o && o.invoice_id) || '';
 }
 
@@ -107,13 +110,15 @@ async function acceptOrder(id){
   const ref = nextInvoiceRef();
   ref.no = window.reserveInvoiceNo ? await window.reserveInvoiceNo() : ref.no;
   ref.id = window.nextInvoiceId ? window.nextInvoiceId(ref.no) : ref.date + '-' + (window.padNo ? window.padNo(ref.no) : String(ref.no).padStart(3, '0'));
-  ref.label = window.displayInvoiceNo ? window.displayInvoiceNo(ref.no)
-    : (window.padNo ? window.padNo(ref.no) : String(ref.no).padStart(3, '0'));
   /* ترحيل الحالة فوراً محلياً — قبل أي سحب قد يعيد new */
   o.status = 'done';
   o.invoice_id = ref.id;
   o.no = ref.no;
   o.date = ref.date;
+  o.print_no = window.nextPrintNo ? window.nextPrintNo(false) : ref.no;
+  ref.label = window.displayInvoiceNo
+    ? window.displayInvoiceNo(o.print_no, o)
+    : String(Number(o.print_no || ref.no) || 0);
   commit();
   renderAll(); /* أخفِ الطلب من «جديدة» فوراً */
   if (window.Notify) try { Notify.check(true); } catch (e) {}
@@ -129,8 +134,9 @@ async function acceptOrder(id){
   const invoice = {
     id: ref.id,
     no: ref.no,
+    print_no: o.print_no || ref.no,
     date: ref.date,
-    queue_no: ref.no, /* الدور = رقم الفاتورة نفسه */
+    queue_no: o.print_no || ref.no, /* الدور = رقم الطباعة الظاهر */
     type: 'delivery',
     customer_name: (o.customer && o.customer.name) || '',
     phone: (o.customer && o.customer.phone) || '',
@@ -256,7 +262,21 @@ function demoIncoming(){
   if (window.Notify) Notify.check(false);
 }
 
+function applyCloudPrintDesign(){
+  try {
+    const ip = (window.DEMO_DATA && DEMO_DATA.invoice_print_settings) || null;
+    if (ip && window.alfaApplyInvoicePrint) window.alfaApplyInvoicePrint(ip);
+  } catch (e) {}
+}
+if (typeof window !== 'undefined' && window.addEventListener) {
+  window.addEventListener('alfa:cloud-ready', function () {
+    applyCloudPrintDesign();
+    try { renderAll(); } catch (e) {}
+  });
+}
+
 (window.alfaStart||function(fn){fn();})(function () {
+  applyCloudPrintDesign();
   renderAll();
   /* تُتيح للنافذة الأم (نقطة البيع) حقن الطلبات الجاهزة وإعادة
      الرسم، لأن الإطار يعيد السحب من الصفر فيعرض صفراً لثوانٍ. */

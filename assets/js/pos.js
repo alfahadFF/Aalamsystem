@@ -440,11 +440,10 @@ document.addEventListener('keydown', function (e) {
 
 /* رقم الفاتورة القادم (نظام الترقيم اليومي: يبدأ 001 ويتجدد 8 صباحاً) */
 function nextInvoiceLabel() {
-  /* نظرة فقط — لا تحجز رقماً، وإلا استُهلك رقم عند كل رسم للشاشة.
-     العرض ثلاثي 001 حتى لو شريحة الجهاز 1001+ (التمييز عند الرفع فقط). */
+  /* نظرة فقط — رقم الطباعة المستمر القادم بلا أصفار بادئة */
+  if (window.nextPrintNo) return String(window.nextPrintNo(true));
   if (window.nextDailyNo && window.displayInvoiceNo) return window.displayInvoiceNo(window.nextDailyNo(true));
-  if (window.nextDailyNo && window.padNo) return window.padNo(window.nextDailyNo(true));
-  return '001';
+  return '1';
 }
 function posModeLabel() {
   const m = POS_MODES.find(x => x.id === displayMode);
@@ -2286,7 +2285,14 @@ function removeFromCart(id){
 function updateItemNote(id,note){ const row=cart.find(c=>c.id===id); if(row && !row.locked) row.note=note; }
 function changeQty(id,d){ const row=cart.find(c=>c.id===id); if(!row) return; if(row.locked) return showToast('🔒 العرض ثابت — يمكن الإضافة عليه فقط','⚠️'); row.qty+=d; if(row.qty<=0) cart=cart.filter(c=>c.id!==id); if (!updateCartPanel([id])) renderPOS(); }
 function clearCart(){ cart=[]; orderServices = { table: 0, delivery: 0 }; renderPOS(); }
-function requireShiftOn(){ return localStorage.getItem('alfaprosys_require_shift') === '1'; }
+function requireShiftOn(){
+  /* السحابة أولاً (pos_rules) — ثم مرآة localStorage التي يحدّثها السحب */
+  try {
+    const r = (window.DEMO_DATA && DEMO_DATA.pos_rules) || null;
+    if (r && r.require_shift != null) return !!r.require_shift;
+  } catch (e) {}
+  return localStorage.getItem('alfaprosys_require_shift') === '1';
+}
 function shiftClosedBlocked(){ return requireShiftOn() && !(DATA.cashierSession && DATA.cashierSession.shift_open); }
 function shiftBanner(){
   if (!shiftClosedBlocked()) return '';
@@ -2335,6 +2341,14 @@ async function submitOrder(){
     // تم حجز invNo أعلاه؛ لا تستدعِ nextInvoiceId هنا حتى لا يُحجز رقم ثانٍ.
     id: window.nextInvoiceId ? nextInvoiceId(invNo) : (invDate + '-' + String(invNo).padStart(3, '0')),
     no: invNo,
+    print_no: (function () {
+      /* متصل: no من الخادم متسلسل → نفس الرقم للطباعة.
+         أوفلاين/شريحة: nextPrintNo يكمل تسلسل الطباعة من السحابة دون إعادة العد. */
+      const p = window.nextPrintNo ? window.nextPrintNo(false) : invNo;
+      const n = Number(invNo) || 0;
+      if (n > 0 && n < 1000) return Math.max(p, n); /* تزامن مع no اليومي */
+      return p;
+    })(),
     draw_code: drawCode,
     invoice_cycle: (function(){ try { return localStorage.getItem('alfaprosys_invoice_cycle_' + invDate) || 'legacy'; } catch(e){ return 'legacy'; } })(),
     date: invDate,
@@ -2392,7 +2406,7 @@ async function submitOrder(){
       weight_label: c.weight_label || ''
     })).concat((serviceSelected.table ? [{id:'service_table', name:'خدمة طاولة', qty:1, price:svcT, total:svcT, note:'', is_service:true}] : []), (serviceSelected.delivery ? [{id:'service_delivery', name:'خدمة توصيل', qty:1, price:svcD, total:svcD, note:'', is_service:true}] : [])), 
   };
-  if(orderType==='takeaway' || orderType==='delivery') inv.queue_no = invNo; // الدور = رقم الفاتورة نفسه
+  if(orderType==='takeaway' || orderType==='delivery') inv.queue_no = inv.print_no || invNo; // الدور = رقم الطباعة الظاهر
   DATA.invoices = [inv, ...(DATA.invoices||[])];
   if (window.InvoiceSync) InvoiceSync.pushSoon(inv);
   // ── إنشاء/تحديث العميل تلقائياً + ترحيل الذمم والدفعات ──
@@ -2457,8 +2471,10 @@ async function submitOrder(){
   }
   // ربط المخزون تلقائياً: خصم المكونات حسب الوصفة
   if (window.deductStockForSale) deductStockForSale(inv.items);
-  const _lbl = window.displayInvoiceNo ? displayInvoiceNo(invNo)
-    : (window.padNo ? padNo(invNo) : String(invNo));
+  const _lbl = (inv && inv.print_no != null && window.displayInvoiceNo)
+    ? displayInvoiceNo(inv.print_no, inv)
+    : (window.displayInvoiceNo ? displayInvoiceNo(invNo, inv)
+    : (window.padNo ? padNo(invNo) : String(invNo)));
   showToast(orderType==='takeaway' || orderType==='delivery'
     ? `فاتورة ${_lbl} · دورك ${_lbl} → المطبخ`
     : `فاتورة ${_lbl} → المطبخ`,'🍳');
@@ -2585,6 +2601,13 @@ function updateContractList() {
 if (typeof window !== 'undefined' && window.addEventListener) {
   window.addEventListener('alfa:cloud-ready', function () {
     try {
+      /* طبّق تصميم الفاتورة من السحابة قبل أي طباعة على الكاشير */
+      const ip = (window.DEMO_DATA && DEMO_DATA.invoice_print_settings) || null;
+      if (ip && window.alfaApplyInvoicePrint) window.alfaApplyInvoicePrint(ip);
+      const pr = (window.DEMO_DATA && DEMO_DATA.pos_rules) || null;
+      if (pr && pr.require_shift != null) {
+        try { localStorage.setItem('alfaprosys_require_shift', pr.require_shift ? '1' : '0'); } catch (e2) {}
+      }
       const a = document.activeElement;
       if (a && (a.tagName === 'INPUT' || a.tagName === 'TEXTAREA')) return;
       renderPOS();
