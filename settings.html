@@ -32,29 +32,24 @@
 
     <main class="mgr-content" id="mainContent">
 
-      <!-- ═══ الخصم ═══ -->
-            <!-- ═══ هوية المطعم ═══ -->
-      <section class="set-card" id="brandingCard">
+      <!-- ═══ تصميم الفاتورة الحرارية — مودال معاينة فورية ═══ -->
+      <section class="set-card" id="invoiceDesignCard">
         <div class="set-card-head">
           <div>
-            <h2>🏪 هوية المطعم</h2>
-            <p>الاسم والعنوان والهاتف تظهر على الإيصالات الحرارية ورؤوس الطباعة — وتُطبق فوراً على كل الشاشات</p>
+            <h2>🧾 تصميم الفاتورة الحرارية</h2>
+            <p>هوية المطعم وترويسة/تذييل الإيصال — تُضبط مرة في السحابة وتُطبَّق على كل الأجهزة. لا إعدادات طباعة على الكاشير.</p>
           </div>
         </div>
         <div class="set-block">
-          <div class="set-add-row">
-            <input type="text" id="brandName" placeholder="اسم المطعم (مثال: مطعم الفهد)">
-            <input type="text" id="brandAddress" placeholder="العنوان (اختياري)">
-            <input type="text" id="brandPhone" placeholder="هاتف (اختياري)">
-          </div>
-          <div class="set-add-row">
-            <input type="text" id="brandFooter" placeholder="سطر ذيل الفاتورة (شكراً لزيارتكم...)">
-            <button class="set-btn primary" onclick="saveBranding()">💾 حفظ الهوية</button>
+          <div class="set-design-summary" id="printDesignSummary">جارٍ التحميل…</div>
+          <div class="set-actions">
+            <button class="set-btn primary" type="button" onclick="openPrintDesignModal()">✏️ فتح محرّر الفاتورة والمعاينة</button>
           </div>
         </div>
       </section>
 
-<section class="set-card" id="discountCard">
+      <!-- ═══ الخصم ═══ -->
+      <section class="set-card" id="discountCard">
         <div class="set-card-head">
           <div>
             <h2>💸 الخصم</h2>
@@ -120,7 +115,7 @@
         <div class="set-card-head">
           <div>
             <h2>⚙️ قواعد البيع</h2>
-            <p>ضوابط إلزامية على شاشة الكاشير</p>
+            <p>ضوابط إلزامية على شاشة الكاشير — تُحفظ في السحابة وتعمّ كل الأجهزة</p>
           </div>
         </div>
         <div class="set-block">
@@ -185,7 +180,7 @@
               <option value="500">أقرب 500 ل.س</option>
               <option value="1000">أقرب 1,000 ل.س</option>
             </select>
-            <small class="set-round-hint">مثال: ٩,٥٨٣ ← ٩,٥٠٠ أو ١٠,٠٠٠ — تظهر نتيجتها في المعاينة قبل الموافقة</small>
+            <small class="set-round-hint">مثال: ٩,٥٨٣ ← ٩,٥٠٠ أو ١٠,٠٠٠ — تظهر نتيجتها في المعاينة قبل الموافقة. يُحفظ مع إعدادات الأسعار في السحابة.</small>
           </div>
 
           <div class="set-actions">
@@ -195,41 +190,9 @@
         </div>
       </section>
 
-
-      <!-- ═══ الطلبات الأونلاين — كان الرابط مقفولاً داخل config.js ═══ -->
-      <section class="set-card" id="onlineOrdersCard">
-        <div class="set-card-head">
-          <div>
-            <h2>🌐 الطلبات الأونلاين</h2>
-            <p>رابط مصدر الطلبات — كان مقفولاً داخل ملف الكود ولا يمكن تغييره إلا بتحريره. الآن يُحفظ في قاعدة البيانات وينسخ لكل الأجهزة.</p>
-          </div>
-        </div>
-        <div class="set-block">
-          <div class="set-add-row">
-            <input id="ooEndpoint" type="url" dir="ltr" placeholder="https://…/orders">
-            <input id="ooPin" type="text" inputmode="numeric" placeholder="الرقم السري (pin)">
-          </div>
-          <small class="set-round-hint">اترك الرابط فارغاً للعمل على البيانات المحلية (الوضع التجريبي).</small>
-          <div class="set-actions">
-            <button class="set-btn primary" onclick="saveOnlineOrdersSettings()">💾 حفظ إعدادات الطلبات</button>
-            <button class="set-btn" onclick="testOnlineOrdersEndpoint()">🔌 اختبار الاتصال</button>
-            <span id="ooStatus" class="set-link"></span>
-          </div>
-        </div>
-      </section>
-
       <section class="set-card" style="border:1px solid #f59e0b;">
-        <div class="set-card-head"><div><h2>🔢 إعادة ترقيم الفواتير</h2><p>يبدأ الرقم التالي من 001 دون تغيير الفواتير القديمة</p></div></div>
+        <div class="set-card-head"><div><h2>🔢 إعادة ترقيم الفواتير</h2><p>يبدأ الرقم الظاهر التالي من 1 دون تغيير الفواتير القديمة — تسلسل مستمر بلا أصفار بادئة (1، 2، 15…)</p></div></div>
         <button class="set-btn" onclick="resetInvoiceSequenceAdmin()">إعادة البدء من الرقم 1</button>
-      </section>
-
-      <!-- ═══ تخصيص ترويسة وتذييل الفاتورة — الجدول ثابت ═══ -->
-      <section class="set-card" id="invoicePrintCard">
-        <div class="set-card-head"><div><h2>🧾 تخصيص ترويسة وتذييل الفاتورة</h2><p>تعديل العناصر المحيطة بالفاتورة فقط — جدول الأصناف والمجموع ثابتان</p></div></div>
-        <div class="set-block"><h3>الترويسة</h3><div class="set-add-row"><input id="printRestaurantName" placeholder="اسم المطعم"><input id="printRestaurantNameSize" type="number" min="12" max="32" step="0.5" placeholder="حجم خط الاسم"></div><div class="set-add-row"><input id="printDescription" placeholder="الوصف أو الهاتف"><input id="printDescriptionSize" type="number" min="9" max="24" step="0.5" placeholder="حجم خط الوصف"></div><div class="set-add-row"><input id="printAddress" placeholder="العنوان"><input id="printAddressSize" type="number" min="9" max="24" step="0.5" placeholder="حجم خط العنوان"></div><div class="set-add-row"><input id="printLogoFile" type="file" accept="image/png,image/jpeg,image/webp"><label class="set-check"><input id="printShowLogo" type="checkbox"> إظهار اللوغو</label><button class="set-btn" type="button" onclick="saveInvoicePrintSettings()">💾 حفظ إعدادات الفاتورة</button></div></div>
-        <div class="set-block"><h3>أحجام عناصر الترويسة</h3><div class="set-add-row"><label>رقم الطلب <input id="printOrderNoSize" type="number" min="12" max="32" step="0.5"></label><label>التاريخ <input id="printDateSize" type="number" min="9" max="24" step="0.5"></label><label>العميل <input id="printCustomerSize" type="number" min="9" max="24" step="0.5"></label><label>ملاحظات الطلب <input id="printOrderNotesSize" type="number" min="9" max="24" step="0.5"></label><label>جدول الأصناف <input id="printItemsSize" type="number" min="8" max="20" step="0.5"></label></div><p class="set-hint">«جدول الأصناف» يضبط حجم الخط داخل الجدول فقط — عرض الأعمدة والجدران والمخطط ثابتة لا تتأثر.</p></div>
-        <div class="set-block"><h3>التذييل</h3><div class="set-add-row"><input id="printFooterTitle" placeholder="عنوان التذييل"><input id="printFooterTitleSize" type="number" min="9" max="24" step="0.5"></div><div class="set-add-row"><input id="printThankYou" placeholder="رسالة الشكر"><input id="printThankYouSize" type="number" min="9" max="28" step="0.5"></div><div class="set-add-row"><input id="printQrFile" type="file" accept="image/png,image/jpeg,image/webp"><label class="set-check"><input id="printShowQr" type="checkbox"> إظهار QR</label><button class="set-btn" type="button" onclick="resetInvoicePrintSettings()">استعادة الافتراضي</button></div></div>
-        <p class="set-hint">اللوغو وQR صور جاهزة فقط، ولا يتم توليد QR. لا يمكن تعديل جدول الأصناف أو جدول المجموع من هنا.</p>
       </section>
 
     </main>
@@ -244,6 +207,31 @@
   <div class="set-modal-scrim" id="priceModalScrim" onclick="closePricePreview()"></div>
   <div class="set-modal" id="priceModal" role="dialog" aria-label="تأكيد تحديث الأسعار"></div>
 
+  <!-- مودال تصميم الفاتورة + معاينة فورية -->
+  <div class="set-modal-scrim" id="printDesignScrim" onclick="closePrintDesignModal()"></div>
+  <div class="set-modal set-print-modal" id="printDesignModal" role="dialog" aria-label="تصميم الفاتورة الحرارية">
+    <div class="set-modal-head">
+      <strong>🧾 تصميم الفاتورة — تعديل ومعاينة فورية</strong>
+      <button type="button" onclick="closePrintDesignModal()" title="إغلاق">✕</button>
+    </div>
+    <div class="set-print-modal-body">
+      <div class="set-print-controls" id="printDesignControls">
+        <!-- يُملأ من settings.js -->
+      </div>
+      <div class="set-print-preview-pane">
+        <div class="set-print-preview-label">معاينة فورية — 80مم</div>
+        <div class="set-print-preview-scroll">
+          <div id="printLivePreview" class="set-print-preview-paper"></div>
+        </div>
+      </div>
+    </div>
+    <div class="set-modal-actions">
+      <button class="set-btn" type="button" onclick="resetPrintDesignDraft()">استعادة الافتراضي</button>
+      <button class="set-btn" type="button" onclick="closePrintDesignModal()">إلغاء</button>
+      <button class="set-btn primary" type="button" id="printDesignSaveBtn" onclick="savePrintDesignModal()">💾 حفظ في السحابة</button>
+    </div>
+  </div>
+
   <div class="toast" id="toast"></div>
 
   <script src="assets/js/config.js"></script>
@@ -256,6 +244,7 @@
   <script src="assets/js/data.js"></script>
   <script src="assets/js/db.js"></script>
   <script src="assets/js/stock.js"></script>
+  <script src="assets/js/thermal.js"></script>
   <script src="assets/js/nav.js"></script>
   <script src="assets/js/settings.js"></script>
 </body>
