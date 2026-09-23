@@ -27,6 +27,41 @@
 .mgr-sidebar { display: none; }
 
 /* ================================================================
+   هيكل شاشات الإدارة (settings / dashboard / …)
+   على الجوال: تمرير الصفحة (body).
+   على الديسكتوب (≥900px): flex + تمرير داخل .mgr-content.
+   ================================================================ */
+.mgr-main {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+.mgr-topbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: calc(10px + var(--safe-top)) 14px 10px;
+  background: rgba(255, 255, 255, 0.96);
+  border-bottom: 1px solid var(--line);
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  box-sizing: border-box;
+}
+.mgr-topbar-title {
+  flex: 1;
+  margin: 0;
+  font-size: 16px;
+  font-weight: 900;
+  color: var(--fahad-navy);
+}
+.mgr-content {
+  width: 100%;
+  padding: 14px 14px calc(88px + var(--safe-bottom));
+  box-sizing: border-box;
+}
+
+/* ================================================================
    منطقة المحتوى
    ================================================================ */
 .mgr-content-panel {
@@ -223,6 +258,7 @@
   html:has(body.mgr-body),
   body.mgr-body {
     height: 100%;
+    max-height: 100svh;
     overflow: hidden;
   }
   body.mgr-body {
@@ -230,21 +266,31 @@
     flex-direction: row;
     align-items: stretch;
   }
+  /* عمود رئيسي مرن: الشريط العلوي ثابت + المحتوى يتمرّر
+     (بدون display:flex هنا كان overflow:hidden يقصّ الصفحة بلا تمرير) */
   .mgr-main {
+    display: flex;
+    flex-direction: column;
     flex: 1;
     min-width: 0;
     min-height: 0;
     height: 100svh;
+    max-height: 100svh;
     overflow: hidden;
   }
   .mgr-topbar {
+    flex-shrink: 0;
     padding: 10px 18px;
   }
   .mgr-topbar .mgr-fab { display: none !important; }
   .mgr-content {
-    flex: 1;
+    flex: 1 1 auto;
     min-height: 0;
-    overflow: auto;
+    height: auto;
+    overflow-x: hidden;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
     padding: 18px 20px 30px;
   }
 
@@ -994,7 +1040,7 @@
 .set-link { font-size: 12px; font-weight: 800; color: var(--fahad-blue-deep); text-decoration: none; }
 .set-link:hover { text-decoration: underline; }
 
-/* نافذة تأكيد تحديث الأسعار */
+/* نافذة تأكيد تحديث الأسعار + مودال تصميم الفاتورة */
 .set-modal-scrim {
   position: fixed; inset: 0; background: rgba(15, 23, 42, 0.5);
   z-index: 90; opacity: 0; pointer-events: none; transition: .18s;
@@ -1011,6 +1057,161 @@
   opacity: 0; pointer-events: none; transition: .2s;
 }
 .set-modal.open { opacity: 1; pointer-events: auto; transform: translate(-50%, -50%) scale(1); }
+
+/* مودال تصميم الفاتورة — لوحتان: تحكم + معاينة */
+.set-modal.set-print-modal {
+  width: min(980px, calc(100vw - 20px));
+  max-height: 92vh;
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  overflow: hidden;
+}
+.set-modal.set-print-modal .set-modal-head { flex-shrink: 0; }
+.set-modal.set-print-modal .set-modal-actions { flex-shrink: 0; }
+.set-print-modal-body {
+  display: grid;
+  grid-template-columns: minmax(280px, 1fr) minmax(260px, 340px);
+  gap: 0;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  border-bottom: 1.5px solid var(--line);
+}
+.set-print-controls {
+  overflow-y: auto;
+  max-height: calc(92vh - 120px);
+  padding: 12px 14px 18px;
+  border-inline-end: 1.5px solid var(--line);
+}
+.set-print-preview-pane {
+  display: flex;
+  flex-direction: column;
+  background: #e8edf3;
+  min-height: 0;
+  overflow: hidden;
+}
+.set-print-preview-label {
+  flex-shrink: 0;
+  padding: 8px 12px;
+  font-size: 11.5px;
+  font-weight: 900;
+  color: var(--fahad-navy);
+  background: var(--card-subtle);
+  border-bottom: 1px solid var(--line);
+  text-align: center;
+}
+.set-print-preview-scroll {
+  flex: 1;
+  overflow: auto;
+  padding: 14px 10px 24px;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+}
+.set-print-preview-paper {
+  background: #fff;
+  box-shadow: 0 8px 28px rgba(15, 23, 42, 0.18);
+  border-radius: 4px;
+  /* عرض تقريبي 80مم على الشاشة */
+  width: 302px;
+  max-width: 100%;
+  overflow: hidden;
+}
+.set-print-preview-paper > div {
+  /* الإيصال نفسه يضبط العرض بـ mm — نتركه */
+}
+.set-design-summary {
+  background: var(--card-subtle);
+  border-radius: 10px;
+  padding: 12px 14px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-main);
+  line-height: 1.55;
+  margin-bottom: 4px;
+}
+.set-sum-sep { color: var(--text-muted); font-weight: 500; margin: 0 4px; }
+.set-pd-section {
+  border-top: 1px dashed var(--line);
+  padding-top: 12px;
+  margin-top: 12px;
+}
+.set-pd-section:first-child { border-top: 0; margin-top: 0; padding-top: 0; }
+.set-pd-section h3 {
+  font-size: 12.5px;
+  font-weight: 900;
+  color: var(--fahad-navy);
+  margin: 0 0 10px;
+}
+.set-pd-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 11.5px;
+  font-weight: 800;
+  color: var(--text-muted);
+  margin-bottom: 8px;
+  flex: 1;
+  min-width: 100px;
+}
+.set-pd-field input[type="text"],
+.set-pd-field input[type="number"],
+.set-pd-field input[type="file"],
+.set-pd-field select {
+  border: 1.5px solid var(--line);
+  border-radius: 9px;
+  padding: 8px 10px;
+  font-size: 13px;
+  font-weight: 700;
+  background: var(--surface);
+  color: var(--text-main);
+  font-family: inherit;
+  outline: none;
+  width: 100%;
+  box-sizing: border-box;
+}
+.set-pd-field input:focus,
+.set-pd-field select:focus { border-color: var(--fahad-blue); }
+.set-pd-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.set-pd-toggles {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px 10px;
+}
+.set-pd-toggle {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12.5px;
+  font-weight: 800;
+  color: var(--text-main);
+  cursor: pointer;
+  padding: 6px 8px;
+  border-radius: 8px;
+  background: var(--card-subtle);
+  border: 1px solid var(--line);
+}
+.set-pd-toggle input { accent-color: var(--fahad-blue); width: 16px; height: 16px; }
+.set-hint { font-size: 11.5px; color: var(--text-muted); font-weight: 700; }
+@media (max-width: 720px) {
+  .set-print-modal-body {
+    grid-template-columns: 1fr;
+    overflow-y: auto;
+    max-height: calc(92vh - 110px);
+  }
+  .set-print-controls {
+    max-height: none;
+    border-inline-end: 0;
+    border-bottom: 1.5px solid var(--line);
+  }
+  .set-print-preview-pane { min-height: 280px; }
+  .set-pd-toggles { grid-template-columns: 1fr; }
+}
 .set-modal-head {
   display: flex; align-items: center; justify-content: space-between;
   padding: 14px 16px; border-bottom: 1.5px solid var(--line);
@@ -1033,11 +1234,9 @@
   display: flex; gap: 8px; justify-content: flex-start;
   padding: 12px 16px; border-top: 1.5px solid var(--line);
 }
-review-table .more { text-align: center; color: var(--text-muted); font-size: 11.5px; }
-.set-modal-actions {
-  display: flex; gap: 8px; justify-content: flex-start;
-  padding: 12px 16px; border-top: 1.5px solid var(--line);
-}
+/* مودال التصميم فوق نوافذ الأسعار */
+#printDesignScrim.show { z-index: 110; }
+#printDesignModal.open { z-index: 115; }
 
 /* تحسين شاشات الإدارة: قراءة أوضح وطباعة نظيفة */
 .mgr-shell, .mgr-shell input, .mgr-shell select, .mgr-shell textarea, .mgr-shell button {
@@ -1055,8 +1254,14 @@ review-table .more { text-align: center; color: var(--text-muted); font-size: 11
 /* منع بقاء طبقات النوافذ فوق شاشات الإدارة بعد الإغلاق */
 .mgr-nav-scrim:not(.show), .sales-modal-scrim:not(.show), .con-modal-scrim:not(.show), .con-picker-scrim:not(.show),
 .emp-modal-scrim:not(.show), .inv-modal-scrim:not(.show), .cust-modal-scrim:not(.show),
-.cr-modal-scrim:not(.show), .exp-modal-scrim:not(.show), .menu-modal-scrim:not(.show) {
+.cr-modal-scrim:not(.show), .exp-modal-scrim:not(.show), .menu-modal-scrim:not(.show),
+.set-modal-scrim:not(.show) {
   display:none !important; opacity:0 !important; pointer-events:none !important;
+}
+/* مودال مغلق لا يعترض العجلة/اللمس */
+.set-modal:not(.open) {
+  display: none !important;
+  pointer-events: none !important;
 }
 @media print {
   .mgr-shell * { color-adjust: exact; -webkit-print-color-adjust: exact; }
