@@ -414,3 +414,93 @@
   .rpt-table th, .rpt-table td { padding: 8px; }
   .rpt-card { padding: 12px; }
 }
+
+/* ══════════════════════════════════════════════════════════════════
+   مستند الطباعة / التصدير  (#rptPrintDoc)
+   ------------------------------------------------------------------
+   كان زر الطباعة يستدعي window.print() على الصفحة نفسها، فتخرج
+   «صورة من الشاشة»: بطاقات ملوّنة وظلال ورسوم بيانية وأزرار.
+   الآن تُبنى نسخة ورقية نظيفة مقاس A4 بترويسة رسمية من نفس بيانات
+   التبويب المعروض، وهي وحدها التي تُطبع.
+   ══════════════════════════════════════════════════════════════════ */
+
+/* على الشاشة: مخفي تماماً */
+#rptPrintDoc { display: none; }
+
+@media print {
+  /* كل واجهة الصفحة تُخفى، ويبقى المستند فقط */
+  body > *:not(#rptPrintDoc) { display: none !important; }
+  #rptPrintDoc { display: block !important; }
+
+  html, body {
+    background: #fff !important;
+    margin: 0 !important; padding: 0 !important;
+    width: 100% !important;
+    font-family: 'Changa', system-ui, 'Segoe UI', sans-serif;
+  }
+
+  /* ── الترويسة ── */
+  .rd-head {
+    border-bottom: 3px solid #102A43;
+    padding-bottom: 3mm; margin-bottom: 5mm;
+  }
+  .rd-brand {
+    font-size: 12pt; font-weight: 800; color: #2F6FB5;
+    display: flex; align-items: center; gap: 2mm;
+  }
+  .rd-title {
+    font-size: 17pt; font-weight: 900; color: #102A43;
+    margin: 1mm 0 0;
+  }
+  .rd-meta {
+    display: flex; justify-content: space-between; gap: 4mm;
+    font-size: 8.5pt; font-weight: 700; color: #5A6B7B;
+    margin-top: 2mm;
+  }
+
+  /* ── الأقسام ── */
+  .rd-sec { margin-bottom: 6mm; break-inside: avoid; }
+  .rd-h {
+    font-size: 10.5pt; font-weight: 800; color: #fff;
+    background: #102A43; padding: 1.8mm 3mm; margin: 0 0 0;
+    border-radius: 1mm 1mm 0 0;
+  }
+
+  /* ── الجدول ── */
+  .rd-table {
+    width: 100% !important; border-collapse: collapse !important;
+    font-size: 9pt; direction: rtl;
+  }
+  .rd-table th {
+    background: #2F6FB5 !important; color: #fff !important;
+    font-weight: 800; padding: 1.8mm 2.5mm;
+    border: 1px solid #102A43 !important; text-align: right;
+    -webkit-print-color-adjust: exact; color-adjust: exact;
+  }
+  .rd-table td {
+    padding: 1.6mm 2.5mm;
+    border: 1px solid #B9C6D2 !important;
+    color: #102A43;
+  }
+  .rd-table tbody tr:nth-child(even) td {
+    background: #F2F6FA !important;
+    -webkit-print-color-adjust: exact; color-adjust: exact;
+  }
+  .rd-num { text-align: left; direction: ltr; font-variant-numeric: tabular-nums; }
+
+  /* صف الإجمالي */
+  .rd-table tfoot td {
+    font-weight: 900 !important;
+    background: #E4EDF6 !important;
+    border-top: 2px solid #102A43 !important;
+    -webkit-print-color-adjust: exact; color-adjust: exact;
+  }
+
+  .rd-empty { font-size: 11pt; font-weight: 700; color: #5A6B7B; }
+
+  /* ── التذييل ── */
+  .rd-foot {
+    border-top: 1px solid #B9C6D2; margin-top: 5mm; padding-top: 2mm;
+    font-size: 7.5pt; font-weight: 700; color: #7A8B9B; text-align: center;
+  }
+}

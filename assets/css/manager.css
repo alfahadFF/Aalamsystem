@@ -149,8 +149,8 @@
   border: 1px solid var(--line-strong);
   border-radius: 20px;
   box-shadow: 0 -4px 30px rgba(15,23,42,.18);
-  
-  -webkit-
+
+  /* تصحيح: كان السطر الناقص "-webkit-" يبتلع تعريف padding */
   padding: 12px;
   /* مخفي افتراضياً */
   opacity: 0;
@@ -839,9 +839,11 @@
   box-shadow: 0 -6px 30px rgba(15,23,42,.15);
   max-height: 88svh; overflow-y: auto;
   transform: translateY(100%);
-  transition: transform .22s ease;
+  /* المودال المغلق لا يجب أن يبتلع النقرات */
+  pointer-events: none;
+  transition: transform .22s ease, visibility .22s ease;
 }
-.sales-modal.show { transform: translateY(0); }
+.sales-modal.show { transform: translateY(0); pointer-events: auto; }
 
 @media (min-width: 580px) {
   .sales-modal {
@@ -850,11 +852,14 @@
     width: min(96vw, 480px);
     border-radius: 18px;
     max-height: 92svh;
+    /* opacity:0 لا يوقف النقرات — نحتاج visibility أيضاً */
     opacity: 0;
+    visibility: hidden;
   }
   .sales-modal.show {
     transform: translate(-50%, -50%) scale(1);
     opacity: 1;
+    visibility: visible;
   }
 }
 

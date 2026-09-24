@@ -275,8 +275,8 @@
 .menu-modal-scrim {
   position: fixed; inset: 0; z-index: 70;
   background: transparent;
-   -webkit-
-  opacity: 0; pointer-events: none; transition: opacity .18s;
+  /* تصحيح: كان السطر الناقص "-webkit-" يبتلع تعريف opacity */
+  opacity: 0; visibility: hidden; pointer-events: none; transition: opacity .18s, visibility .18s;
 }
 .menu-modal-scrim.show { opacity: 1; pointer-events: auto; }
 
@@ -291,9 +291,11 @@
   max-height: 92svh;
   overflow-y: auto;
   transform: translateY(100%);
-  transition: transform .15s ease;
+  /* المودال المغلق لا يجب أن يبتلع النقرات */
+  pointer-events: none;
+  transition: transform .15s ease, visibility .15s ease;
 }
-.menu-modal.show { transform: translateY(0); }
+.menu-modal.show { transform: translateY(0); pointer-events: auto; }
 
 @media (min-width: 580px) {
   .menu-modal {
@@ -302,9 +304,11 @@
     width: min(96vw, 500px);
     border-radius: 18px;
     max-height: 94svh;
+    /* opacity:0 لا يوقف النقرات — نحتاج visibility أيضاً */
     opacity: 0;
+    visibility: hidden;
   }
-  .menu-modal.show { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+  .menu-modal.show { transform: translate(-50%, -50%) scale(1); opacity: 1; visibility: visible; }
 }
 
 .menu-modal-head {
