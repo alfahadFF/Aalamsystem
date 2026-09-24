@@ -82,10 +82,18 @@ window.AlfaSB = (function () {
   /* مهلة كل طلب (وضع سوريا): الطلب المعلق يُجهض بدل التكدس — تُضبط عبر AlfaSB.timeoutMs */
   function rfetch(url, opts) {
     const ms = Number((window.AlfaSB && window.AlfaSB.timeoutMs) || 15000);
-    if (typeof AbortController === 'undefined') return fetch(url, opts);
+    /* ── منع التخزين المؤقت للمتصفح ──────────────────────────────────
+       سيرفر Supabase لا يُرسل ترويسة Cache-Control، فيطبّق المتصفح
+       تخزيناً تقديرياً: يعيد الرد القديم نفسه من ذاكرته دون أن يسأل
+       السيرفر. النتيجة: بعد حفظ إعدادات الطباعة، تعيد الصفحة تحميلها
+       فتقرأ نسخةً قديمة من ذاكرة المتصفح وتكتبها فوق الجديدة — فيبدو
+       للمستخدم أن «التغييرات لا تُحفظ». الخيار cache:'no-store' يُلزم
+       المتصفح بسؤال السيرفر في كل مرة (وهو خيارٌ للطلب لا ترويسة،
+       فلا يُطلق طلب CORS مسبق). ────────────────────────────────────── */
+    const o = Object.assign({}, opts || {}, { cache: 'no-store' });
+    if (typeof AbortController === 'undefined') return fetch(url, o);
     const ctrl = new AbortController();
     const t = setTimeout(function () { try { ctrl.abort(); } catch (e) {} }, ms);
-    const o = opts || {};
     o.signal = ctrl.signal;
     return fetch(url, o).then(function (res) { clearTimeout(t); return res; },
       function (err) {
