@@ -38,6 +38,7 @@ let assignModal    = null;        // { invoiceId } — مودال الإسناد
 let feedbackModal  = null;        // { invoiceId } — مودال ملاحظة العميل
 let trackModal     = null;        // invoiceId — مودال التتبع
 let agentFormModal = false;
+let settleModal    = null;        // { agentId, name, total, fees } — مودال المحاسبة
 let role           = '';
 
 /* ── حالة التوصيل ── */
@@ -161,6 +162,8 @@ function renderApp() {
     <!-- مودال التتبع -->
     ${trackModal ? renderTrackModal() : ''}
     ${agentFormModal ? renderAgentFormModal() : ''}
+    <!-- مودال المحاسبة -->
+    ${settleModal ? renderSettleModal() : ''}
   `;
 
   renderTabContent();
@@ -853,26 +856,111 @@ function doCopyLink() {
   }
 }
 
+function escHtml(v) {
+  return String(v == null ? '' : v).replace(/[&<>"']/g, function (c) {
+    return { '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c];
+  });
+}
+function numEn(n) { return Number(n || 0).toLocaleString('en-US'); }
+
+/* قالب الكشف مهيّأ لورق 72مم (الطابعة الحرارية) */
+function agentStatementHtml(agent, invs, total, fees) {
+  const now = new Date();
+  const dStr = now.toLocaleDateString('ar');
+  const tStr = now.toLocaleTimeString('ar', { hour: '2-digit', minute: '2-digit' });
+  const cfg = window.ALFA_CONFIG || {};
+  const restName = (cfg.thermal && cfg.thermal.restaurantName) || cfg.restaurantName || '';
+  const net = total - fees;
+
+  const rows = invs.length
+    ? invs.map(function (i) {
+        const info = i.delivery_info || {};
+        const fee = Number(info.fee || 0);
+        return `<div style="border-bottom:1px dashed #000;padding:3px 0;">
+          <div style="font-size:12px;font-weight:900;">#${escHtml(i.id)} · ${escHtml(i.customer_name || '—')}</div>
+          <div style="font-size:11px;">المبلغ: ${numEn(i.total || 0)}${fee > 0 ? ' · الرسوم: ' + numEn(fee) : ''}${info.status ? ' · ' + escHtml(info.status) : ''}</div>
+        </div>`;
+      }).join('')
+    : '<div style="padding:6px 0;font-size:11px;">لا توجد طلبات</div>';
+
+  return `<div style="width:72mm;max-width:72mm;margin:0 auto;padding:0;font-family:Tahoma,Arial,sans-serif;color:#000;direction:rtl;text-align:right;background:#fff;line-height:1.35;">
+    ${restName ? `<div style="font-size:16px;font-weight:900;text-align:center;">${escHtml(restName)}</div>` : ''}
+    <div style="font-size:13px;font-weight:900;text-align:center;margin:2mm 0;">كشف محاسبة توصيل</div>
+    <div style="font-size:11.5px;font-weight:800;">العامل/الشركة: ${escHtml(agent.name)}</div>
+    <div style="font-size:11px;">التاريخ: ${escHtml(dStr)} — ${escHtml(tStr)}</div>
+    <div style="border-top:1px solid #000;margin:2mm 0 1mm;"></div>
+    ${rows}
+    <div style="border-top:1px solid #000;margin:1mm 0;"></div>
+    <div style="font-size:11.5px;font-weight:800;">عدد الطلبات: ${numEn(invs.length)}</div>
+    <div style="font-size:11.5px;font-weight:800;">إجمالي المبالغ: ${numEn(total)} ل.س</div>
+    ${fees > 0 ? `<div style="font-size:11.5px;font-weight:800;">رسوم التوصيل: ${numEn(fees)} ل.س</div>` : ''}
+    <div style="font-size:14px;font-weight:900;margin-top:1mm;">${fees > 0 ? 'الصافي المطلوب' : 'المبلغ المطلوب'}: ${numEn(net)} ل.س</div>
+    <div style="height:6mm;"></div>
+  </div>`;
+}
+
+/* طباعة الكشف على الطابعة الحرارية مباشرةً (بلا نافذة منبثقة) */
 function printAgentReport(agentId) {
   const agent = agents().find(a => a.id === agentId); if (!agent) return;
-  const invs = agentInvoices(agentId); const total = invs.reduce((s,i)=>s+Number(i.total||0),0);
-  const fees = invs.reduce((s,i)=>s+Number((i.delivery_info||{}).fee||0),0);
-  const w = window.open('', '_blank', 'width=800,height=900'); if (!w) return showToast('اسمح بالنوافذ المنبثقة للطباعة','⚠️');
-  w.document.write('<!doctype html><html dir="rtl"><head><meta charset="utf-8"><title>كشف توصيل</title><style>body{font-family:Arial,Tahoma;margin:18px;color:#111}h2{text-align:center}table{width:100%;border-collapse:collapse;margin-top:15px}th,td{border:1px solid #333;padding:7px;text-align:center}th{background:#eee}.sum{font-size:16px;font-weight:bold;margin-top:15px}@media print{button{display:none}}</style></head><body>');
-  w.document.write('<h2>كشف محاسبة التوصيل</h2><div>العامل/الشركة: <b>'+String(agent.name).replace(/[<>]/g,'')+'</b></div><div>التاريخ: '+new Date().toLocaleString('ar')+'</div><table><tr><th>الفاتورة</th><th>العميل</th><th>الإجمالي</th><th>رسوم التوصيل</th><th>الحالة</th></tr>');
-  invs.forEach(i=>{const d=i.delivery_info||{};w.document.write('<tr><td>'+i.id+'</td><td>'+String(i.customer_name||'').replace(/[<>]/g,'')+'</td><td>'+Number(i.total||0).toLocaleString()+'</td><td>'+Number(d.fee||0).toLocaleString()+'</td><td>'+String(d.status||'').replace(/[<>]/g,'')+'</td></tr>');});
-  w.document.write('</table><div class="sum">إجمالي المبالغ: '+total.toLocaleString()+' ل.س — الرسوم: '+fees.toLocaleString()+' ل.س — الصافي: '+(total-fees).toLocaleString()+' ل.س</div><script>window.onload=function(){window.print();}</script></body></html>');w.document.close();
+  const invs = agentInvoices(agentId);
+  const total = invs.reduce((s, i) => s + Number(i.total || 0), 0);
+  const fees  = invs.reduce((s, i) => s + Number((i.delivery_info || {}).fee || 0), 0);
+  const html  = agentStatementHtml(agent, invs, total, fees);
+
+  if (!window.ThermalPrint || !ThermalPrint.printHtml) {
+    return showToast('خدمة الطباعة الحرارية غير متاحة', '⚠️');
+  }
+  /* اتصال بـ QZ (محلي ثم شبكي) بحد أقصى 5 ثوانٍ، ثم الطباعة —
+     وإن تعذّر QZ يفتح حوار طباعة المتصفح من داخل الصفحة (بلا نوافذ منبثقة). */
+  Promise.race([
+    Promise.resolve(ThermalPrint.connect ? ThermalPrint.connect() : false).catch(function () { return false; }),
+    new Promise(function (res) { setTimeout(function () { res(false); }, 5000); }),
+  ])
+    .then(function () { return ThermalPrint.printHtml(html); })
+    .catch(function (e) { showToast('تعذرت الطباعة: ' + ((e && e.message) || e), '⚠️'); });
 }
 
 /* ================================================================
    محاسبة العامل
    ================================================================ */
+/* ── نافذة محاسبة العامل (بدل alert غير الاحترافية) ── */
 function settleAgent(agentId, agentName, total, fees) {
-  const net = total - fees;
-  const msg = fees > 0
-    ? `محاسبة ${agentName}:\nإجمالي المبالغ المستلمة: ${fmtNum(total)} ل.س\nرسوم التوصيل للشركة: ${fmtNum(fees)} ل.س\nصافي المبلغ المطلوب: ${fmtNum(net)} ل.س`
-    : `محاسبة ${agentName}:\nإجمالي المبالغ المستلمة: ${fmtNum(total)} ل.س\n(موظف داخلي — لا رسوم توصيل)`;
-  alert(msg);
+  settleModal = { agentId: agentId, name: agentName, total: Number(total) || 0, fees: Number(fees) || 0 };
+  renderApp();
+}
+function closeSettle() { settleModal = null; renderApp(); }
+
+function renderSettleModal() {
+  if (!settleModal) return '';
+  const net = settleModal.total - settleModal.fees;
+  const isCompany = settleModal.fees > 0;
+  return `<div class="dlv-modal-scrim" onclick="closeSettle()"></div>
+  <div class="dlv-modal" role="dialog" aria-label="محاسبة عامل التوصيل">
+    <div class="dlv-modal-head">
+      <strong>💵 محاسبة ${e(settleModal.name)}</strong>
+      <button onclick="closeSettle()">✕</button>
+    </div>
+    <div class="dlv-modal-body">
+      <div class="dlv-settle-row">
+        <span>إجمالي المبالغ المستلمة</span>
+        <strong>${fmt(settleModal.total)}</strong>
+      </div>
+      ${isCompany ? `
+      <div class="dlv-settle-row">
+        <span>رسوم التوصيل للشركة</span>
+        <strong class="fee">${fmt(settleModal.fees)}</strong>
+      </div>` : `
+      <div class="dlv-settle-note">موظف داخلي — لا رسوم توصيل</div>`}
+      <div class="dlv-settle-row dlv-settle-net">
+        <span>${isCompany ? 'صافي المبلغ المطلوب' : 'المبلغ المطلوب'}</span>
+        <strong>${fmt(net)}</strong>
+      </div>
+    </div>
+    <div class="dlv-modal-actions">
+      <button class="dlv-btn" onclick="closeSettle()">إغلاق</button>
+      <button class="dlv-btn dlv-btn-print" onclick="printAgentReport('${e(settleModal.agentId)}')">🖨️ طباعة كشف</button>
+    </div>
+  </div>`;
 }
 
 /* ================================================================

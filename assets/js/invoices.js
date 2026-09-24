@@ -819,14 +819,29 @@ function reopenInvoice(){
   render();
 }
 
+/* مهلة للاتصال: حين لا يكون QZ Tray مُشغّلاً قد يبقى وعد connect()
+   معلّقاً، فلا تصل الطباعة أبداً. بعد المهلة نتابع إلى print() الذي
+   يفتح حوار طباعة المتصفح تلقائياً. */
+function withConnectTimeout(fn, ms) {
+  return Promise.race([
+    Promise.resolve().then(fn).catch(function(){ return false; }),
+    new Promise(function(res){ setTimeout(function(){ res(false); }, ms || 5000); }),
+  ]);
+}
+
 function printEditNotice(id){
   const inv = invoices.find(x => x.id === id) || invoices.find(x => String(invNoLabel(x)) === String(id));
   if (!inv) return showToast('لم يتم العثور على الفاتورة','⚠️');
-  if (window.ThermalPrint && ThermalPrint.isActive && ThermalPrint.isActive()) {
-    ThermalPrint.print(inv).catch(function(e){ showToast('تعذر الطباعة الصامتة: ' + (e.message || e), '⚠️'); });
-  } else {
-    showToast('طابعة الكاشير غير متصلة — لم تفتح نافذة متصفح','⚠️');
-  }
+  if (!window.ThermalPrint || !ThermalPrint.print) return showToast('خدمة الطباعة غير متاحة','⚠️');
+  /* كان الشرط السابق يتحقق من isActive() فقط، وحالة الاتصال تبدأ 'idle'
+     ولا أحد يستدعي connect() في هذه الشاشة ⇒ النتيجة: لا طباعة أبداً.
+     الآن: نحاول الاتصال (محلي ثم شبكي) ثم نطبع عبر ThermalPrint.print
+     الذي يفتح حوار طباعة المتصفح تلقائياً إن تعذّر QZ. */
+  /* نفس رقم الفاتورة + إشارة «نسخة معدّلة» إن كانت قد عُدِّلت بعد إصدارها */
+  const isMod = (inv.modifications && inv.modifications.length > 0) || inv.status === 'modified';
+  withConnectTimeout(function(){ return ThermalPrint.connect ? ThermalPrint.connect() : false; })
+    .then(function(){ return ThermalPrint.print(inv, { modifiedMark: isMod }); })
+    .catch(function(e){ showToast('تعذرت الطباعة: ' + ((e && e.message) || e), '⚠️'); });
 }
 
 /* ── طباعة إشعار التعديل للمطبخ ── */
@@ -898,12 +913,16 @@ body{font-family:'Courier New',monospace;width:72mm;margin:0 auto;padding:4mm;fo
 </div>
 </body></html>`;
 
-  if (window.ThermalPrint && ThermalPrint.printModification && ThermalPrint.isActive && ThermalPrint.isActive()) {
-    ThermalPrint.printModification(inv).catch(function(e){ showToast('تعذر الطباعة الصامتة: ' + (e.message || e), '⚠️'); });
-  } else {
-    showToast('طابعة الكاشير غير متصلة — لم يتم فتح نافذة متصفح', '⚠️');
+  /* نفس عطَل printEditNotice: isActive() يبدأ false في هذه الشاشة
+     فلم يكن الإشعار يُطبع أبداً. الآن: اتصال ثم طباعة، وحوار المتصفح
+     بديلاً عند تعذّر QZ. */
+  if (!window.ThermalPrint || !ThermalPrint.printModification) {
+    showToast('خدمة الطباعة غير متاحة', '⚠️');
     return;
   }
+  withConnectTimeout(function(){ return ThermalPrint.connect ? ThermalPrint.connect() : false; })
+    .then(function(){ return ThermalPrint.printModification(inv); })
+    .catch(function(e){ showToast('تعذرت طباعة إشعار المطبخ: ' + ((e && e.message) || e), '⚠️'); });
 
   /* مسح التعديلات بعد الطباعة (ستُجمع تعديلات جديدة) */
   inv.modifications = [];

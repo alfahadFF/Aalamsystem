@@ -3095,13 +3095,21 @@ window.DEMO_DATA.price_settings = window.DEMO_DATA.price_settings || {
   };
   /* الرقم الظاهر: print_no إن وُجد، وإلا ترتيب مستمر من no بدون modulo */
   /* عرض/طباعة: رقم طبيعي بلا أصفار بادئة (طلب العميل): 1، 2، 15… لا 001 */
+  /* الأرقام اللاتينية (1 2 3) حصراً في رقم الفاتورة — لا ١٢٣.
+     بعض متصفحات الأندرويد تُنتج أرقاماً هندية من String() إن كانت
+     لغة الجهاز عربية، فنُطبّعها هنا صراحةً. */
+  window.alfaLatinDigits = function (v) {
+    return String(v == null ? '' : v)
+      .replace(/[\u0660-\u0669]/g, function (d) { return String(d.charCodeAt(0) - 0x0660); })
+      .replace(/[\u06F0-\u06F9]/g, function (d) { return String(d.charCodeAt(0) - 0x06F0); });
+  };
   window.displayInvoiceNo = function (n, inv) {
     if (inv && inv.print_no != null && Number(inv.print_no) > 0) {
-      return String(Number(inv.print_no));
+      return window.alfaLatinDigits(Number(inv.print_no));
     }
     n = Number(n) || 0;
     if (n <= 0) return '0';
-    return String(n);
+    return window.alfaLatinDigits(n);
   };
   window.invoiceNo = function (inv) {
     if (!inv) return '';
@@ -3172,19 +3180,45 @@ window.DEMO_DATA.price_settings = window.DEMO_DATA.price_settings || {
   window.ALFA_SLOT_SPAN = 1000;  // سعة شريحة الجهاز الواحد في اليوم
   window.ALFA_SLOT_MAX  = 9;     // عدد الأجهزة المدعومة
 
+  /* بصمة ثابتة للجهاز — تُولَّد مرة واحدة وتُحفظ.
+     السبب: الشريحة كانت تُختار من «فواتير اليوم المحلية» فقط، فجهازان
+     جديدان لا يرى أحدهما فواتير الآخر يختاران الشريحة ٠ معاً ويُنتجان
+     الأرقام نفسها حتماً. الآن تُشتق الشريحة المبدئية من بصمة الجهاز
+     فيتوزّع الأجهزة على الشرائح بدل أن تتزاحم على الأولى. */
+  window.alfaDeviceId = function () {
+    try {
+      let id = localStorage.getItem('alfaprosys_device_id');
+      if (!id) {
+        id = (window.crypto && crypto.randomUUID)
+          ? crypto.randomUUID()
+          : ('d' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10));
+        localStorage.setItem('alfaprosys_device_id', id);
+      }
+      return id;
+    } catch (e) { return 'd0'; }
+  };
+
   window.alfaDeviceSlot = function () {
     try {
       let s = localStorage.getItem('alfaprosys_device_slot');
       if (s === null) {
-        /* اختر شريحة لا تحتوي فواتير اليوم (أي لم يستخدمها جهاز آخر) */
+        /* شريحة لا تحتوي فواتير اليوم (أي لم يستخدمها جهاز آخر) */
         const today = window.businessDay();
         const taken = {};
         (window.DEMO_DATA.invoices || []).forEach(function (i) {
           if ((i.date || '') !== today) return;
           taken[Math.floor((Number(i.no) || 0) / window.ALFA_SLOT_SPAN)] = true;
         });
-        s = '0';
-        for (let k = 0; k < window.ALFA_SLOT_MAX; k++) { if (!taken[k]) { s = String(k); break; } }
+        /* نقطة البداية من بصمة الجهاز، ثم أول شريحة خالية بعدها */
+        let h = 0; const id = window.alfaDeviceId();
+        for (let k = 0; k < id.length; k++) h = (h * 31 + id.charCodeAt(k)) >>> 0;
+        const start = h % window.ALFA_SLOT_MAX;
+        s = null;
+        for (let k = 0; k < window.ALFA_SLOT_MAX; k++) {
+          const cand = (start + k) % window.ALFA_SLOT_MAX;
+          if (!taken[cand]) { s = String(cand); break; }
+        }
+        if (s === null) s = String(start);
         localStorage.setItem('alfaprosys_device_slot', s);
       }
       return Math.max(0, Math.min(window.ALFA_SLOT_MAX - 1, Number(s) || 0));
@@ -3230,8 +3264,12 @@ window.DEMO_DATA.price_settings = window.DEMO_DATA.price_settings || {
       /* تجنّب القفز داخل شريحة جهاز أوفلاين أخرى إن وُجدت أرقام شرائح فقط:
          إن كانت كل الأرقام < 1000 نتابع؛ إن وُجدت شرائح نأخذ maxAll+1 أيضاً (فريد) */
     } else {
-      /* أوفلاين: شريحة الجهاز حتى لا يتصادم (date,no) عند الرفع لاحقاً */
-      next = Math.max(maxInSlot, base) + 1;
+      /* أوفلاين: شريحة الجهاز حتى لا يتصادم (date,no) عند الرفع لاحقاً.
+         كان الحساب يتجاهل الحجز المحفوظ ويعتمد على maxInSlot وحده
+         (أرقام الفواتير الموجودة فعلاً) — فإن لم تُحفظ الفاتورة في
+         القائمة لأي سبب أُعيد الرقم نفسه للفاتورة التالية. الآن
+         الحجز (max) داخل الحساب فيتقدّم التسلسل دائماً. */
+      next = Math.max(maxInSlot, base, max) + 1;
       if (next < base + 1) next = base + 1;
       if (next >= base + span) next = Math.max(maxAll + 1, base + 1);
     }
@@ -3264,24 +3302,171 @@ window.DEMO_DATA.price_settings = window.DEMO_DATA.price_settings || {
     if (window.AlfaSB && AlfaSB.enabled && AlfaSB.enabled() && AlfaSB.rpc) return AlfaSB.rpc('start_invoice_cycle', { p_business_day: day, p_created_by: (window.DEMO_DATA.cashierSession && window.DEMO_DATA.cashierSession.cashier_name) || 'المدير' }).then(function(c){ return start(Array.isArray(c)?c[0]:c); });
     return Promise.resolve(start('local-' + Date.now()));
   };
-  window.reserveInvoiceNo = function () {
+  /* ══════════════════════════════════════════════════════════════
+     حجز الرقم — مرجع مشترك واحد أو لا رقم
+     ──────────────────────────────────────────────────────────────
+     مطلب الإدارة (نهائي): التعداد ١، ٢، ٣… بلا أصفار بادئة وبلا
+     قفزات، ويستمر صاعداً حتى لو صدر من جهازين في اليوم نفسه.
+
+     لازمُ هذا المطلب: لا يجوز لأي جهاز أن يُصدر رقماً من عنده.
+     فالترقيم المحلي ينتج إمّا قفزاً (شريحة ١٠٠١/٢٠٠١…) وإمّا
+     تكراراً (رقمين متطابقين من جهازين) — وكلاهما مرفوض.
+
+     لذلك: الرقم من مرجع مشترك حصراً
+       ١) خادم السحابة  (Supabase — يعطي تسلسلاً ذرياً موحداً)
+       ٢) خدمة ترقيم محلية على شبكة المطعم (إن ضُبطت في config.js)
+       ٣) وإلا: لا رقم — ويُبلَّغ الكاشير بدل إصدار رقم خاطئ.
+     ══════════════════════════════════════════════════════════════ */
+  window.RESERVE_TIMEOUT_MS = 5000;
+  window.LAN_TIMEOUT_MS     = 2500;
+  window.alfaLastInvoiceNoSource = 'server';
+
+  function rememberReservation(today, n) {
+    try { localStorage.setItem('alfaprosys_invoice_reservation_' + today, String(n)); } catch (e) {}
+  }
+
+  /* ٢) خدمة ترقيم محلية على شبكة المطعم — تعمل بلا إنترنت */
+  /* ٢) خدمة ترقيم محلية على شبكة المطعم — تعمل بلا إنترنت.
+        إن لم يُضبط numbering.lanUrl صراحةً، نجرّب الأجهزة المذكورة
+        أصلاً في thermal.qzHosts (هي أجهزة المطعم التي تحمل الطابعات)
+        على المنفذ 8787 — فلا يحتاج صاحب المطعم إلى إعداد إضافي. */
+  function lanBaseUrls() {
+    const out = [];
+    const cfg = window.ALFA_CONFIG || {};
+    const direct = (cfg.numbering && cfg.numbering.lanUrl) || '';
+    if (direct) {
+      let b = String(direct).trim().replace(/\/+$/, '').replace(/\/next$/i, '');
+      if (/^https?:\/\//i.test(b)) out.push(b);
+      else if (b) out.push('http://' + b + ':8787');
+      return out;
+    }
+    const hosts = (cfg.thermal && (cfg.thermal.qzHosts || cfg.thermal.qzHost)) || [];
+    (Array.isArray(hosts) ? hosts : [hosts]).forEach(function (h) {
+      h = String(h || '').trim();
+      if (!h) return;
+      if (/^https?:\/\//i.test(h)) { out.push(h.replace(/\/+$/, '')); return; }
+      out.push('http://' + h + ':8787');
+    });
+    return out;
+  }
+
+  function lanCandidateUrls() {
+    return lanBaseUrls().map(function (b) { return b + '/next'; });
+  }
+
+  function fetchLanNo(url, today) {
+    const ctl = (window.AbortController) ? new AbortController() : null;
+    const timer = setTimeout(function () { if (ctl) ctl.abort(); }, window.LAN_TIMEOUT_MS);
+    const sep = url.indexOf('?') >= 0 ? '&' : '?';
+    /* &_= يُلغي تخزين المتصفح للرد: بدونه كان يُعاد الرقم نفسه
+       خمس مرات لأن الطلب متطابق تماماً في كل مرة. */
+    return fetch(url + sep + 'day=' + encodeURIComponent(today) + '&_=' + Date.now(),
+                 { cache: 'no-store', signal: ctl ? ctl.signal : undefined })
+      .then(function (r) { return r.ok ? r.json() : Promise.reject(new Error('lan-http')); })
+      .then(function (j) {
+        const n = Number(j && (j.no != null ? j.no : j.next));
+        if (!n) return Promise.reject(new Error('lan-bad'));
+        return n;
+      })
+      .then(function (n) { clearTimeout(timer); return n; },
+            function (e) { clearTimeout(timer); return Promise.reject(e); });
+  }
+
+  /* /set على الخدمة المحلية: يرفع العدّاد إلى رقم محدّد ويردّ النتيجة */
+  function fetchLanSet(base, today, no) {
+    const ctl = (window.AbortController) ? new AbortController() : null;
+    const timer = setTimeout(function () { if (ctl) ctl.abort(); }, window.LAN_TIMEOUT_MS);
+    const url = base + '/set?day=' + encodeURIComponent(today) + '&no=' + encodeURIComponent(no) + '&_=' + Date.now();
+    return fetch(url, { cache: 'no-store', signal: ctl ? ctl.signal : undefined })
+      .then(function (r) { return r.ok ? r.json() : Promise.reject(new Error('lan-http')); })
+      .then(function (j) {
+        const n = Number(j && (j.no != null ? j.no : j.next));
+        return n || no;
+      })
+      .then(function (n) { clearTimeout(timer); return n; },
+            function (e) { clearTimeout(timer); return Promise.reject(e); });
+  }
+
+  /* مزامنة بالخلف: كل رقم تصدره السحابة نرفع إليه عدّاد الخدمة المحلية.
+     فلو انقطع الإنترنت في منتصف اليوم تكمل الخدمة المحلية من حيث
+     توقّفت السحابة، ولا يُصدر أيّ رقم مكرّر. فشل المزامنة لا يوقف البيع. */
+  function lanSyncToServer(today, no) {
+    if (!no) return;
+    lanBaseUrls().forEach(function (base) {
+      try { fetchLanSet(base, today, no).catch(function () {}); } catch (e) {}
+    });
+  }
+
+  function lastIssuedNo(today) {
+    try { return Number(localStorage.getItem('alfaprosys_invoice_reservation_' + today)) || 0; }
+    catch (e) { return 0; }
+  }
+
+  /* أرضية أمان: إن أعادت الخدمة رقماً أصغر من آخر رقم أصدره هذا الجهاز
+     اليوم (لم تصلها المزامنة)، نرفع عدّادها إلى ما بعده. */
+  function lanApplyFloor(today, n) {
+    const last = lastIssuedNo(today);
+    if (!last || n > last) return n;
+    const bases = lanBaseUrls();
+    if (!bases.length) return n;
+    return bases.reduce(function (chain, base) {
+      return chain.catch(function () { return fetchLanSet(base, today, last + 1); });
+    }, Promise.reject(new Error('start'))).catch(function () { return n; });
+  }
+
+  function lanReserve(today) {
+    const urls = lanCandidateUrls();
+    if (!urls.length) return Promise.reject(new Error('no-lan'));
+    return urls.reduce(function (chain, url) {
+      return chain.catch(function () { return fetchLanNo(url, today); });
+    }, Promise.reject(new Error('start')))
+      .then(function (n) { return lanApplyFloor(today, n); });
+  }
+
+  window.reserveInvoiceNoDetailed = function () {
     const today = window.businessDay();
-    const span = window.ALFA_SLOT_SPAN || 1000;
-    const base = (window.alfaDeviceSlot ? window.alfaDeviceSlot() : 0) * span;
     const online = navigator.onLine !== false && window.AlfaSB && AlfaSB.enabled && AlfaSB.enabled();
+
+    /* ١) السحابة — المصدر الأساس */
     if (online && AlfaSB.rpc) {
       let cycle = ''; try { cycle = localStorage.getItem('alfaprosys_invoice_cycle_' + today) || ''; } catch (e) {}
-      return AlfaSB.rpc(cycle ? 'reserve_cycle_invoice_no' : 'reserve_invoice_no', cycle ? { p_cycle_id: cycle } : { p_business_day: today })
+      const call = AlfaSB.rpc(cycle ? 'reserve_cycle_invoice_no' : 'reserve_invoice_no',
+                              cycle ? { p_cycle_id: cycle } : { p_business_day: today });
+      const deadline = new Promise(function (_, rej) {
+        setTimeout(function () { rej(new Error('reserve-timeout')); }, window.RESERVE_TIMEOUT_MS);
+      });
+      return Promise.race([call, deadline])
         .then(function (n) {
           n = Number(Array.isArray(n) ? n[0] : n);
           if (!n) throw new Error('invalid invoice number');
-          /* متصل: نقبل رقم الخادم كما هو (تسلسل موحّد مستمر بين الأجهزة) */
-          try { localStorage.setItem('alfaprosys_invoice_reservation_' + today, String(n)); } catch (e) {}
-          return n;
-        }).catch(function () { return window.nextDailyNo(); });
+          rememberReservation(today, n);
+          lanSyncToServer(today, n);
+          window.alfaLastInvoiceNoSource = 'server';
+          return { no: n, source: 'server' };
+        })
+        .catch(function () { return lanReserve(today).then(function (n) {
+          rememberReservation(today, n);
+          window.alfaLastInvoiceNoSource = 'lan';
+          return { no: n, source: 'lan' };
+        }).catch(function () {
+          window.alfaLastInvoiceNoSource = 'none';
+          return { no: null, source: 'none' };
+        }); });
     }
-    /* أوفلاين: شريحة الجهاز */
-    return Promise.resolve(window.nextDailyNo());
+
+    /* لا سحابة — جرّب الخدمة المحلية */
+    return lanReserve(today).then(function (n) {
+      rememberReservation(today, n);
+      window.alfaLastInvoiceNoSource = 'lan';
+      return { no: n, source: 'lan' };
+    }).catch(function () {
+      window.alfaLastInvoiceNoSource = 'none';
+      return { no: null, source: 'none' };
+    });
+  };
+
+  window.reserveInvoiceNo = function () {
+    return window.reserveInvoiceNoDetailed().then(function (r) { return r.no; });
   };
   window.nextInvoiceId = function (n) {
     const today = window.businessDay(); let cycle = '';

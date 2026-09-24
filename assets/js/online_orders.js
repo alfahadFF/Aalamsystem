@@ -115,7 +115,7 @@ async function acceptOrder(id){
   o.invoice_id = ref.id;
   o.no = ref.no;
   o.date = ref.date;
-  o.print_no = window.nextPrintNo ? window.nextPrintNo(false) : ref.no;
+  o.print_no = ref.no;   /* نفس الرقم الموحد — لا حساب محلي */
   ref.label = window.displayInvoiceNo
     ? window.displayInvoiceNo(o.print_no, o)
     : String(Number(o.print_no || ref.no) || 0);

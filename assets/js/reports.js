@@ -18,7 +18,8 @@ function fmtMoney(n){ return fmtNum(n) + ' ل.س'; }
 function fmtDate(d) {
   if (!d) return '—';
   const dt = new Date(d);
-  return dt.toLocaleDateString('ar-EG', { year:'numeric', month:'short', day:'numeric' });
+  /* -u-nu-latn: أسماء الشهور تبقى عربية، والأرقام لاتينية (23 لا ٢٣) */
+  return dt.toLocaleDateString('ar-EG-u-nu-latn', { year:'numeric', month:'short', day:'numeric' });
 }
 /* ================================================================
    التنقل
@@ -228,7 +229,7 @@ function switchTab(btn, tab) {
 const TAB_LABELS = { summary:'الملخص', sales:'المبيعات', expenses:'المصروفات', items:'الأصناف', employees:'الموظفون', customers:'العملاء', compare:'مقارنة الفترات', cats:'التصنيفات', purchases:'المشتريات' };
 function updatePrintHead(){
   const el = document.getElementById('rptPrintHead');
-  if (el) el.textContent = `alfaprosys — تقرير ${TAB_LABELS[currentTab] || ''} · ${labelForRange(dateFrom, dateTo)} · طُبع في ${new Date().toLocaleString('ar')}`;
+  if (el) el.textContent = `alfaprosys — تقرير ${TAB_LABELS[currentTab] || ''} · ${labelForRange(dateFrom, dateTo)} · طُبع في ${new Date().toLocaleString('ar-EG-u-nu-latn')}`;
 }
 
 /* ================================================================
@@ -242,53 +243,295 @@ document.addEventListener('click', e => {
   if (!e.target.closest || !e.target.closest('.rpt-export'))
     document.getElementById('exportMenu')?.classList.remove('open');
 });
-function csvCell(v){
-  v = String(v == null ? '' : v);
-  return /[",\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v;
+
+/* ================================================================
+   📐 نموذج التقرير الموحّد — مصدر واحد لإكسل وللطباعة
+   ----------------------------------------------------------------
+   كان التصدير ينسخ «نص ما على الشاشة»: الأرقام تخرج نصاً لا تُجمع
+   في إكسل، وتبويب الملخص (بطاقات بلا جدول) يخرج صفوفاً مبعثرة،
+   والطباعة كانت تصويراً لصفحة الويب. الآن يُبنى نموذج بيانات واحد
+   من الشاشة، ويُستخدم نفسه للملفين.
+   ================================================================ */
+
+const AR_MONTHS = ['يناير','فبراير','مارس','أبريل','مايو','يونيو',
+                   'يوليو','أغسطس','سبتمبر','أكتوبر','نوفمبر','ديسمبر'];
+
+function arDigitsToEn(s){
+  return String(s)
+    .replace(/[\u0660-\u0669]/g, d => String(d.charCodeAt(0) - 0x0660))
+    .replace(/[\u06F0-\u06F9]/g, d => String(d.charCodeAt(0) - 0x06F0));
 }
-function csvClean(t){
-  return String(t || '').replace(/\u00A0/g, ' ').replace(/ ل\.س/g, '').replace(/,/g, '').replace(/\s+/g, ' ').trim();
+
+/* «٢٣ سبتمبر ٢٠٢٦» → كائن تاريخ حقيقي (ليُكتب تاريخاً في إكسل) */
+function parseArDate(s){
+  const t = arDigitsToEn(String(s || '').trim());
+  const m = t.match(/^(\d{1,2})\s+(\S+)\s+(\d{4})$/);
+  if (!m) return null;
+  const mi = AR_MONTHS.indexOf(m[2]);
+  if (mi < 0) return null;
+  const d = new Date(Number(m[3]), mi, Number(m[1]));
+  return isNaN(d.getTime()) ? null : d;
 }
-function exportReportCSV(){
-  const rows = [
-    ['alfaprosys — تقرير ' + (TAB_LABELS[currentTab] || currentTab)],
-    ['الفترة', labelForRange(dateFrom, dateTo)],
-    ['تاريخ التصدير', new Date().toLocaleString('ar')],
-    [],
-  ];
-  const tables = document.querySelectorAll('#tabContent table');
+
+/* نص الخلية ← قيمة مكتوبة: رقم حقيقي، أو تاريخ، أو نص */
+function cellFrom(raw){
+  const src = String(raw == null ? '' : raw).replace(/\u00A0/g,' ').replace(/\s+/g,' ').trim();
+  if (!src || src === '—') return null;
+  const money = /ل\.س/.test(src);
+  const pct   = /%/.test(src);
+  let t = src.replace(/ل\.س/g,'').replace(/%/g,'').replace(/,/g,'');
+  t = arDigitsToEn(t).trim();
+  if (/^-?\d+(\.\d+)?$/.test(t)) {
+    let v = Number(t);
+    if (pct) v = v / 100;
+    return { v, t:'n', money, pct };
+  }
+  const dt = parseArDate(src);
+  if (dt) return { v: dt, t:'d', text: src };
+  return { v: src, t:'s' };
+}
+
+/* القيمة كما تظهر في المستند المطبوع */
+function cellText(c){
+  if (!c) return '';
+  if (c.t === 'n') {
+    if (c.pct) return fmtNum(Math.round(c.v * 100)) + '%';
+    const n = fmtNum(Math.round(c.v));
+    return c.money ? n + ' ل.س' : n;
+  }
+  if (c.t === 'd') return c.text || '';
+  return String(c.v);
+}
+
+/* ── بناء النموذج من التبويب المعروض حالياً ── */
+function buildExportModel(){
+  const sc = document.getElementById('tabContent');
+  const cfg = window.ALFA_CONFIG || {};
+  const model = {
+    restaurant: (cfg.thermal && cfg.thermal.restaurantName) || cfg.restaurantName || 'alfaprosys',
+    title: 'تقرير ' + (TAB_LABELS[currentTab] || currentTab || ''),
+    period: ((typeof labelForRange === 'function') ? labelForRange(dateFrom, dateTo) : '').replace(/^[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}\uFE0F\s]+/u, ''),
+    printedAt: new Date().toLocaleString('ar-EG-u-nu-latn'),
+    sections: [],
+  };
+  if (!sc) return model;
+
+  const tables = Array.prototype.slice.call(sc.querySelectorAll('table.rpt-table'));
+
   if (tables.length) {
-    tables.forEach((tb, ti) => {
-      if (ti) rows.push([]);
-      tb.querySelectorAll('tr').forEach(tr =>
-        rows.push([...tr.cells].map(td => csvClean(td.textContent))));
+    tables.forEach(function (tb) {
+      const card    = tb.closest('.rpt-card');
+      let   heading = '';
+      if (card) {
+        const h = card.querySelector('.rpt-card-title');
+        if (h) heading = h.textContent.trim().replace(/^[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}\uFE0F\s]+/u, '');
+      }
+      const head = Array.prototype.map.call(tb.querySelectorAll('thead th'), th => th.textContent.trim());
+      const body = Array.prototype.map.call(tb.querySelectorAll('tbody tr'),
+        tr => Array.prototype.map.call(tr.cells, td => cellFrom(td.textContent)));
+      const foot = Array.prototype.map.call(tb.querySelectorAll('tfoot tr'),
+        tr => Array.prototype.map.call(tr.cells, td => cellFrom(td.textContent)));
+      if (head.length) model.sections.push({ heading: heading, head: head, rows: body, foot: foot });
     });
-  } else {
-    document.querySelectorAll('#tabContent .rpt-kpi').forEach(k =>
-      rows.push([
-        csvClean(k.querySelector('.rpt-kpi-lbl')?.textContent),
-        csvClean(k.querySelector('.rpt-kpi-val')?.textContent),
-      ]));
   }
-  const name = `تقرير-${TAB_LABELS[currentTab] || currentTab}-${dateFrom}_${dateTo}`;
-  if (window.XLSX) {
-    const ws = XLSX.utils.aoa_to_sheet(rows);
-    ws['!cols'] = rows.reduce((a, r) => { r.forEach((v,i) => a[i] = { wch: Math.max(a[i]?.wch || 10, Math.min(42, String(v||'').length + 2)) }); return a; }, []);
-    const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, 'التقرير');
-    XLSX.writeFile(wb, name + '.xlsx');
-    showToast('تم تصدير ملف Excel فعلي', '📊');
-  } else {
-    const csv = '\uFEFF' + rows.map(r => r.map(csvCell).join(',')).join('\r\n');
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
-    a.download = name + '.csv'; document.body.appendChild(a); a.click(); a.remove();
-    showToast('تم تصدير CSV احتياطيًا', '📄');
+
+  /* تبويب بلا جداول (الملخص): البطاقات والإحصائيات → جدول «بيان / قيمة» */
+  if (!model.sections.length) {
+    const pairs = [];
+    Array.prototype.forEach.call(sc.querySelectorAll('.rpt-kpi'), k => pairs.push([
+      k.querySelector('.rpt-kpi-lbl') ? k.querySelector('.rpt-kpi-lbl').textContent.trim() : '',
+      k.querySelector('.rpt-kpi-val') ? k.querySelector('.rpt-kpi-val').textContent.trim() : '',
+    ]));
+    Array.prototype.forEach.call(sc.querySelectorAll('.rpt-stat'), k => pairs.push([
+      k.querySelector('.rpt-stat-lbl') ? k.querySelector('.rpt-stat-lbl').textContent.trim() : '',
+      k.querySelector('.rpt-stat-val') ? k.querySelector('.rpt-stat-val').textContent.trim() : '',
+    ]));
+    if (pairs.length) {
+      model.sections.push({
+        heading: 'إحصائيات التقرير',
+        head: ['البيان', 'القيمة'],
+        rows: pairs.map(p => [cellFrom(p[0]), cellFrom(p[1])]),
+        foot: [],
+      });
+    }
   }
+
+  /* حذف الأعمدة البصرية فقط: بلا عنوان، أو عمود «الشريط».
+     أما العمود الفارغ مؤقتاً (مثل «الكاشير») فيُحفظ — قد يمتلئ ببيانات أخرى. */
+  model.sections.forEach(function (sec) {
+    const keep = [];
+    for (let c = 0; c < sec.head.length; c++) {
+      const h = String(sec.head[c] || '').trim();
+      if (!h || h === 'الشريط') continue;
+      keep.push(c);
+    }
+    if (!keep.length || keep.length === sec.head.length) return;
+    sec.head = keep.map(c => sec.head[c]);
+    sec.rows = sec.rows.map(r => keep.map(c => r[c]));
+    sec.foot = sec.foot.map(r => keep.map(c => r[c]));
+  });
+
+  return model;
 }
+
+/* ── رسم المستند الورقي داخل #rptPrintDoc ── */
+function renderPrintDoc(m){
+  const esc = window.e || (v => String(v == null ? '' : v));
+  let el = document.getElementById('rptPrintDoc');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'rptPrintDoc';
+    document.body.appendChild(el);
+  }
+
+  const sections = m.sections.map(function (sec) {
+    const thead = '<thead><tr>' + sec.head.map(h => '<th>' + esc(h) + '</th>').join('') + '</tr></thead>';
+    const tbody = '<tbody>' + sec.rows.map(function (r) {
+      return '<tr>' + r.map(function (c) {
+        return '<td class="' + (c && (c.t === 'n' || c.t === 'd') ? 'rd-num' : '') + '">' + esc(cellText(c)) + '</td>';
+      }).join('') + '</tr>';
+    }).join('') + '</tbody>';
+    const tfoot = (sec.foot && sec.foot.length)
+      ? '<tfoot>' + sec.foot.map(function (r) {
+          return '<tr>' + r.map(function (c) {
+            return '<td class="' + (c && (c.t === 'n' || c.t === 'd') ? 'rd-num' : '') + '">' + esc(cellText(c)) + '</td>';
+          }).join('') + '</tr>';
+        }).join('') + '</tfoot>'
+      : '';
+    return '<section class="rd-sec">'
+      + (sec.heading ? '<h2 class="rd-h">' + esc(sec.heading) + '</h2>' : '')
+      + '<table class="rd-table">' + thead + tbody + tfoot + '</table>'
+      + '</section>';
+  }).join('');
+
+  el.innerHTML =
+    '<div class="rd-doc">'
+    + '<header class="rd-head">'
+    +   '<div class="rd-brand">🍽️ ' + esc(m.restaurant) + '</div>'
+    +   '<div class="rd-title">' + esc(m.title) + '</div>'
+    +   '<div class="rd-meta"><span>الفترة: ' + esc(m.period) + '</span>'
+    +   '<span>طُبع في: ' + esc(m.printedAt) + '</span></div>'
+    + '</header>'
+    + (sections || '<p class="rd-empty">لا توجد بيانات في هذه الفترة</p>')
+    + '<footer class="rd-foot">' + esc(m.restaurant) + ' — ' + esc(m.title) + '</footer>'
+    + '</div>';
+}
+
+/* ── زر «طباعة / PDF» ── */
 function printReport(){
-  document.getElementById('exportMenu')?.classList.remove('open');
-  updatePrintHead();
-  setTimeout(() => window.print(), 60);
+  document.getElementById('exportMenu') ? document.getElementById('exportMenu').classList.remove('open') : 0;
+  try { renderPrintDoc(buildExportModel()); } catch (err) { console.warn('printReport', err); }
+  const done = function () { document.body.classList.remove('printing-report'); };
+  document.body.classList.add('printing-report');
+  window.addEventListener('afterprint', done, { once: true });
+  setTimeout(done, 60000);
+  setTimeout(function () { window.print(); }, 80);
+}
+
+/* ── زر «Excel» — أرقام حقيقية قابلة للجمع ── */
+function exportReportXLSX(){
+  document.getElementById('exportMenu') ? document.getElementById('exportMenu').classList.remove('open') : 0;
+  const m = buildExportModel();
+  if (!m.sections.length) { showToast('لا توجد بيانات للتصدير', '⚠️'); return; }
+
+  const name = 'تقرير-' + (TAB_LABELS[currentTab] || currentTab) + '-' + dateFrom + '_' + dateTo;
+
+  if (!window.XLSX) { exportReportCSV(m, name); return; }
+
+  /* صفوف القيم + صفوف موازية تحمل وصف كل خلية (نص/رقم/نقود/نسبة/عنوان) */
+  const aoa = [], meta = [];
+  const push = function (vals, metas) { aoa.push(vals); meta.push(metas); };
+  const M = function (k) { return k || null; };
+
+  push([m.restaurant + ' — ' + m.title], [{ kind: 'title' }]);
+  push(['الفترة', m.period], [{ kind: 'label' }, { kind: 'text' }]);
+  push(['تاريخ التصدير', m.printedAt], [{ kind: 'label' }, { kind: 'text' }]);
+  push([], []);
+
+  let maxCols = 1;
+  m.sections.forEach(function (sec) {
+    maxCols = Math.max(maxCols, sec.head.length);
+    push([sec.heading || ''], [{ kind: 'section' }]);
+    push(sec.head.slice(), sec.head.map(() => ({ kind: 'header' })));
+    sec.rows.forEach(function (r) {
+      push(r.map(c => (c ? c.v : '')),
+           r.map(c => (c ? { kind: c.t === 'n' ? 'num' : (c.t === 'd' ? 'date' : 'text'), money: c.money, pct: c.pct } : { kind: 'text' })));
+    });
+    (sec.foot || []).forEach(function (r) {
+      push(r.map(c => (c ? c.v : '')),
+           r.map(c => (c ? { kind: 'total', money: c.money, pct: c.pct } : { kind: 'total' })));
+    });
+    push([], []);
+  });
+
+  const ws = XLSX.utils.aoa_to_sheet(aoa);
+  const range = XLSX.utils.decode_range(ws['!ref']);
+
+  for (let R = range.s.r; R <= range.e.r; R++) {
+    for (let C = range.s.c; C <= range.e.c; C++) {
+      const addr = XLSX.utils.encode_cell({ r: R, c: C });
+      const cell = ws[addr];
+      if (!cell) continue;
+      const mm = (meta[R] && meta[R][C]) || {};
+      if (mm.kind === 'num' || mm.kind === 'total') {
+        if (typeof cell.v !== 'number') continue;
+        cell.z = mm.pct ? '0%' : '#,##0';   // تنسيق عرض الأرقام
+      } else if (mm.kind === 'date') {
+        cell.z = 'yyyy-mm-dd';   /* يعمل سواء حُفظ كـ d أو كرقم تسلسلي */
+      }
+      /* عريض للترويسة وعناوين الأقسام ورؤوس الأعمدة وصف الإجمالي */
+      if (mm.kind === 'title' || mm.kind === 'section' || mm.kind === 'header' ||
+          mm.kind === 'total' || mm.kind === 'label') {
+        cell.s = { font: { bold: true } };
+      }
+    }
+  }
+
+  /* عروض الأعمدة مناسبة للمحتوى */
+  const widths = [];
+  aoa.forEach(function (row, ri) {
+    if (ri < 4) return;                 /* ترويسة المستند لا تحدد عروض الأعمدة */
+    row.forEach(function (v, i) {
+      let txt;
+      if (v instanceof Date)      txt = '2026-09-23';        /* 10 = طول التاريخ المعروض */
+      else if (typeof v === 'number') txt = String(Math.round(v).toLocaleString('en-US'));
+      else                        txt = String(v == null ? '' : v);
+      const len = txt.length + 4;
+      if (!widths[i] || widths[i] < len) widths[i] = len;
+    });
+  });
+  ws['!cols'] = widths.map(w => ({ wch: Math.min(46, Math.max(11, w)) }));
+
+  /* دمج صف العنوان على كامل العرض */
+  ws['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: Math.max(0, maxCols - 1) } }];
+
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'التقرير');
+  XLSX.writeFile(wb, name + '.xlsx', { cellStyles: true });
+  showToast('تم تصدير ملف Excel', '📊');
+}
+
+/* احتياط: إن لم تتوفر مكتبة الإكسل */
+function exportReportCSV(m, name){
+  m = m || buildExportModel();
+  name = name || ('تقرير-' + (TAB_LABELS[currentTab] || currentTab) + '-' + dateFrom + '_' + dateTo);
+  const q = function (v) {
+    v = String(v == null ? '' : v);
+    return /[",\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v;
+  };
+  const rows = [[m.restaurant + ' — ' + m.title], ['الفترة', m.period], ['تاريخ التصدير', m.printedAt], []];
+  m.sections.forEach(function (sec) {
+    rows.push([sec.heading || '']);
+    rows.push(sec.head.slice());
+    sec.rows.forEach(r => rows.push(r.map(c => (c ? (c.t === 'n' ? c.v : cellText(c)) : ''))));
+    (sec.foot || []).forEach(r => rows.push(r.map(c => (c ? (c.t === 'n' ? c.v : cellText(c)) : ''))));
+    rows.push([]);
+  });
+  const csv = '\uFEFF' + rows.map(r => r.map(q).join(',')).join('\r\n');
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+  a.download = name + '.csv'; document.body.appendChild(a); a.click(); a.remove();
+  showToast('تم تصدير CSV', '📄');
 }
 
 function renderTab(tab, from, to) {
@@ -306,6 +549,8 @@ function renderTab(tab, from, to) {
     case 'cats':      el.innerHTML = renderCatsReport(from, to);  break;
     case 'purchases': el.innerHTML = renderPurchases(from, to);   break;
   }
+  /* المستند الورقي يُحدَّث مع كل تبويب — فيعمل زر الطباعة و Ctrl+P بنفس الشكل */
+  try { renderPrintDoc(buildExportModel()); } catch (err) { console.warn('rptPrintDoc', err); }
 }
 
 /* ================================================================
@@ -967,13 +1212,6 @@ function buildDonut(segments, total) {
    ================================================================ */
 function emptyState(msg) {
   return `<div class="rpt-empty"><span>📭</span><p>${e(msg)}</p></div>`;
-}
-
-/* ================================================================
-   طباعة
-   ================================================================ */
-function printReport() {
-  window.print();
 }
 
 /* ================================================================

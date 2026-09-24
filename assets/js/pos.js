@@ -2335,20 +2335,37 @@ async function submitOrder(){
   const usedDrawCodes = new Set((DATA.invoices || []).map(x => String(x.draw_code || '')).filter(Boolean));
   /* سقف محاولات: يمنع حلقة لا نهائية إن امتلأت المساحة نظرياً */
   for (let _g = 0; usedDrawCodes.has(drawCode) && _g < 200; _g++) drawCode = newDrawCode();
-  const invNo   = window.reserveInvoiceNo ? await reserveInvoiceNo() : (window.nextDailyNo ? nextDailyNo() : 1);
+  /* ══════════════════════════════════════════════════════════════
+     الرقم الموحّد هو نفسه رقم الطباعة
+     ──────────────────────────────────────────────────────────────
+     كان رقم الطباعة (print_no) يُحسب محلياً: max+1 من فواتير هذا
+     الجهاز وحده. جهازان يعملان في اليوم نفسه يصلان إلى الرقم نفسه
+     فيطبع كلٌّ منهما فاتورة به — ولا شيء يمنع التكرار لأن عمود
+     print_no غير موجود أصلاً في قاعدة البيانات ليُكشف التكرار.
+     الآن: الرقم المحجوز من الخادم (تسلسل موحّد مستمر) هو رقم الطباعة،
+     وإن تعذّر الاتصال نتراجع لشريحة الجهاز مع تنبيه الكاشير.
+     ══════════════════════════════════════════════════════════════ */
+  const _res = window.reserveInvoiceNoDetailed
+    ? await window.reserveInvoiceNoDetailed()
+    : { no: null, source: 'none' };
+  const invNo = Number(_res.no) || 0;
+
+  /* لا مرجع مشترك ⇒ لا رقم. إصدار رقم من الجهاز نفسه يعني إمّا تكراراً
+     (نفس الرقم من جهازين) وإمّا قفزاً (١٠٠١/٢٠٠١…)، وكلاهما مرفوض
+     من الإدارة. نُبلغ الكاشير بوضوح ولا نُصدر رقماً مزوّراً. */
+  if (!invNo) {
+    showToast('تعذّر ترقيم الفاتورة — لا اتصال بالخادم ولا بخدمة الترقيم', '🚫');
+    return;
+  }
+  if (_res.source === 'lan' && window.showToast) {
+    try { showToast('رُقِّمت الفاتورة من خدمة الترقيم المحلية (لا إنترنت)', '🏠'); } catch (e) {}
+  }
   const invDate = window.businessDay ? businessDay() : '';
   const inv = {
     // تم حجز invNo أعلاه؛ لا تستدعِ nextInvoiceId هنا حتى لا يُحجز رقم ثانٍ.
     id: window.nextInvoiceId ? nextInvoiceId(invNo) : (invDate + '-' + String(invNo).padStart(3, '0')),
     no: invNo,
-    print_no: (function () {
-      /* متصل: no من الخادم متسلسل → نفس الرقم للطباعة.
-         أوفلاين/شريحة: nextPrintNo يكمل تسلسل الطباعة من السحابة دون إعادة العد. */
-      const p = window.nextPrintNo ? window.nextPrintNo(false) : invNo;
-      const n = Number(invNo) || 0;
-      if (n > 0 && n < 1000) return Math.max(p, n); /* تزامن مع no اليومي */
-      return p;
-    })(),
+    print_no: invNo,
     draw_code: drawCode,
     invoice_cycle: (function(){ try { return localStorage.getItem('alfaprosys_invoice_cycle_' + invDate) || 'legacy'; } catch(e){ return 'legacy'; } })(),
     date: invDate,
@@ -2631,6 +2648,11 @@ if (typeof window !== 'undefined' && window.addEventListener) {
   renderPOS();
   if (window.__splash) window.__splash.done();
   if (window.Notify) Notify.init();
+  /* تسخين الطباعة: يُنشئ اتصال QZ ويحلّ أسماء الطابعات في الخلفية الآن،
+     فلا تنتظر أول فاتورة في الوردية تكلفة الاستكشاف وحدها. */
+  if (window.ThermalPrint && ThermalPrint.warmup) {
+    setTimeout(function () { ThermalPrint.warmup().catch(function () {}); }, 1200);
+  }
   if (window.InvoiceSync && InvoiceSync.pull) {
     /* نصف دقيقة: جلب الفواتير + الطلبات الأونلاين (مع دمج ترحيل الحالة) */
     setInterval(function () {

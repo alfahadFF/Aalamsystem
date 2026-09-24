@@ -53,6 +53,12 @@
     if (saved) list.unshift(saved);
     return uniqNames(list);
   }
+  /* مدة صلاحية الأسماء المحلولة — ١٠ دقائق بدل ٨ ثوانٍ.
+     الاستكشاف كان يعاد كل ٨ ثوانٍ فيُبطئ كل فاتورة. */
+  const RESOLVE_TTL = 10 * 60 * 1000;
+  const PRINTER_LS = 'alfaprosys_qz_printers';
+  let lastDetails = null, lastDetailsAt = 0;
+
   const WIDTH = () => Number(CFG().widthMm) || 72;            // عرض قالب الإيصال
   const PAPER = () => Number(CFG().paperWidthMm) || WIDTH();  // عرض الورق الفيزيائي
   /* الحد الأدنى لطول الإيصال (مم) — من config.js ← thermal.minHeightMm
@@ -66,6 +72,9 @@
     th: 9.5, td: 12, name: 11, note: 14, itemNote: 11, sum: 13, thanks: 15, address: 12.5,
   }, CFG().fonts || {});
   const FEED = () => Number(CFG().feedMm) || 3;
+  /* عروض أعمدة جدول الأصناف (نسبة مئوية من عرض الجدول) — من config.js
+     ← thermal.cols. الافتراضي: اسم المادة مُوسَّع على حساب البقية. */
+  const COLS = () => Object.assign({ name: 34, qty: 10, price: 16, total: 18, note: 22 }, CFG().cols || {});
   const RESTAURANT = () => CFG().restaurantName || 'alfaprosys';
   const FONT_FAMILY = () => CFG().fontFamily || 'Tahoma,Arial,sans-serif';
   /* أعلام إظهار عناصر الترويسة/التذييل — من invoice_print في السحابة */
@@ -252,7 +261,11 @@
   }
 
   /* استعلام الطابعات المتاحة ومطابقة المرشّحين (محلي + مشترك) */
-  async function listPrinterNames() {
+  /* includeDetails: false = find() فقط (سريع).
+     qz.printers.details() أبطأ عملية في QZ (تستعلم حالة كل طابعة،
+     وإن كانت مشاركة شبكة فالاستعلام يذهب إلى الخادم فعلياً) — كانت
+     تُستدعى دائماً في كل استكشاف. الآن تُستدعى عند الحاجة فقط. */
+  async function listPrinterNames(includeDetails) {
     const names = [];
     const push = function (n) {
       n = String(n || '').trim();
@@ -270,15 +283,17 @@
       console.warn('[ThermalPrint] printers.find failed:', e && e.message || e);
     }
     /* details أحياناً تكشف UNC لا يظهر في find بنفس الصيغة */
-    try {
-      if (qz.printers && typeof qz.printers.details === 'function') {
-        const det = await qz.printers.details();
-        (Array.isArray(det) ? det : (det ? [det] : [])).forEach(function (d) {
-          if (!d) return;
-          push(d.name || d.printer || '');
-        });
-      }
-    } catch (e2) {}
+    if (includeDetails) {
+      try {
+        if (qz.printers && typeof qz.printers.details === 'function') {
+          const det = await qz.printers.details();
+          (Array.isArray(det) ? det : (det ? [det] : [])).forEach(function (d) {
+            if (!d) return;
+            push(d.name || d.printer || '');
+          });
+        }
+      } catch (e2) {}
+    }
     return names;
   }
 
@@ -376,18 +391,18 @@
     const map = {};
     try {
       if (!(qz.printers && typeof qz.printers.details === 'function')) return map;
-      const det = await qz.printers.details();
-      const list = Array.isArray(det) ? det : (det ? [det] : []);
-      list.forEach(function (d) {
+      /* details() بطيئة — وكانت تُستدعى مرتين في الاستكشاف الواحد
+         (مرة في listPrinterNames ومرة هنا). نعيد استخدام النتيجة نفسها
+         إن كانت حديثة (٥ ثوانٍ) فنوفر جولة شبكة كاملة. */
+      let det = null;
+      if (lastDetails && (Date.now() - lastDetailsAt) < 5000) det = lastDetails;
+      else { det = await qz.printers.details(); lastDetails = det; lastDetailsAt = Date.now(); }
+      (Array.isArray(det) ? det : (det ? [det] : [])).forEach(function (d) {
         if (!d) return;
-        const nm = d.name || d.printer || d.driver || '';
-        if (!nm) return;
-        map[String(nm)] = d;
-        map[String(nm).toLowerCase()] = d;
+        (map[d.name] = map[d.name] || d);
+        if (d.printer) map[d.printer] = d;
       });
-    } catch (e) {
-      console.warn('[ThermalPrint] printers.details failed:', e && e.message || e);
-    }
+    } catch (e) {}
     return map;
   }
 
@@ -473,14 +488,56 @@
     return pref + base;
   }
 
+  /* الأسماء المحلولة تُحفظ في ذاكرة الجهاز: عند إعادة فتح الصفحة — أو
+     عند كل فاتورة — لا حاجة لإعادة الاستكشاف من الصفر. */
+  function saveResolved() {
+    try {
+      if (!resolved.cashier && !resolved.kitchen) return;
+      localStorage.setItem(PRINTER_LS, JSON.stringify({
+        cashier: resolved.cashier || null,
+        kitchen: resolved.kitchen || null,
+        host: resolved.host || linkHost || '',
+        at: resolved.at || 0,
+      }));
+    } catch (e) {}
+  }
+  function invalidateResolved() {
+    resolved = { cashier: null, kitchen: null, at: 0, host: '', available: [] };
+    lastDetails = null; lastDetailsAt = 0;
+    try { localStorage.removeItem(PRINTER_LS); } catch (e) {}
+  }
+  /* استرجاع ما حُفظ عند تحميل الملف */
+  (function restoreResolved() {
+    try {
+      const raw = localStorage.getItem(PRINTER_LS);
+      if (!raw) return;
+      const o = JSON.parse(raw);
+      if (!o || (!o.cashier && !o.kitchen)) return;
+      resolved = { cashier: o.cashier || null, kitchen: o.kitchen || null,
+                   host: o.host || '', at: o.at || 0, available: [] };
+    } catch (e) {}
+  })();
+
   async function resolvePrinters(force) {
-    if (!force && resolved.cashier && resolved.kitchen && resolved.host === linkHost && (Date.now() - resolved.at) < 8000) {
+    /* كان الشرط يطلب حلّ الكاشير والمطبخ معاً خلال ٨ ثوانٍ — فإن كانت
+       عندك طابعة واحدة (وهو الغالب) لم يتحقق الشرط أبداً فأُعيد
+       الاستكشاف الكامل عند كل فاتورة. الآن: يكفي حلّ أحدهما، و١٠ دقائق. */
+    if (!force && resolved.host === linkHost &&
+        (resolved.cashier || resolved.kitchen) &&
+        (Date.now() - (resolved.at || 0)) < RESOLVE_TTL) {
       return resolved;
     }
-    const available = await listPrinterNames();
-    const detailsMap = await printerDetailsMap();
+    /* find() أولاً (سريع)؛ فإن لم تُحل الطابعتان نلجأ لـ details() (بطيء) */
+    let available = await listPrinterNames(false);
+    let detailsMap = {};
     let cash = pickBestForRole(available, cashierCandidates(), detailsMap);
     let kit = pickBestForRole(available, kitchenCandidates(), detailsMap);
+    if (!cash || !kit) {
+      available = await listPrinterNames(true);
+      detailsMap = await printerDetailsMap();
+      cash = pickBestForRole(available, cashierCandidates(), detailsMap) || cash;
+      kit  = pickBestForRole(available, kitchenCandidates(), detailsMap) || kit;
+    }
 
     const cashNet = cash && isNetworkPrinterName(cash);
     const kitNet = kit && isNetworkPrinterName(kit);
@@ -524,6 +581,7 @@
       host: linkHost,
       available: available,
     };
+    saveResolved();
     console.info('[ThermalPrint] resolve on', linkHost,
       '→ cashier:', resolved.cashier,
       '| kitchen:', resolved.kitchen,
@@ -537,6 +595,14 @@
     return !!(r.cashier || r.kitchen);
   }
 
+  /* تبريد قصير لكل مضيف شبكي فشل: إن كان جهاز المطعم مطفأً فمحاولة
+     الاتصال به تستغرق ثوانٍ، ولا معنى لتكرارها مع كل فاتورة. */
+  const HOST_FAIL_TTL = 30000;
+  let hostFailUntil = {};
+  function hostCoolingDown(h) { return (hostFailUntil[h] || 0) > Date.now(); }
+  function markHostFailed(h) { hostFailUntil[h] = Date.now() + HOST_FAIL_TTL; }
+  function markHostGood(h) { delete hostFailUntil[h]; }
+
   async function connect(force) {
     if (force !== true && state === 'connected' && window.qz && qz.websocket.isActive()) {
       /* إن كانت الأسماء محلولة حديثاً اكتفِ */
@@ -548,51 +614,75 @@
       await ensureQzLib();
       setupSecurity();
 
-      /* ── 1) محلي أولاً (الجهاز المرتبط بالطابعات أو الذي يرى المشارَكات) ── */
-      let ok = false;
-      try {
-        await connectHost('localhost', force === true);
-        if (await hostHasOurPrinters()) {
-          ok = true;
-        } else {
-          console.info('[ThermalPrint] localhost متصل لكن بلا طابعات مطابقة — نجرّب الشبكة');
-          await disconnectQz();
-        }
-      } catch (eLocal) {
-        console.info('[ThermalPrint] QZ محلي غير متاح:', eLocal && eLocal.message || eLocal);
-      }
+      /* الأسماء محفوظة من جلسة سابقة على نفس المضيف → لا استكشاف */
+      const warm = force !== true && (resolved.cashier || resolved.kitchen) &&
+                   resolved.host === linkHost &&
+                   (Date.now() - (resolved.at || 0)) < RESOLVE_TTL;
 
-      /* ── 2) شبكة: QZ على الجهاز الرئيسي ── */
-      if (!ok) {
+      let ok = false;
+      if (warm) {
+        ok = true;
+      } else {
+        /* ── ١) الشبكة أولاً: QZ على جهاز المطعم حيث الطابعات ──
+           الترتيب السابق كان يعكس ذلك (المحلي أولاً) فيطبع الكاشير عبر
+           QZ المحلي إن وُجد ولو كانت الطابعات مشاركة من الجهاز الرئيسي.
+           الآن: الشبكة مقدَّمة — فإن تعذّرت ننتقل إلى QZ المحلي. */
         const hosts = qzHostCandidates();
         for (let i = 0; i < hosts.length; i++) {
           const h = hosts[i];
           if (!h || h === 'localhost' || h === '127.0.0.1') continue;
+          if (force !== true && hostCoolingDown(h)) continue;
           try {
             await connectHost(h, force === true);
-            if (await hostHasOurPrinters()) {
-              ok = true;
-              break;
-            }
+            if (await hostHasOurPrinters()) { ok = true; markHostGood(h); break; }
             await disconnectQz();
           } catch (eNet) {
             console.info('[ThermalPrint] QZ على', h, 'فشل:', eNet && eNet.message || eNet);
+            markHostFailed(h);
             try { await disconnectQz(); } catch (e2) {}
           }
         }
+
+        /* ── ٢) محلي ثانياً: QZ على جهاز الكاشير نفسه ── */
+        if (!ok) {
+          try {
+            await connectHost('localhost', force === true);
+            if (await hostHasOurPrinters()) {
+              ok = true;
+            } else {
+              console.info('[ThermalPrint] QZ محلي متصل لكن بلا طابعات مطابقة');
+              if (!hosts.length) await disconnectQz();
+            }
+          } catch (eLocal) {
+            console.info('[ThermalPrint] QZ محلي غير متاح:', eLocal && eLocal.message || eLocal);
+          }
+        }
+
+        /* ── ٣) ملاذ أخير: نقبل أي اتصال ناجح حتى بلا مطابقة تامة،
+              الشبكة أولاً ثم المحلي — print() يستخدم أول مرشّح. ── */
+        if (!ok) {
+          for (let i = 0; i < hosts.length && !ok; i++) {
+            const h = hosts[i];
+            if (!h || h === 'localhost' || h === '127.0.0.1') continue;
+            if (force !== true && hostCoolingDown(h)) continue;
+            try {
+              await connectHost(h, force === true);
+              await resolvePrinters(true);
+              ok = !!qz.websocket.isActive();
+              if (ok) markHostGood(h);
+            } catch (e) { markHostFailed(h); }
+          }
+        }
+        if (!ok) {
+          try {
+            await connectHost('localhost', force === true);
+            await resolvePrinters(true);
+            ok = !!qz.websocket.isActive();
+          } catch (e) {}
+        }
       }
 
-      /* ── 3) إن لم تُضبط hosts: ابقَ على localhost إن اتصل (حتى بلا مطابقة تامة) ── */
-      if (!ok) {
-        try {
-          await connectHost('localhost', force === true);
-          await resolvePrinters(true);
-          /* نقبل الاتصال المحلي حتى لو الأسماء لم تُحل — print() ستستخدم المرشّح الأول */
-          ok = qz.websocket.isActive();
-        } catch (e) {}
-      }
-
-      if (!ok) throw new Error('لا QZ محلي ولا شبكي');
+      if (!ok) throw new Error('لا QZ شبكي ولا محلي');
 
       setState('connected');
       offlineCooldown = 30000; offlineUntil = 0;
@@ -742,31 +832,34 @@
     }
     const svcTotal = svcT + svcD;
 
+    /* ملاحظات الصنف: توضع كاملة داخل خلية «ملاحظات» في نفس صف الصنف.
+       (سابقاً: الملاحظة الأطول من 10 أحرف كانت تُنقل إلى سطر منفصل تحت
+       الصنف بـ colspan=5 — مرفوض؛ الخلية تلتفّ تلقائياً فلا داعي له.) */
     const rows = items.map(it => {
       const note = String(it.note || '').trim();
-      const inline = note.length <= 10 ? note : '';
       const nm = nameLines(it);
       const nameCell = nm.map((ln, ix) => `${ix === 0 && it.offer_id ? '🎟️ ' : ''}${ix === 0 && it.is_free ? '🎁 ' : ''}${esc(ln)}`).join('<br>');
-      let h = `<tr>
+      return `<tr>
           <td style="${TD}text-align:center;font-size:${F.name || F.td}px;">${nameCell}</td>
           <td style="${TD}text-align:center;">${it.weight_label ? esc(it.weight_label) : (Number(it.qty) || 1).toFixed(2)}</td>
           <td style="${TD}text-align:center;">${fmtN(it.price)}</td>
-          <td style="${TD}text-align:center;">${fmtN((Number(it.price) || 0) * (Number(it.qty) || 1))}</td>`
-        + `\n          <td style="${TD}text-align:center;font-weight:normal;font-size:${F.itemNote || F.note}px;">${esc(inline)}</td>`
-        + `\n         </tr>`;
-      if (note.length > 10) h += `<tr><td colspan="5" style="${TD}text-align:right;font-weight:normal;font-size:${F.itemNote || F.note}px;">▸ ${esc(note)}</td></tr>`;
-      return h;
+          <td style="${TD}text-align:center;">${fmtN((Number(it.price) || 0) * (Number(it.qty) || 1))}</td>
+          <td style="${TD}text-align:center;font-weight:normal;font-size:${F.itemNote || F.note}px;">${esc(note)}</td>
+         </tr>`;
     }).join('');
 
     /* رؤوس الأعمدة: خط أصغر وخط فاصل أسفلها أثقل لشكل أنظف — 5 أعمدة دائماً */
     const HB = 'border-bottom:2px solid #000;';
-    /* عروض الأعمدة مقيسة من فاتورة العميل نفسها (مواضع الأرقام): اسم المادة ≈
-       الإجمالي ≈ الملاحظات ≈ 22.7% لكل منها، الكمية 13%، السعر 20% */
-    const headCols = `<th style="${TH}${HB}text-align:center;width:22%;">اسم المادة</th>
-         <th style="${TH}${HB}text-align:center;width:13%;">الكمية</th>
-         <th style="${TH}${HB}text-align:center;width:20%;">السعر</th>
-         <th style="${TH}${HB}text-align:center;width:22.5%;">إجمالي</th>
-         <th style="${TH}${HB}text-align:center;width:22.5%;">ملاحظات</th>`;
+    /* عروض الأعمدة — النسبة من عرض الجدول (عرض الجدول نفسه ثابت: 100% - 1مم).
+       العمود الأول «اسم المادة» مُوَسَّع على حساب البقية بأمر صاحب المطعم:
+       أسماء الأصناف طويلة فكانت تُلتفّ من سطرين. عدّل من config.js
+       ← thermal.cols، والمجموع يجب أن يبقى 100. */
+    const C = COLS();
+    const headCols = `<th style="${TH}${HB}text-align:center;width:${C.name}%;">اسم المادة</th>
+         <th style="${TH}${HB}text-align:center;width:${C.qty}%;">الكمية</th>
+         <th style="${TH}${HB}text-align:center;width:${C.price}%;">السعر</th>
+         <th style="${TH}${HB}text-align:center;width:${C.total}%;">إجمالي</th>
+         <th style="${TH}${HB}text-align:center;width:${C.note}%;">ملاحظات</th>`;
 
     /* الترويسة (~7سم): الأسطر موزعة بتساوٍ عبر عمود مرن —
        الاسم · الاسم والهاتف · رقم الطلب كبير + نوع الطلب · التاريخ والوقت · الزبون */
@@ -791,8 +884,14 @@
     const nameBlock = S.name
       ? `<div style="font-size:${F.title}px;font-weight:900;text-align:center;">${esc(RESTAURANT())}</div>`
       : '';
+    /* إشارة التعديل: حرف m صغير بجانب رقم الطلب نفسه (بدل سطر إضافي).
+       يظهر فقط عند الطباعة من شاشة الفواتير (opts.modifiedMark) لفاتورة
+       طرأ عليها تعديل بعد إصدارها — الرقم نفسه لا يتغيّر. */
+    const modMark = (opts.modifiedMark && S.orderNo)
+      ? `<span style="font-size:${Math.max(9, Math.round((F.no || 26) * 0.5))}px;font-weight:900;">m</span>`
+      : '';
     const noBlock = S.orderNo
-      ? `<div style="font-size:${F.noLabel}px;font-weight:900;text-align:center;">رقم الطلب: <span style="font-size:${F.no}px;line-height:1.1;">${esc(no)}</span></div>`
+      ? `<div style="font-size:${F.noLabel}px;font-weight:900;text-align:center;">رقم الطلب: <span style="font-size:${F.no}px;line-height:1.1;">${esc(no)}</span>${modMark}</div>`
       : '';
     const dateBlock = S.date
       ? `<div style="font-size:${F.date}px;font-weight:bold;text-align:center;">تاريخ الطلب: ${esc(inv.date || '')} ${esc(to12h(inv.time))}</div>`
@@ -938,8 +1037,9 @@
   }
 
   /* الطباعة: صامتة عبر QZ إن كانت متصلة، وإلا حوار طباعة المتصفح */
-  async function print(inv, opts = {}) {
-    const html = receiptHtml(inv, opts);
+  /* إرسال HTML جاهز إلى الطابعة الحرارية (كاشير/مطبخ).
+     opts.withDrawer: فتح درج النقود (حصراً للفواتير، لا للتقارير). */
+  async function sendToPrinter(html, opts = {}) {
     if (isActive()) {
       try {
         /* size.width = عرض الورق الفيزيائي؛ القالب نفسه عرضه widthMm ويتمركز داخله.
@@ -967,7 +1067,7 @@ html, body { margin: 0 !important; padding: 0 !important; background: #fff; }
         const pName = await printerName(opts.kitchen ? 'kitchen' : 'cashier');
         const config = qz.configs.create(pName, printOptions);
         await qz.print(config, data);
-        if (!opts.kitchen && CFG().openDrawer !== false) {
+        if (opts.withDrawer && !opts.kitchen && CFG().openDrawer !== false) {
           try {
             const drawerName = await printerName('cashier');
             const drawerConfig = qz.configs.create(drawerName, { units:'in', margins:0 });
@@ -977,6 +1077,9 @@ html, body { margin: 0 !important; padding: 0 !important; background: #fff; }
         return 'qz';
       } catch (err) {
         console.error('QZ print failed:', err);
+        /* الاسم المحفوظ قد يكون قديماً (طابعة أُزيلت/تغيّر اسمها) —
+           نُبطل الذاكرة ليُعاد الاستكشاف في المحاولة التالية مرة واحدة */
+        invalidateResolved();
         /* ليُدرك الكاشير لماذا فُتح حوار المتصفح بدل الطباعة الصامتة */
         try { if (window.showToast) showToast('فشلت طباعة QZ (' + String(err && err.message || err).slice(0, 60) + ') — فُتح حوار الطباعة، اختر ورق Roll', '⚠️'); } catch (e2) {}
       }
@@ -985,27 +1088,58 @@ html, body { margin: 0 !important; padding: 0 !important; background: #fff; }
     return 'dialog';
   }
 
+  /* طباعة فاتورة (القالب المعتمد) — يفتح الدرج بعدها كالمعتاد */
+  async function print(inv, opts = {}) {
+    return sendToPrinter(receiptHtml(inv, opts), Object.assign({}, opts, { withDrawer: true }));
+  }
+
+  /* طباعة تقرير/كشف يبني قالبه بنفسه (كشف محاسبة التوصيل وغيره)
+     على الطابعة الحرارية مباشرةً — بلا فتح درج. */
+  async function printHtml(html, opts = {}) {
+    return sendToPrinter(html, Object.assign({}, opts, { withDrawer: false }));
+  }
+
   /* بعد كل عملية بيع: إيصال كاشير + نسخة مطبخ (حسب config.js)
      ── إصلاح: عند غياب QZ Tray كان يُفتح حوار الطباعة مرتين متتاليتين
      (نسخة كاشير + نسخة مطبخ) والحوار الثاني يكتب فوق نفس الحاوية.
      حوار المتصفح يستهدف طابعة واحدة فقط، فنطبع نسخة واحدة. ── */
   async function afterSale(inv) {
-    try { await connect(); } catch (e) {}
-    if (isActive()) {
+    /* قياس الزمن: من لحظة البيع حتى انتهاء آخر أمر أُرسل للطابعة.
+       يُقرأ من الكونسول (F12 ← Console) لمعرفة الزمن الحقيقي على
+       أجهزة المطعم — لأن الجزء الأكبر منه يقع داخل QZ Tray والطابعة. */
+    const T0 = (window.performance && performance.now) ? performance.now() : Date.now();
+    try {
+      try { await connect(); } catch (e) {}
+      if (isActive()) {
+        try {
+          await print(inv, {});
+          if (CFG().kitchenCopy !== false) await print(inv, { kitchen: true });
+          return;
+        } catch (e) { console.error('[ThermalPrint] فشل الطباعة عبر QZ:', e); }
+      }
+      try { if (window.showToast) showToast('QZ Tray غير متصل — فُتح حوار الطباعة بنسخة واحدة · اختر ورق Roll للطابعة', '🖨️'); } catch (e) {}
+      await fallbackPrint(receiptHtml(inv, {}));
+    } finally {
       try {
-        await print(inv, {});
-        if (CFG().kitchenCopy !== false) await print(inv, { kitchen: true });
-        return;
-      } catch (e) { console.error('[ThermalPrint] فشل الطباعة عبر QZ:', e); }
+        const T1 = (window.performance && performance.now) ? performance.now() : Date.now();
+        console.info('[ThermalPrint] زمن طباعة الفاتورة (حتى انتهاء أمر الطابعة): ' + Math.round(T1 - T0) + ' ms');
+      } catch (e) {}
     }
-    try { if (window.showToast) showToast('QZ Tray غير متصل — فُتح حوار الطباعة بنسخة واحدة · اختر ورق Roll للطابعة', '🖨️'); } catch (e) {}
-    await fallbackPrint(receiptHtml(inv, {}));
+  }
+
+  /* تسخين: يُستدعى عند فتح شاشة البيع في الخلفية، فلا تدفع أول فاتورة
+     في اليوم تكلفة الاتصال والاستكشاف وحدها. */
+  async function warmup() {
+    try { await connect(); } catch (e) {}
+    return isActive();
   }
 
   window.ThermalPrint = {
     connect,
+    warmup,
     reconnect: () => connect(true),   // إعادة محاولة كاملة يدوياً (زر/إعدادات)
     print,
+    printHtml,
     printModification: async function(inv){
       const mods = inv.modifications || [];
       const copy = Object.assign({}, inv, { items: mods.map(function(m){ return { name: (m.type || 'تعديل') + ': ' + (m.detail || ''), qty: 1, price: 0, note: 'إشعار تعديل' }; }), total: 0, notes: 'إشعار تعديل على الفاتورة ' + (inv.id || '') });
