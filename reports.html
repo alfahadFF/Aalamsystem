@@ -7,6 +7,8 @@
   <link rel="stylesheet" href="assets/css/style.css" />
   <link rel="stylesheet" href="assets/css/manager.css" />
   <link rel="stylesheet" href="assets/css/reports.css" />
+  <!-- مقاس الورق — خاص بهذه الصفحة فقط، لا يؤثر على Z-Report في cash_reports -->
+  <style>@page { size: A4 portrait; margin: 14mm 12mm; }</style>
   <link rel="manifest" href="manifest.webmanifest" />
   <meta name="theme-color" content="#102A43" />
   <link rel="icon" href="assets/icon/logo.png" type="image/png" />
@@ -57,7 +59,7 @@
         <div class="rpt-export">
           <button class="rpt-export-btn" onclick="toggleExportMenu(event)">⬇️ تصدير التقرير</button>
           <div class="rpt-export-menu" id="exportMenu">
-            <button onclick="exportReportCSV()">📊 Excel (CSV)</button>
+            <button onclick="exportReportXLSX()">📊 Excel</button>
             <button onclick="printReport()">🖨️ طباعة / PDF</button>
           </div>
         </div>
@@ -90,6 +92,9 @@
   <nav class="mgr-mobile-nav" id="mgrMobileNav" id="mgrMobileNav">
     <div class="mgr-mobile-nav-grid" id="mobileNavGrid"></div>
   </nav>
+
+  <!-- مستند الطباعة/التصدير — يُبنى تلقائياً من التبويب المعروض ويظهر عند الطباعة فقط -->
+  <div id="rptPrintDoc" aria-hidden="true"></div>
 
   <!-- Toast -->
   <div class="toast" id="toast"></div>
