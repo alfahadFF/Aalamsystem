@@ -1396,6 +1396,16 @@ window.OnlineOrderSync = (function () {
   const sb = window.AlfaSB;
   let pushTimer = null;
 
+  /* يوم الطلب: لا يكون فارغاً أبداً — العمود NOT NULL وهو جزء من مفتاح
+     الجدول، فأي صف بلا تاريخ يُرفض برمز 23502. */
+  function orderDay(o) {
+    var d = o && o.date ? String(o.date) : '';
+    if (/^\d{4}-\d{2}-\d{2}/.test(d)) return d.slice(0, 10);
+    var c = o && o.created_at ? String(o.created_at) : '';
+    if (/^\d{4}-\d{2}-\d{2}/.test(c)) return c.slice(0, 10);
+    return new Date().toISOString().slice(0, 10);
+  }
+
   function row(o) {
     return {
       id: String(o.id),
@@ -1411,9 +1421,15 @@ window.OnlineOrderSync = (function () {
       source: o.source || 'online',
       invoice_id: o.invoice_id || null,
       no: o.no == null ? null : o.no,
-      /* رقم الطباعة المستمر — نفس تسلسل فواتير الكاشير بلا أصفار */
-      print_no: o.print_no == null ? null : Number(o.print_no) || null,
-      date: o.date || null,
+      /* ── تنبيه: لا تُضِف هنا عموداً غير موجود في الجدول ──────────
+         كان يُرسل print_no وهو عمود غير موجود في online_orders، فيردّ
+         الخادم 400 (PGRST204) ويفشل رفع الطلب كاملاً — فيبقى الطلب
+         محلياً ولا تُحفظ حالته، ويبدو كأن النظام لا يجلب شيئاً.
+         الأعمدة المتاحة في الجدول: id · created_at · customer · items ·
+         subtotal · delivery_fee · discount · total · payment · status ·
+         source · invoice_id · no · date.
+         رقم الطباعة يبقى محلياً في الطلب ولا يُرفع — والدمج يحفظه. ── */
+      date: orderDay(o),
     };
   }
 
