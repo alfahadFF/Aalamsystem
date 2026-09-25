@@ -94,6 +94,21 @@ let qtyEditBuf = '';
 const NOTE_SUGGESTIONS = ['ملح خفيف','بدون ملح','حار زيادة','بدون حار','ثوم زيادة','بدون ثوم','بدون خس','خس زيادة','بدون مخلل','مخلل زيادة','بدون فطر','بطاطا زيادة','صوص زيادة','مايونيز زيادة','بدون مايونيز'];
 let cart = [];
 
+/* ── آخر فاتورة صدرت: تبقى معروضة في أعلى لوحة الفاتورة بعد الطباعة ──
+   كان كل شيء يختفي فور الطباعة، فإن سلّم الكاشير الوصل للزبون نسي قيمته.
+   تُحفظ في الجهاز فتبقى حتى بعد إغلاق الصفحة، وتُستبدل مع الفاتورة التالية. */
+const LAST_SALE_KEY = 'alfaprosys_last_sale';
+let lastSale = null;
+try { lastSale = JSON.parse(localStorage.getItem(LAST_SALE_KEY) || 'null'); } catch (e) { lastSale = null; }
+function saveLastSale(label, total, type) {
+  lastSale = { label: String(label || ''), total: Number(total) || 0, type: type || '', at: Date.now() };
+  try { localStorage.setItem(LAST_SALE_KEY, JSON.stringify(lastSale)); } catch (e) {}
+}
+function clearLastSale() { lastSale = null; try { localStorage.removeItem(LAST_SALE_KEY); } catch (e) {} }
+function timeHM(ts) {
+  try { const d = new Date(ts); return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0'); } catch (e) { return ''; }
+}
+
 /* ── خدمات الطلب (طاولة / توصيل) — قيم اختيارية تُضاف فوق الصافي ── */
 let orderServices = { table: 0, delivery: 0 };
 let serviceSelected = { table: false, delivery: false };
@@ -602,6 +617,7 @@ function renderDirectPOS(total, count) {
 
         <div class="d-body">
           <section class="d-main" aria-label="الفاتورة والأصناف">
+            ${renderLastSaleBar()}
             <div class="d-invwrap" id="menuInvoice">${renderDirectInvoice(total, count)}</div>
             <div class="d-items" id="menuItems">${renderDirectItemsArea(items)}</div>
             <div class="d-paybar" id="menuPaybar"><button class="d-print-btn" type="button" data-action="submit-order" ${cart.length===0?'disabled':''}>🖨️ طباعة</button><button class="d-calc-btn" type="button" data-action="open-calc" ${cart.length===0?'disabled':''}>🧮 حاسبة الباقي</button>${renderPaySection()}</div>
@@ -1891,6 +1907,7 @@ function autoFillPartial(phone) {
 
 function handleAction(action, value, el, ev) {
   switch(action) {
+    case 'clear-last-sale': clearLastSale(); return renderPOS();
     case 'toggle-nav': return toggleCashierNav();
     case 'close-nav': return closeCashierNav();
     case 'toggle-search': return toggleSearch();
@@ -2136,8 +2153,27 @@ function updateMenuArea() {
     return true;
   } catch (e) { return false; }
 }
-function renderBillPanel(total, count) {
+/* شريط «آخر فاتورة»: يبقى ظاهراً أعلى الفاتورة بعد الطباعة ومسح السلة،
+   فإن سلّم الكاشير الوصل للزبون لم ينسَ قيمته. يُستبدل مع البيع التالي،
+   ويُحفظ في الجهاز فيبقى حتى بعد إغلاق الصفحة. */
+function renderLastSaleBar() {
+  if (!lastSale) return '';
   return `
+          <div class="last-sale-bar" style="margin:0 0 8px;padding:7px 10px;border-radius:12px;background:#0b2942;color:#fff;display:flex;align-items:center;justify-content:space-between;gap:8px;box-shadow:0 2px 8px rgba(0,0,0,.18);">
+            <div style="line-height:1.2;">
+              <div style="font-size:11px;opacity:.75;">آخر فاتورة مُسلَّمة</div>
+              <div style="font-size:13px;font-weight:700;white-space:nowrap;">#${escapeHtml(String(lastSale.label || ''))}${lastSale.at ? ' · ' + timeHM(lastSale.at) : ''}</div>
+            </div>
+            <div style="font-size:23px;font-weight:900;white-space:nowrap;">${fmtCur(lastSale.total)}</div>
+            <button type="button" data-action="clear-last-sale" title="إخفاء" aria-label="إخفاء آخر فاتورة" style="background:transparent;border:0;color:#fff;opacity:.6;font-size:15px;cursor:pointer;padding:2px 4px;">✕</button>
+          </div>`;
+}
+
+function renderBillPanel(total, count) {
+  /* شريط «آخر فاتورة»: يظهر أعلى الفاتورة بعد أول عملية بيع، ويبقى ظاهراً
+     بعد الطباعة ومسح السلة حتى يعرف الكاشير قيمة ما سلّمه للزبون. */
+  return `
+          ${renderLastSaleBar()}
           <div class="bill-head">
             <div><h2>🧾 فاتورة ${nextInvoiceLabel()}</h2><p>${orderType==='dinein' ? escapeHtml(selectedHall) : orderType==='takeaway' ? 'خارجي' : 'توصيل'}</p></div>
             
@@ -2492,6 +2528,8 @@ async function submitOrder(){
     ? displayInvoiceNo(inv.print_no, inv)
     : (window.displayInvoiceNo ? displayInvoiceNo(invNo, inv)
     : (window.padNo ? padNo(invNo) : String(invNo)));
+  /* يبقى الإجمالي معروضاً في أعلى الفاتورة بعد الطباعة */
+  saveLastSale(_lbl, grand, orderType);
   showToast(orderType==='takeaway' || orderType==='delivery'
     ? `فاتورة ${_lbl} · دورك ${_lbl} → المطبخ`
     : `فاتورة ${_lbl} → المطبخ`,'🍳');

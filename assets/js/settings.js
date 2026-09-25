@@ -464,6 +464,7 @@ const PRINT_DEFAULTS = {
   items_font_size: 12,          /* خلايا الكمية والسعر والإجمالي */
   items_note_font_size: 11,     /* ملاحظات الصنف داخل الجدول */
   sum_font_size: 12.5,
+  sum_value_font_size: 17,   /* أرقام جدول المجاميع (مجموع الطلب/الصافي) */
   show_logo: true,
   logo_url: '',
   logo_max_mm: 22,
@@ -553,6 +554,7 @@ function applyPrintToRuntime(s){
     thanks: Number(s.thank_you_font_size) || 16,
     footerTitle: Number(s.footer_title_font_size) || 14,
     sum: Number(s.sum_font_size) || 12.5,
+    sumVal: Number(s.sum_value_font_size) || 17,  /* أرقام المجاميع — أكبر من التسميات */
     td: it,                 /* كمية / سعر / إجمالي */
     th: thSz || 9.5,        /* رؤوس الأعمدة */
     name: nameSz || 11,     /* اسم المادة */
@@ -690,6 +692,7 @@ function buildPrintDesignControls(){
       <div class="set-pd-row">
         <label class="set-pd-field">ملاحظات الطلب <input type="number" min="8" max="28" step="0.5" data-k="order_notes_font_size" value="${Number(s.order_notes_font_size)||14}"></label>
         <label class="set-pd-field">المجاميع <input type="number" min="8" max="24" step="0.5" data-k="sum_font_size" value="${Number(s.sum_font_size)||12.5}"></label>
+        <label class="set-pd-field">أرقام المجاميع <input type="number" min="8" max="32" step="0.5" data-k="sum_value_font_size" value="${Number(s.sum_value_font_size)||17}"></label>
         <label class="set-pd-field">عنوان التذييل <input type="number" min="8" max="28" step="0.5" data-k="footer_title_font_size" value="${Number(s.footer_title_font_size)||14}"></label>
       </div>
       <div class="set-pd-row">

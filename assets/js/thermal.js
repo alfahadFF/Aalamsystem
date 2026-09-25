@@ -69,7 +69,7 @@
      عدّلها من config.js → thermal.fonts إن أراد صاحب المطعم تغييراً. */
   const FONTS = () => Object.assign({
     title: 20, sub: 12.5, noLabel: 26, no: 26, date: 12, cust: 12.5,
-    th: 9.5, td: 12, name: 11, note: 14, itemNote: 11, sum: 13, thanks: 15, address: 12.5,
+    th: 9.5, td: 12, name: 11, note: 14, itemNote: 11, sum: 13, sumVal: 17, thanks: 15, address: 12.5,
   }, CFG().fonts || {});
   const FEED = () => Number(CFG().feedMm) || 3;
   /* عروض أعمدة جدول الأصناف (نسبة مئوية من عرض الجدول) — من config.js
@@ -701,8 +701,17 @@
   async function printerName(kind) {
     if (!isActive()) return kind === 'kitchen' ? PRINTER_KITCHEN() : PRINTER_CASHIER();
     try { await resolvePrinters(false); } catch (e) {}
-    if (kind === 'kitchen') return resolved.kitchen || kitchenCandidates()[0] || PRINTER_KITCHEN();
-    return resolved.cashier || cashierCandidates()[0] || PRINTER_CASHIER();
+    /* يُسجَّل الاسم الفعلي المستخدم عند كل بيع: به نعرف من الكونسول
+       (F12) إلى أي طابعة ذهبت نسخة الكاشير ونسخة المطبخ فعلاً. */
+    let n;
+    if (kind === 'kitchen') {
+      n = resolved.kitchen || kitchenCandidates()[0] || PRINTER_KITCHEN();
+      console.info('[ThermalPrint] مطبخ → "' + n + '"' + (resolved.kitchen ? '' : '  ⚠ لم يُحلّ الاسم — استخدام احتياطي'));
+    } else {
+      n = resolved.cashier || cashierCandidates()[0] || PRINTER_CASHIER();
+      console.info('[ThermalPrint] كاشير → "' + n + '"' + (resolved.cashier ? '' : '  ⚠ لم يُحلّ الاسم — استخدام احتياطي'));
+    }
+    return n;
   }
 
   /* الوقت بنظام 12 ساعة كالفاتورة المعتمدة: 14:32 ← 2:32 PM */
@@ -864,6 +873,9 @@
     /* الترويسة (~7سم): الأسطر موزعة بتساوٍ عبر عمود مرن —
        الاسم · الاسم والهاتف · رقم الطلب كبير + نوع الطلب · التاريخ والوقت · الزبون */
     const SUM = `border:1px solid #000;padding:2px 6px;font-size:${F.sum}px;line-height:1.2;font-weight:bold;`;
+    /* الأرقام في جدول المجاميع (مجموع الطلب · الحسم · الخدمات · الصافي) أكبر
+       من تسمياتها ليقف الكاشير على المبلغ بلمحة. يُضبط من إعدادات الطباعة. */
+    const SUMV = `border:1px solid #000;padding:2px 6px;font-size:${F.sumVal || (Number(F.sum) || 13) + 4}px;line-height:1.2;font-weight:900;`;
 
     const footerTitleTxt = (S.footerTitle && CFG().footerTitle) ? String(CFG().footerTitle) : '';
     const thankTxt = (S.thankYou) ? String(CFG().thankYou || 'شكرا لزيارتكم') : '';
@@ -923,10 +935,10 @@
         </table>
 
         <table style="width:calc(100% - 1mm);border-collapse:collapse;border:1px solid #000;margin:0 auto 1mm;">
-          <tr><td style="${SUM}text-align:right;padding-inline-start:12px;">مجموع الطلب</td><td style="${SUM}text-align:center;">${fmtN(sub)}</td></tr>
-          <tr><td style="${SUM}text-align:right;padding-inline-start:12px;">الحسم</td><td style="${SUM}text-align:center;">${fmtN(disc)}</td></tr>
-          ${svcTotal > 0 ? `<tr><td style="${SUM}text-align:right;padding-inline-start:12px;">الخدمات</td><td style="${SUM}text-align:center;">${fmtN(svcTotal)}</td></tr>` : ''}
-          <tr><td style="${SUM}text-align:right;padding-inline-start:12px;">الصافي</td><td style="${SUM}text-align:center;">${fmtN(total)}</td></tr>
+          <tr><td style="${SUM}text-align:right;padding-inline-start:12px;">مجموع الطلب</td><td style="${SUMV}text-align:center;">${fmtN(sub)}</td></tr>
+          <tr><td style="${SUM}text-align:right;padding-inline-start:12px;">الحسم</td><td style="${SUMV}text-align:center;">${fmtN(disc)}</td></tr>
+          ${svcTotal > 0 ? `<tr><td style="${SUM}text-align:right;padding-inline-start:12px;">الخدمات</td><td style="${SUMV}text-align:center;">${fmtN(svcTotal)}</td></tr>` : ''}
+          <tr><td style="${SUM}text-align:right;padding-inline-start:12px;">الصافي</td><td style="${SUMV}text-align:center;">${fmtN(total)}</td></tr>
         </table>
 
         ${drawBlock}
