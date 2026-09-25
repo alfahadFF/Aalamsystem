@@ -830,7 +830,10 @@
           <td style="${TD}text-align:center;font-weight:normal;font-size:${F.itemNote || F.note}px;"></td>
         </tr>`;
     let svcRows = '';
-    if (!opts.kitchen && !items.some(x => x.is_service)) {
+    /* نسخة المطبخ = نسخة الكاش حرفياً: لم يبقَ أي استثناء لـ opts.kitchen
+       في محتوى الورقة. كان السطر التالي يبدأ بـ !opts.kitchen فتُطبع ورقة
+       المطبخ بلا سطر «خدمة طاولة/توصيل» وبلا مجاميع مختلفة الطول. */
+    if (!items.some(x => x.is_service)) {
       if (svcT > 0 || inv.type === 'dinein' || inv.type === 'table') svcRows += svcRowFor('خدمة طاولة', svcT);
       if (svcD > 0 || inv.type === 'delivery') svcRows += svcRowFor('خدمة توصيل', svcD);
       if (!svcRows) {
@@ -884,7 +887,7 @@
     const footerBlock = (footerTitleTxt || thankTxt)
       ? `<div style="text-align:center;padding-bottom:${FEED()}mm;font-weight:bold;">${footerTitleTxt ? `<div style="font-size:${fTitleSize}px;">${esc(footerTitleTxt)}</div>` : ''}${thankTxt ? `<div style="font-size:${fThanksSize}px;">${esc(thankTxt)}</div>` : ''}</div>`
       : '';
-    const drawBlock = (S.drawCode && inv.draw_code && !opts.kitchen)
+    const drawBlock = (S.drawCode && inv.draw_code)
       ? `<div style="font-size:${Math.max(10, (F.date || 12))}px;font-weight:900;text-align:center;padding:1mm 0;">رمز السحب: ${esc(inv.draw_code)}</div>`
       : '';
     const qrBlock = (S.qr && CFG().qrImageUrl)
@@ -913,7 +916,7 @@
       : '';
 
     return `
-      <div style="display:flow-root;${MINH() && !opts.kitchen ? `min-height:${MINH()}mm;` : ''}width:${w}mm;max-width:${w}mm;min-width:${w}mm;margin:0 auto;padding:0;font-family:${esc(FONT_FAMILY())};color:#000;direction:rtl;text-align:right;box-sizing:border-box;line-height:1.25;background:#fff;">
+      <div style="display:flow-root;${MINH() ? `min-height:${MINH()}mm;` : ''}width:${w}mm;max-width:${w}mm;min-width:${w}mm;margin:0 auto;padding:0;font-family:${esc(FONT_FAMILY())};color:#000;direction:rtl;text-align:right;box-sizing:border-box;line-height:1.25;background:#fff;">
         <div style="min-height:${isDlv ? 60 : 64}mm;display:flex;flex-direction:column;justify-content:space-evenly;margin:1mm 0 2mm;">
           ${logoBlock}
           ${nameBlock}
