@@ -24,6 +24,18 @@ window.AlfaOutbox = (function () {
   function refreshBadge() { try { if (window.NetBadge) NetBadge.refresh(); } catch (e) {} }
   function clone(o) { return JSON.parse(JSON.stringify(o)); }
   function rowId(r) { return String(r.id != null ? r.id : (r.key != null ? r.key : '')); }
+  /* جداول مفتاحها مركّب: الطلبات الأونلاين تتكرر أرقامها بين الأيام،
+     فالمفتاح هنا «الرقم|التاريخ» — وإلا اختلط طلب يوم بطلب يوم آخر. */
+  const COMPOSITE = {
+    online_orders: function (r) {
+      if (!r) return '';
+      return String(r.id != null ? r.id : '') + '|' + String(r.date || '');
+    },
+  };
+  function rowKey(name, r) {
+    const f = COMPOSITE[name];
+    return f ? f(r) : rowId(r);
+  }
   function isEmpty(b) { return !b || (!Object.keys(b.rows || {}).length && !(b.dels || []).length); }
 
   function persist(name) {
@@ -81,7 +93,7 @@ window.AlfaOutbox = (function () {
     return hydrate(name).then(function () {
       const b = boxOf(name);
       rows.forEach(function (r) {
-        const id = rowId(r);
+        const id = rowKey(name, r);
         if (!id) return;
         b.dels = (b.dels || []).filter(function (x) { return String(x) !== id; });
         try { b.rows[id] = clone(r); } catch (e) { b.rows[id] = r; }

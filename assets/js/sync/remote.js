@@ -1045,13 +1045,27 @@ window.InvoiceSync = (function () {
    أي طرف — وإلا بعد «قبول وطباعة» يعود الطلب للظهور كأنه جديد
    عند أول سحب (خصوصاً PosSync الذي كان يستبدل المصفوفة كاملة).
    ══════════════════════════════════════════════════════════════ */
+/* ══════════════════════════════════════════════════════════════
+   مفتاح الطلب الأونلاين: الرقم + التاريخ
+   ──────────────────────────────────────────────────────────────
+   رقم الطلب يبدأ من 001 كل يوم، فيتكرر الرقم نفسه بين الأيام —
+   وهذا مقبول تماماً. لكن الرقم وحده لا يكفي لتمييز الطلب، فالمفتاح
+   صار مركّباً: «on 001|2026-09-25». يُستخدم للدمج والبحث والإشعارات
+   حتى لا يختلط طلب اليوم بطلب يوم آخر يحمل الرقم نفسه.
+   ══════════════════════════════════════════════════════════════ */
+window.alfaOrderKey = function (o) {
+  if (!o) return '';
+  var d = o.date || (o.created_at ? String(o.created_at).slice(0, 10) : '');
+  return String(o.id != null ? o.id : '') + '|' + String(d || '');
+};
+
 window.alfaMergeOnlineOrders = function (localList, remoteList) {
   var RANK = { new: 0, rejected: 1, done: 1 };
   var byId = {};
   function rank(s) { return RANK[s] || 0; }
   function put(row, preferTerminal) {
     if (!row || row.id == null) return;
-    var id = String(row.id);
+    var id = window.alfaOrderKey(row);
     var cur = byId[id];
     if (!cur) { byId[id] = row; return; }
     var cr = rank(cur.status), rr = rank(row.status);
@@ -1197,7 +1211,7 @@ window.PosSync = (function () {
   }
   function applyOnlineBox(b) {
     if (!window.DEMO_DATA || !window.AlfaOutbox) return;
-    DEMO_DATA.online_orders = AlfaOutbox.mergeLists(DEMO_DATA.online_orders, b);
+    DEMO_DATA.online_orders = AlfaOutbox.mergeLists(DEMO_DATA.online_orders, b, window.alfaOrderKey);
   }
   function applySettingsBox(b) {
     if (!window.DEMO_DATA) return;
@@ -1420,14 +1434,14 @@ window.OnlineOrderSync = (function () {
 
   function pushOne(o) {
     if (!sb.enabled() || !o || !o.id) return Promise.resolve({ skipped: true });
-    return sb.upsert('online_orders', [row(o)], 'id');
+    return sb.upsert('online_orders', [row(o)], 'id,date');
   }
 
   function pushAll() {
     if (!sb.enabled() || navigator.onLine === false) return Promise.resolve({ skipped: true });
     const list = ((window.DEMO_DATA && DEMO_DATA.online_orders) || []).map(row);
     if (!list.length) return Promise.resolve({ skipped: true, reason: 'empty' });
-    return sb.upsert('online_orders', list, 'id').then(function () { return { pushed: true, n: list.length }; });
+    return sb.upsert('online_orders', list, 'id,date').then(function () { return { pushed: true, n: list.length }; });
   }
 
   function pushSoonLegacy(o) {
@@ -1464,11 +1478,21 @@ window.OnlineOrderSync = (function () {
     if (!sb.enabled() || navigator.onLine === false) return Promise.reject(new Error('offline'));
     const list = (rows || []).map(row);
     if (!list.length) return Promise.resolve({ pushed: true, n: 0 });
-    return sb.upsert('online_orders', list, 'id').then(function () { return { pushed: true, n: list.length }; });
+    return sb.upsert('online_orders', list, 'id,date').then(function () { return { pushed: true, n: list.length }; });
   }
-  function delRows(ids) {
+  function delRows(keys) {
     if (!sb.enabled() || navigator.onLine === false) return Promise.reject(new Error('offline'));
-    return sb.del('online_orders', ids || []);
+    var list = keys || [];
+    if (!list.length) return Promise.resolve();
+    /* المفتاح المركّب «رقم|تاريخ»: الحذف يجب أن يحمل التاريخ أيضاً وإلا
+       لمسحنا الطلب نفسه من كل الأيام. */
+    return Promise.all(list.map(function (k) {
+      var str = String(k), bar = str.indexOf('|');
+      if (bar < 0) return sb.del('online_orders', [str]);
+      var id = str.slice(0, bar), dt = str.slice(bar + 1);
+      return sb.delFilter('online_orders',
+        '?id=eq.' + encodeURIComponent(id) + '&date=eq.' + encodeURIComponent(dt));
+    }));
   }
   function applyBox(b) {
     if (!window.DEMO_DATA || !window.AlfaOutbox) return;
