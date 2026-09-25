@@ -118,7 +118,23 @@ async function acceptOrder(id, date){
   const o = findOrder(id, date); if(!o) return;
   if (o.status !== 'new') { showToast('هذا الطلب مُعالج مسبقاً', 'ℹ️'); renderAll(); return; }
   const ref = nextInvoiceRef();
-  ref.no = window.reserveInvoiceNo ? await window.reserveInvoiceNo() : ref.no;
+  /* ══════════════════════════════════════════════════════════════
+     الحجز أولاً — وقاعدة صارمة: لا رقم ⇒ لا فاتورة ولا قبول
+     ──────────────────────────────────────────────────────────────
+     كان القبول يكمل حتى لو فشل الحجز: يبقى ref.no فارغاً، فيبني
+     nextInvoiceId رقماً من عدّاد هذا الجهاز وحده (١، ٢، ٣…) ويُصدر
+     فاتورة برقم مُختلق — رقم سبق أن صدر اليوم على جهاز آخر، فيصطدم
+     معرّف الفاتورة بالسحابة (409/400) فلا تُرفع، ويظهر الطلب كأنه
+     «لم يتم». وشاشة البيع لا تفعل ذلك: ترفض البيع بلا رقم حقيقي.
+     الآن الشاشتان تتصرّفان تصرّفاً واحداً: بلا رقم لا يُقبل الطلب.
+     ══════════════════════════════════════════════════════════════ */
+  const reserved = window.reserveInvoiceNo ? await window.reserveInvoiceNo() : null;
+  const reservedNo = Number(reserved) || 0;
+  if (!reservedNo) {
+    try { showToast('تعذّر ترقيم الفاتورة — لا اتصال بالخادم ولا بخدمة الترقيم', '🚫'); } catch (e) {}
+    return;   /* الطلب يبقى «جديد» — لا فاتورة برقم مُختلق */
+  }
+  ref.no = reservedNo;
   ref.id = window.nextInvoiceId ? window.nextInvoiceId(ref.no) : ref.date + '-' + (window.padNo ? window.padNo(ref.no) : String(ref.no).padStart(3, '0'));
   /* ترحيل الحالة فوراً محلياً — قبل أي سحب قد يعيد new */
   o.status = 'done';
