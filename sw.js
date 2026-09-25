@@ -7,7 +7,7 @@
    - أصول أخرى (js/css/أيقونات): كاش أولًا ثم شبكة.
    - خطوط خارجية: كاش أولًا بعد أول تحميل (تعمل أوفلاين لاحقًا).
    ============================================================ */
-const VERSION = 'alfaprosys-v96'; /* v96: استدعاءات قاعدة البيانات تُجلب من الشبكة دائماً — لا كاش (إعدادات الطباعة كانت تُقرأ قديمة) */
+const VERSION = 'alfaprosys-v97'; /* v96: استدعاءات قاعدة البيانات من الشبكة دائماً — لا كاش · v97: معالجة أخطاء الجلب (كانت ترمي «Failed to convert value to Response») */
 
 /* ملفات تُجلب دائماً من الشبكة أولاً (لا كاش-أولاً أبداً)
    أضف هنا أي ملف إعدادات حسّاس مستقبلاً بنفس الطريقة */
@@ -113,7 +113,7 @@ self.addEventListener('fetch', (event) => {
      فتقرأ نسخةً قديمة من الكاش وتكتبها فوق الجديدة — فيبدو للمستخدم أن
      تغييراته لا تُحفظ. البيانات لا تُخزَّن: الشبكة أو لا شيء. ────────── */
   if (url.origin !== self.location.origin && /\/rest\/v1\//.test(url.pathname)) {
-    event.respondWith(fetch(req));
+    event.respondWith(fetch(req).catch(() => Response.error()));
     return;
   }
 
@@ -155,13 +155,17 @@ self.addEventListener('fetch', (event) => {
   }
 
   // أصول خارجية (خطوط Google): كاش أولًا بعد أول تحميل
+  /* ملاحظة: عند فشل الجلب لا يوجد ما نُعيده. إرجاع undefined كان يرمي
+     «Failed to convert value to Response» في الكونسول — نُعيد Response.error()
+     بدلاً منه (نفس أثر انقطاع الشبكة، بلا خطأ مُرعب). وإن كان الأصل مخزَّناً
+     نُعيده من الكاش. */
   event.respondWith(
     caches.match(req).then((hit) => hit ||
       fetch(req).then((res) => {
         const copy = res.clone();
         caches.open(VERSION).then((c) => c.put(req, copy));
         return res;
-      }).catch(() => caches.match(req))
+      }).catch(() => caches.match(req).then((c) => c || Response.error()))
     )
   );
 });
