@@ -37,7 +37,9 @@ window.Notify = (function () {
   function setMuted(m){ try { localStorage.setItem(LS_MUTED, m ? '1' : '0'); } catch (e) {} }
 
   const orders  = () => (window.DEMO_DATA && window.DEMO_DATA.online_orders) || [];
-  const newIds  = () => orders().filter(o => o.status === 'new').map(o => o.id);
+  /* المفتاح المركّب (رقم|تاريخ): الرقم يتكرر بين الأيام فلا يصلح وحده */
+  const keyOf   = (o) => (window.alfaOrderKey ? window.alfaOrderKey(o) : String(o.id));
+  const newIds  = () => orders().filter(o => o.status === 'new').map(keyOf);
 
   function blink(on) {
     document.querySelectorAll('.online-ot-btn').forEach(el => el.classList.toggle('blink', on));

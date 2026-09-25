@@ -78,8 +78,8 @@ function renderCards(){
       </div>
       ${o.status==='new' ? `
       <div class="online-actions">
-        <button class="online-act accept" onclick="acceptOrder('${e(o.id)}')">🖨️ قبول وطباعة فاتورة</button>
-        <button class="online-act reject" onclick="rejectOrder('${e(o.id)}')">رفض</button>
+        <button class="online-act accept" onclick="acceptOrder('${e(o.id)}','${e(o.date||'')}')">🖨️ قبول وطباعة فاتورة</button>
+        <button class="online-act reject" onclick="rejectOrder('${e(o.id)}','${e(o.date||'')}')">رفض</button>
       </div>` : ''}
     </div>`).join('');
 }
@@ -104,8 +104,18 @@ function toggleSound(){
 function commit(){ DATA.online_orders = orders().slice(); }
 
 /* ── قبول طلب: يتحول لفاتورة ضمن التسلسل ── */
-async function acceptOrder(id){
-  const o = orders().find(x=>x.id===id); if(!o) return;
+/* البحث عن الطلب: بالرقم + التاريخ — لأن الرقم يتكرر بين الأيام */
+function findOrder(id, date){
+  const list = orders();
+  if (date) {
+    const hit = list.find(x => String(x.id) === String(id) && String(x.date || '') === String(date));
+    if (hit) return hit;
+  }
+  return list.find(x => String(x.id) === String(id));
+}
+
+async function acceptOrder(id, date){
+  const o = findOrder(id, date); if(!o) return;
   if (o.status !== 'new') { showToast('هذا الطلب مُعالج مسبقاً', 'ℹ️'); renderAll(); return; }
   const ref = nextInvoiceRef();
   ref.no = window.reserveInvoiceNo ? await window.reserveInvoiceNo() : ref.no;
@@ -176,8 +186,8 @@ async function acceptOrder(id){
   if (window.Notify) try { Notify.check(true); } catch (e) {}
 }
 
-async function rejectOrder(id){
-  const o = orders().find(x=>x.id===id); if(!o) return;
+async function rejectOrder(id, date){
+  const o = findOrder(id, date); if(!o) return;
   if (o.status !== 'new') { showToast('هذا الطلب مُعالج مسبقاً', 'ℹ️'); renderAll(); return; }
   o.status = 'rejected';
   commit();

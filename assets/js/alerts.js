@@ -51,14 +51,14 @@ window.Alerts = (function () {
       const bucket = m >= 60 ? '60+' : m >= 30 ? '30' : '15';
       if (m >= 15) {
         out.push({
-          key: 'onl:' + o.id, sig: bucket, level: 'urgent',
+          key: 'onl:' + (window.alfaOrderKey ? window.alfaOrderKey(o) : o.id), sig: bucket, level: 'urgent',
           title: `طلب أونلاين ${esc(o.id)} ينتظر المعالجة منذ ${m} دقيقة`,
           detail: `${esc(o.customer && o.customer.name || '')} · ${Number(o.total || 0).toLocaleString('en-US')} ل.س`,
           target: 'online_orders.html',
         });
       } else if (m >= 5) {
         out.push({
-          key: 'onl:soon:' + o.id, sig: '5', level: 'warn',
+          key: 'onl:soon:' + (window.alfaOrderKey ? window.alfaOrderKey(o) : o.id), sig: '5', level: 'warn',
           title: `طلب أونلاين ${esc(o.id)} وصل ولم يُعالج بعد`,
           detail: `${esc(o.customer && o.customer.name || '')} · منذ ${m} دقيقة`,
           target: 'online_orders.html',
