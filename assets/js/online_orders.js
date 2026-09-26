@@ -127,19 +127,40 @@ function toggleSound(){
 
 function commit(){ DATA.online_orders = orders().slice(); }
 
+function onlineThermal(){
+  /* إذا كانت شاشة الأونلاين مفتوحة داخل شاشة البيع، نستخدم نفس كائن الطباعة
+     الموجود في شاشة البيع نفسها. هذا يجعل الأمر يخرج من نفس السياق المسخّن
+     الذي تطبع منه الفاتورة العادية، بدل أن يفتح iframe مساراً مستقلاً. */
+  try {
+    if (window.parent && window.parent !== window && window.parent.ThermalPrint) {
+      return window.parent.ThermalPrint;
+    }
+  } catch (e) {}
+  return window.ThermalPrint || null;
+}
+function onlineThermalCfg(){
+  try {
+    if (window.parent && window.parent !== window && window.parent.ALFA_CONFIG) {
+      return (window.parent.ALFA_CONFIG && window.parent.ALFA_CONFIG.thermal) || {};
+    }
+  } catch (e) {}
+  return (window.ALFA_CONFIG && window.ALFA_CONFIG.thermal) || {};
+}
+
 let onlinePrintBusy = false;
 
 async function ensureOnlineDirectPrinter(){
-  if (!window.ThermalPrint || !ThermalPrint.afterSale) return false;
+  const TP = onlineThermal();
+  if (!TP || !TP.afterSale) return false;
   try {
     /* نفس فكرة شاشة البيع: تجهيز QZ قبل أمر الطباعة حتى لا يدخل مسار معاينة المتصفح. */
-    if (ThermalPrint.isActive && ThermalPrint.isActive()) return true;
-    if (ThermalPrint.warmup) await ThermalPrint.warmup();
-    if (ThermalPrint.isActive && ThermalPrint.isActive()) return true;
-    if (ThermalPrint.connect) await ThermalPrint.connect();
-    return !!(ThermalPrint.isActive && ThermalPrint.isActive());
+    if (TP.isActive && TP.isActive()) return true;
+    if (TP.warmup) await TP.warmup();
+    if (TP.isActive && TP.isActive()) return true;
+    if (TP.connect) await TP.connect();
+    return !!(TP.isActive && TP.isActive());
   } catch (e) {
-    return !!(ThermalPrint.isActive && ThermalPrint.isActive());
+    return !!(TP.isActive && TP.isActive());
   }
 }
 
@@ -150,7 +171,8 @@ async function printOnlineInvoice(invId){
     showToast('لم تصل الفاتورة بعد — اضغط تحديث', '⚠️');
     return;
   }
-  if (!window.ThermalPrint || !ThermalPrint.afterSale) {
+  const TP = onlineThermal();
+  if (!TP || !TP.afterSale) {
     showToast('ملف الطباعة غير متاح', '⚠️');
     return;
   }
@@ -161,8 +183,8 @@ async function printOnlineInvoice(invId){
 
     /* نفس آلية البيع العادي حرفياً: استدعاء afterSale فقط، وهي تتولى الاتصال والطباعة. */
     try {
-      const _th = window.ALFA_CONFIG && window.ALFA_CONFIG.thermal || {};
-      if (window.ThermalPrint && _th.autoAfterSale !== false) ThermalPrint.afterSale(inv);
+      const _th = onlineThermalCfg();
+      if (_th.autoAfterSale !== false) TP.afterSale(inv);
     } catch (e) { console.error('[طباعة أونلاين] فشل بدء أمر الطباعة:', e); }
 
     if (ord) {
@@ -230,8 +252,9 @@ if (typeof window !== 'undefined' && window.addEventListener) {
   window.__ooRender = renderAll;
   if (window.Notify) Notify.init({ markSeenOnLoad: true });
   /* نفس شاشة البيع: تسخين الطباعة مبكراً حتى تكون الطباعة مباشرة وسريعة. */
-  if (window.ThermalPrint && ThermalPrint.warmup) {
-    setTimeout(function () { ThermalPrint.warmup().catch(function () {}); }, 1200);
+  const _otp = onlineThermal();
+  if (_otp && _otp.warmup) {
+    setTimeout(function () { _otp.warmup().catch(function () {}); }, 1200);
   }
 
   function quietPull() {
