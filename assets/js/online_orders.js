@@ -103,21 +103,41 @@ function toggleSound(){
 /* ── حفظ التعديلات عبر Proxy (إسناد علوي) ── */
 function commit(){ DATA.online_orders = orders().slice(); }
 
-function onlineThermal(){
-  try {
-    if (window.parent && window.parent !== window && window.parent.ThermalPrint) return window.parent.ThermalPrint;
-  } catch (e) {}
-  return window.ThermalPrint || null;
+function posPrintHostAvailable(){
+  try { return !!(window.parent && window.parent !== window); } catch (e) { return false; }
 }
-function printViaPOS(inv){
-  try {
-    if (window.parent && window.parent !== window && typeof window.parent.printOnlineInvoiceFromPOS === 'function') {
-      return window.parent.printOnlineInvoiceFromPOS(inv);
+
+function requestPosPrint(inv){
+  return new Promise(function(resolve, reject){
+    if (!inv) return reject(new Error('no-invoice'));
+    if (!posPrintHostAvailable()) return reject(new Error('pos-not-open'));
+    const requestId = 'op_' + Date.now() + '_' + Math.random().toString(16).slice(2);
+    let done = false;
+    const timer = setTimeout(function(){
+      if (done) return;
+      done = true;
+      try { window.removeEventListener('message', onMsg); } catch(e) {}
+      reject(new Error('pos-print-timeout'));
+    }, 12000);
+    function onMsg(ev){
+      const m = ev && ev.data;
+      if (!m || m.type !== 'ALFA_ONLINE_PRINT_RESULT' || m.requestId !== requestId) return;
+      if (done) return;
+      done = true;
+      clearTimeout(timer);
+      try { window.removeEventListener('message', onMsg); } catch(e) {}
+      if (m.ok) resolve(true);
+      else reject(new Error(m.error || 'pos-print-failed'));
     }
-  } catch (e) {}
-  const tp = onlineThermal();
-  if (!tp || !tp.afterSale) return Promise.reject(new Error('ThermalPrint unavailable'));
-  return tp.afterSale(inv);
+    window.addEventListener('message', onMsg);
+    try {
+      window.parent.postMessage({ type:'ALFA_PRINT_ONLINE_INVOICE', requestId, invoice: inv, invoiceId: inv.id }, '*');
+    } catch (e) {
+      clearTimeout(timer);
+      try { window.removeEventListener('message', onMsg); } catch(e2) {}
+      reject(e);
+    }
+  });
 }
 
 /* ── قبول طلب: يتحول لفاتورة ضمن التسلسل ── */
@@ -134,6 +154,7 @@ function findOrder(id, date){
 async function acceptOrder(id, date){
   const o = findOrder(id, date); if(!o) return;
   if (o.status !== 'new') { showToast('هذا الطلب مُعالج مسبقاً', 'ℹ️'); renderAll(); return; }
+  if (!posPrintHostAvailable()) { showToast('افتح طلبات الأونلاين من شاشة البيع حتى تتم الطباعة المباشرة', '⚠️'); return; }
   const ref = nextInvoiceRef();
   /* ══════════════════════════════════════════════════════════════
      الحجز أولاً — وقاعدة صارمة: لا رقم ⇒ لا فاتورة ولا قبول
@@ -213,27 +234,31 @@ async function acceptOrder(id, date){
      ══════════════════════════════════════════════════════════════ */
   const _inv = (DATA.invoices || []).find(i => i.id === ref.id) || (DATA.invoices || [])[0];
   showToast(`تم قبول الطلب وتحويله للفاتورة ${ref.label}`, '🧾');
-  const _tp = onlineThermal();
   console.info('[قبول أونلاين] الفاتورة:', _inv && _inv.id,
-               '· ملف الطباعة:', !!_tp,
-               '· الطابعات:', _tp ? JSON.stringify(_tp.printers().resolved) : '—');
-  const _printP = (_tp && _inv)
-    ? Promise.resolve().then(() => printViaPOS(_inv)).catch(e => { console.error('[قبول أونلاين] فشل أمر الطباعة:', e); })
-    : Promise.resolve().then(() => { try { showToast('ملف الطباعة غير متاح', '⚠️'); } catch(e){} });
+               '· الطباعة من شاشة البيع:', posPrintHostAvailable());
+  const _printP = (_inv)
+    ? requestPosPrint(_inv).catch(e => { console.error('[قبول أونلاين] فشل أمر الطباعة من شاشة البيع:', e); throw e; })
+    : Promise.reject(new Error('no-invoice'));
 
-  /* ترحيل الحالة للسحابة — يجري بالتوازي ولا يحجب الطباعة */
+  /* انتظر قبول شاشة البيع لأمر الطباعة، ثم ارفع حالة الطلب. */
+  try {
+    await _printP;
+  } catch (e) {
+    try { showToast('لم يتم إرسال أمر الطباعة من شاشة البيع', '⚠️'); } catch (err) {}
+    return;
+  }
+
   try {
     if (window.OnlineOrderSync) {
       if (OnlineOrderSync.pushSoon) await OnlineOrderSync.pushSoon(o);
       else if (OnlineOrderSync.pushOne) await OnlineOrderSync.pushOne(o);
     }
   } catch (e) {
-    try { showToast('حُفظ القبول محلياً — سيُرفع عند عودة الاتصال', '⚠️'); } catch (err) {}
+    try { showToast('طُبع محلياً — وستُرفع الحالة عند عودة الاتصال', '⚠️'); } catch (err) {}
   }
 
   renderAll();
   if (window.Notify) try { Notify.check(true); } catch (e) {}
-  try { await _printP; } catch (e) {}
 }
 
 async function rejectOrder(id, date){

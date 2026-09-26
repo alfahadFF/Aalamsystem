@@ -2550,19 +2550,38 @@ async function submitOrder(){
 }
 
 
-/* ── طباعة فاتورة أونلاين من نفس سياق شاشة البيع ──
-   صفحة الأونلاين قد تكون داخل iframe؛ أمر الطباعة هنا يخرج من شاشة البيع نفسها،
-   بنفس ThermalPrint ونفس QZ ونفس الطابعات التي تطبع الفاتورة العادية. */
-window.printOnlineInvoiceFromPOS = function (inv) {
-  if (!inv) return Promise.reject(new Error('no-invoice'));
+/* ── طباعة أونلاين من نفس مسار شاشة البيع ── */
+window.addEventListener('message', function (ev) {
+  const m = ev && ev.data;
+  if (!m || m.type !== 'ALFA_PRINT_ONLINE_INVOICE') return;
+  const reply = function (payload) {
+    try {
+      if (ev.source && ev.source.postMessage) {
+        ev.source.postMessage(Object.assign({ type:'ALFA_ONLINE_PRINT_RESULT', requestId:m.requestId }, payload || {}), ev.origin || '*');
+      }
+    } catch (e) {}
+  };
   try {
+    let inv = m.invoice || null;
+    if (!inv && m.invoiceId) inv = (DATA.invoices || []).find(i => String(i.id) === String(m.invoiceId));
+    if (!inv) return reply({ ok:false, error:'invoice-not-found-in-pos' });
+
+    const list = DATA.invoices || [];
+    const ix = list.findIndex(i => String(i.id) === String(inv.id));
+    if (ix >= 0) list[ix] = Object.assign({}, list[ix], inv);
+    else DATA.invoices = [inv].concat(list);
+
     const _th = (window.ALFA_CONFIG && window.ALFA_CONFIG.thermal) || {};
-    if (!window.ThermalPrint || _th.autoAfterSale === false) return Promise.resolve(false);
-    return Promise.resolve(ThermalPrint.afterSale(inv));
+    if (!window.ThermalPrint || _th.autoAfterSale === false) return reply({ ok:false, error:'thermal-disabled' });
+
+    console.info('[POS] طباعة فاتورة أونلاين من مسار البيع:', inv.id);
+    Promise.resolve(ThermalPrint.afterSale(inv))
+      .then(function () { reply({ ok:true }); })
+      .catch(function (e) { reply({ ok:false, error:String((e && e.message) || e) }); });
   } catch (e) {
-    return Promise.reject(e);
+    reply({ ok:false, error:String((e && e.message) || e) });
   }
-};
+});
 
 /* ── تعليق / استئناف الطلبات ── */
 function holdCurrentOrder(){
