@@ -103,6 +103,13 @@ function toggleSound(){
 /* ── حفظ التعديلات عبر Proxy (إسناد علوي) ── */
 function commit(){ DATA.online_orders = orders().slice(); }
 
+function onlineThermal(){
+  try {
+    if (window.parent && window.parent !== window && window.parent.ThermalPrint) return window.parent.ThermalPrint;
+  } catch (e) {}
+  return window.ThermalPrint || null;
+}
+
 /* ── قبول طلب: يتحول لفاتورة ضمن التسلسل ── */
 /* البحث عن الطلب: بالرقم + التاريخ — لأن الرقم يتكرر بين الأيام */
 function findOrder(id, date){
@@ -196,12 +203,13 @@ async function acceptOrder(id, date){
      ══════════════════════════════════════════════════════════════ */
   const _inv = (DATA.invoices || []).find(i => i.id === ref.id) || (DATA.invoices || [])[0];
   showToast(`تم قبول الطلب وتحويله للفاتورة ${ref.label}`, '🧾');
+  const _tp = onlineThermal();
   console.info('[قبول أونلاين] الفاتورة:', _inv && _inv.id,
-               '· ملف الطباعة:', !!window.ThermalPrint,
-               '· الطابعات:', window.ThermalPrint ? JSON.stringify(ThermalPrint.printers().resolved) : '—');
-  const _printP = (window.ThermalPrint && _inv)
-    ? Promise.resolve().then(() => ThermalPrint.afterSale(_inv)).catch(e => { console.error('[قبول أونلاين] فشل أمر الطباعة:', e); })
-    : Promise.resolve().then(() => printReceipt(o, ref.label)).catch(() => {});
+               '· ملف الطباعة:', !!_tp,
+               '· الطابعات:', _tp ? JSON.stringify(_tp.printers().resolved) : '—');
+  const _printP = (_tp && _inv)
+    ? Promise.resolve().then(() => _tp.afterSale(_inv)).catch(e => { console.error('[قبول أونلاين] فشل أمر الطباعة:', e); })
+    : Promise.resolve().then(() => { try { showToast('ملف الطباعة غير متاح', '⚠️'); } catch(e){} });
 
   /* ترحيل الحالة للسحابة — يجري بالتوازي ولا يحجب الطباعة */
   try {
