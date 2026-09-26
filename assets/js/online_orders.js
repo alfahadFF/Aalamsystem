@@ -127,7 +127,24 @@ function toggleSound(){
 
 function commit(){ DATA.online_orders = orders().slice(); }
 
+let onlinePrintBusy = false;
+
+async function ensureOnlineDirectPrinter(){
+  if (!window.ThermalPrint || !ThermalPrint.afterSale) return false;
+  try {
+    /* نفس فكرة شاشة البيع: تجهيز QZ قبل أمر الطباعة حتى لا يدخل مسار معاينة المتصفح. */
+    if (ThermalPrint.isActive && ThermalPrint.isActive()) return true;
+    if (ThermalPrint.warmup) await ThermalPrint.warmup();
+    if (ThermalPrint.isActive && ThermalPrint.isActive()) return true;
+    if (ThermalPrint.connect) await ThermalPrint.connect();
+    return !!(ThermalPrint.isActive && ThermalPrint.isActive());
+  } catch (e) {
+    return !!(ThermalPrint.isActive && ThermalPrint.isActive());
+  }
+}
+
 async function printOnlineInvoice(invId){
+  if (onlinePrintBusy) return;
   const inv = invoices().find(i => String(i.id) === String(invId));
   if (!inv || !isOnlineInvoice(inv)) {
     showToast('لم تصل الفاتورة بعد — اضغط تحديث', '⚠️');
@@ -138,36 +155,50 @@ async function printOnlineInvoice(invId){
     return;
   }
 
-  const ord = linkedOrder(inv);
+  onlinePrintBusy = true;
   try {
-    await Promise.resolve().then(() => ThermalPrint.afterSale(inv));
-  } catch (e) {
-    console.error('[طباعة أونلاين] فشل أمر الطباعة:', e);
-    showToast('تعذر إرسال أمر الطباعة', '⚠️');
-    return;
-  }
-
-  if (ord) {
-    ord.status = 'done';
-    ord.invoice_id = inv.id;
-    ord.no = inv.no;
-    ord.date = inv.date || ord.date;
-    commit();
-    renderAll();
-    if (window.Notify) try { Notify.check(true); } catch (e) {}
-    try {
-      if (window.OnlineOrderSync) {
-        if (OnlineOrderSync.pushSoon) await OnlineOrderSync.pushSoon(ord);
-        else if (OnlineOrderSync.pushOne) await OnlineOrderSync.pushOne(ord);
-      }
-    } catch (e) {
-      try { showToast('طُبعت الفاتورة — وستُحفظ الحالة عند عودة الاتصال', '⚠️'); } catch (err) {}
+    const ready = await ensureOnlineDirectPrinter();
+    if (!ready) {
+      showToast('الطابعة المباشرة غير جاهزة — لم أفتح معاينة المتصفح', '⚠️');
       return;
     }
-  }
 
-  showToast(`تمت طباعة فاتورة الأونلاين ${invNoLabel(inv)}`, '🧾');
-  renderAll();
+    const ord = linkedOrder(inv);
+
+    /* نفس آلية البيع العادي: إرسال أمر الطباعة فقط، بدون انتظار شبكة/ترقيم/إنشاء فاتورة. */
+    try {
+      const _th = window.ALFA_CONFIG && window.ALFA_CONFIG.thermal || {};
+      if (_th.autoAfterSale !== false) {
+        Promise.resolve()
+          .then(function(){ return ThermalPrint.afterSale(inv); })
+          .catch(function(e){ console.error('[طباعة أونلاين] فشل أمر الطباعة:', e); });
+      }
+    } catch (e) { console.error('[طباعة أونلاين] فشل بدء أمر الطباعة:', e); }
+
+    if (ord) {
+      ord.status = 'done';
+      ord.invoice_id = inv.id;
+      ord.no = inv.no;
+      ord.date = inv.date || ord.date;
+      commit();
+      renderAll();
+      if (window.Notify) try { Notify.check(true); } catch (e) {}
+      try {
+        if (window.OnlineOrderSync) {
+          if (OnlineOrderSync.pushSoon) await OnlineOrderSync.pushSoon(ord);
+          else if (OnlineOrderSync.pushOne) await OnlineOrderSync.pushOne(ord);
+        }
+      } catch (e) {
+        try { showToast('أُرسل أمر الطباعة — وستُحفظ الحالة عند عودة الاتصال', '⚠️'); } catch (err) {}
+        return;
+      }
+    }
+
+    showToast(`أُرسل أمر طباعة فاتورة الأونلاين ${invNoLabel(inv)}`, '🧾');
+    renderAll();
+  } finally {
+    onlinePrintBusy = false;
+  }
 }
 
 async function refreshOrders(){
@@ -208,6 +239,10 @@ if (typeof window !== 'undefined' && window.addEventListener) {
   renderAll();
   window.__ooRender = renderAll;
   if (window.Notify) Notify.init({ markSeenOnLoad: true });
+  /* نفس شاشة البيع: تسخين الطباعة مبكراً حتى تكون الطباعة مباشرة وسريعة. */
+  if (window.ThermalPrint && ThermalPrint.warmup) {
+    setTimeout(function () { ThermalPrint.warmup().catch(function () {}); }, 1200);
+  }
 
   function quietPull() {
     if (navigator.onLine === false) return Promise.resolve();
