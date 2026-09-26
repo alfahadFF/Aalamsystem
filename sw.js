@@ -7,18 +7,13 @@
    - أصول أخرى (js/css/أيقونات): كاش أولًا ثم شبكة.
    - خطوط خارجية: كاش أولًا بعد أول تحميل (تعمل أوفلاين لاحقًا).
    ============================================================ */
-const VERSION = 'alfaprosys-v101'; /* v96: قاعدة البيانات من الشبكة · v97: معالجة أخطاء الجلب · v98: مفتاح الطلبات المركّب · v99: لا فشل صامت في التحميل · v100: مكتبة الطباعة من الكاش فوراً · v101: رجوع تعديل ورقة المطبخ */
+const VERSION = 'alfaprosys-v102'; /* v102: شاشة الأونلاين تطبع من فواتير is_online الجاهزة */
 
 /* ملفات تُجلب دائماً من الشبكة أولاً (لا كاش-أولاً أبداً)
    أضف هنا أي ملف إعدادات حسّاس مستقبلاً بنفس الطريقة */
-/* ملفات تُجلب من الشبكة أولاً لأنها تتغيّر مع كل تعديل.
-   ملاحظة مهمة: qz-tray.min.js كان ضمن هذه القائمة — وهو لا يتغيّر أبداً،
-   فإدخاله في سباق الشبكة كان يؤخّر تحميل مكتبة الطباعة ٢٫٥ ثانية على كل
-   فتح صفحة، وإن تأخّرت الشبكة بعد مسح الكاش فقد لا تُحمَّل فيتوقف ربط
-   الطابعات. أُخرجناه: يُقدَّم فوراً من الكاش، ويُحدَّث مع كل رفع (لأن رفع
-   أي تعديل يرفع رقم الإصدار فيُعاد تخزينه جديداً). */
 const NETWORK_FIRST_ASSETS = [
   'assets/js/config.js',
+  'assets/js/qz-tray.min.js',   // مكتبة QZ — محلية الآن (كانت CDN) لطباعة أوفلاين
 ];
 
 /* مهلة سباق الشبكة (وضع سوريا): إن لم ترد الشبكة خلالها قُدّم الكاش فوراً
@@ -94,14 +89,6 @@ self.addEventListener('install', (event) => {
       await Promise.all(CORE.map((url) =>
         cache.add(url).catch(() => null)
       ));
-      /* محاولة ثانية للملفات الحرجة (مكتبة الطباعة والإعدادات): إن فشلت
-         أول مرة لأي سبب، تُعاد مرة واحدة حتى لا يبقى الكاش بلا مكتبة
-         الطباعة — وهو ما يوقف الطباعة الصامتة كلياً. */
-      await Promise.all(['assets/js/qz-tray.min.js', 'assets/js/config.js'].map(async (url) => {
-        const hit = await cache.match(url);
-        if (hit) return;
-        await cache.add(url).catch(() => null);
-      }));
     }).then(() => self.skipWaiting())
   );
 });
@@ -135,7 +122,7 @@ self.addEventListener('fetch', (event) => {
     event.respondWith(
       networkRace(req, NAV_TIMEOUT).then(({ res, bg }) => {
         if (bg) event.waitUntil(bg);
-        return res || caches.match('index.html').then((c) => c || Response.error());
+        return res || caches.match('index.html');
       })
     );
     return;
@@ -144,14 +131,10 @@ self.addEventListener('fetch', (event) => {
   // ملفات إعداد حساسة: سباق شبكة 2.5ث وإلا الكاش (config.js سكربت حاجب — لا يعلّق الإقلاع)
   if (url.origin === self.location.origin &&
       NETWORK_FIRST_ASSETS.some((p) => url.pathname.endsWith('/' + p) || url.pathname.endsWith(p))) {
-    /* ملاحظة: إن فشل الجلب ولم يوجد في الكاش نُعيد Response.error().
-       إرجاع undefined كان يجعل respondWith يرمي «Failed to convert value
-       to 'Response'» — فيفشل تحميل config.js أو qz-tray.min.js بالكامل،
-       وهي بالضبط الملفات الحرجة هنا، فيتوقف ربط الطابعات كلياً. */
     event.respondWith(
       networkRace(req, NAV_TIMEOUT).then(({ res, bg }) => {
         if (bg) event.waitUntil(bg);
-        return res || caches.match(req).then((c) => c || Response.error());
+        return res || caches.match(req);
       })
     );
     return;
