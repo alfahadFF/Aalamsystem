@@ -157,22 +157,12 @@ async function printOnlineInvoice(invId){
 
   onlinePrintBusy = true;
   try {
-    const ready = await ensureOnlineDirectPrinter();
-    if (!ready) {
-      showToast('الطابعة المباشرة غير جاهزة — لم أفتح معاينة المتصفح', '⚠️');
-      return;
-    }
-
     const ord = linkedOrder(inv);
 
-    /* نفس آلية البيع العادي: إرسال أمر الطباعة فقط، بدون انتظار شبكة/ترقيم/إنشاء فاتورة. */
+    /* نفس آلية البيع العادي حرفياً: استدعاء afterSale فقط، وهي تتولى الاتصال والطباعة. */
     try {
       const _th = window.ALFA_CONFIG && window.ALFA_CONFIG.thermal || {};
-      if (_th.autoAfterSale !== false) {
-        Promise.resolve()
-          .then(function(){ return ThermalPrint.afterSale(inv); })
-          .catch(function(e){ console.error('[طباعة أونلاين] فشل أمر الطباعة:', e); });
-      }
+      if (window.ThermalPrint && _th.autoAfterSale !== false) ThermalPrint.afterSale(inv);
     } catch (e) { console.error('[طباعة أونلاين] فشل بدء أمر الطباعة:', e); }
 
     if (ord) {
