@@ -2549,6 +2549,21 @@ async function submitOrder(){
   } catch (e) {}
 }
 
+
+/* ── طباعة فاتورة أونلاين من نفس سياق شاشة البيع ──
+   صفحة الأونلاين قد تكون داخل iframe؛ أمر الطباعة هنا يخرج من شاشة البيع نفسها،
+   بنفس ThermalPrint ونفس QZ ونفس الطابعات التي تطبع الفاتورة العادية. */
+window.printOnlineInvoiceFromPOS = function (inv) {
+  if (!inv) return Promise.reject(new Error('no-invoice'));
+  try {
+    const _th = (window.ALFA_CONFIG && window.ALFA_CONFIG.thermal) || {};
+    if (!window.ThermalPrint || _th.autoAfterSale === false) return Promise.resolve(false);
+    return Promise.resolve(ThermalPrint.afterSale(inv));
+  } catch (e) {
+    return Promise.reject(e);
+  }
+};
+
 /* ── تعليق / استئناف الطلبات ── */
 function holdCurrentOrder(){
   if(!cart.length && !servicesTotal()){ showToast('لا يوجد طلب لتعليقه','⚠️'); return; }

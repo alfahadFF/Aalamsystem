@@ -109,6 +109,16 @@ function onlineThermal(){
   } catch (e) {}
   return window.ThermalPrint || null;
 }
+function printViaPOS(inv){
+  try {
+    if (window.parent && window.parent !== window && typeof window.parent.printOnlineInvoiceFromPOS === 'function') {
+      return window.parent.printOnlineInvoiceFromPOS(inv);
+    }
+  } catch (e) {}
+  const tp = onlineThermal();
+  if (!tp || !tp.afterSale) return Promise.reject(new Error('ThermalPrint unavailable'));
+  return tp.afterSale(inv);
+}
 
 /* ── قبول طلب: يتحول لفاتورة ضمن التسلسل ── */
 /* البحث عن الطلب: بالرقم + التاريخ — لأن الرقم يتكرر بين الأيام */
@@ -208,7 +218,7 @@ async function acceptOrder(id, date){
                '· ملف الطباعة:', !!_tp,
                '· الطابعات:', _tp ? JSON.stringify(_tp.printers().resolved) : '—');
   const _printP = (_tp && _inv)
-    ? Promise.resolve().then(() => _tp.afterSale(_inv)).catch(e => { console.error('[قبول أونلاين] فشل أمر الطباعة:', e); })
+    ? Promise.resolve().then(() => printViaPOS(_inv)).catch(e => { console.error('[قبول أونلاين] فشل أمر الطباعة:', e); })
     : Promise.resolve().then(() => { try { showToast('ملف الطباعة غير متاح', '⚠️'); } catch(e){} });
 
   /* ترحيل الحالة للسحابة — يجري بالتوازي ولا يحجب الطباعة */
