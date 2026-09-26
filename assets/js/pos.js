@@ -279,6 +279,11 @@ function restoreDraft() {
 }
 function posDirty() { return !!(cart.length || heldOrders.length); }
 function openPosScreen(url, title) {
+  /* الأونلاين يجب أن يفتح داخل شاشة البيع دائماً حتى تطبع الطلبات من نفس مسار POS. */
+  if (String(url || '').indexOf('online_orders.html') >= 0) {
+    posEmbed = { url, title: title || url };
+    return renderPOS();
+  }
   if (displayMode === 'direct') {
     /* ════════════════════════════════════════════════════════
        الإطار (iframe) مستند مستقل بنافذته وبياناته الخاصة:
