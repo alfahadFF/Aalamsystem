@@ -7,7 +7,7 @@
    - أصول أخرى (js/css/أيقونات): كاش أولًا ثم شبكة.
    - خطوط خارجية: كاش أولًا بعد أول تحميل (تعمل أوفلاين لاحقًا).
    ============================================================ */
-const VERSION = 'alfaprosys-v110'; /* v110: فتح الأونلاين داخل POS دائماً للطباعة من نفس المسار */
+const VERSION = 'alfaprosys-v114'; /* v114: ترقيم — الخدمة المحلية أولاً (لا قفزات ولا انتظار) */
 
 /* ملفات تُجلب دائماً من الشبكة أولاً (لا كاش-أولاً أبداً)
    أضف هنا أي ملف إعدادات حسّاس مستقبلاً بنفس الطريقة */
@@ -45,7 +45,7 @@ const CORE = [
   'manifest.webmanifest',
   'assets/icon/logo.png',
   // الصفحات — كاملة
-  'index.html','pos.html','dashboard.html','sales.html','invoices.html',
+  'index.html','pos.html','pos2.html','dashboard.html','sales.html','invoices.html',
   'open_invoices.html','edit_invoice.html','reports.html','menu_admin.html',
   'inventory.html','employees.html','customers.html','contracts.html',
   'expenditures.html','cash_reports.html','cashier_session.html','costs.html',
@@ -60,7 +60,7 @@ const CORE = [
   'assets/js/sync/storage.js','assets/js/sync/outbox.js','assets/js/sync/queue.js','assets/js/sync/remote.js',
   'assets/js/sync/manager.js',
   // السكربتات — كل صفحة
-  'assets/js/pos.js','assets/js/manager.js','assets/js/sales.js','assets/js/invoices.js',
+  'assets/js/pos.js','assets/js/pos2.js','assets/js/manager.js','assets/js/sales.js','assets/js/invoices.js',
   'assets/js/open_invoices.js','assets/js/edit_invoice.js','assets/js/reports.js',
   'assets/js/menu_admin.js','assets/js/inventory.js','assets/js/employees.js',
   'assets/js/customers.js','assets/js/contracts.js','assets/js/expenditures.js',
@@ -70,7 +70,7 @@ const CORE = [
   'assets/js/owner_shield.js','assets/js/settings.js','assets/js/suppliers.js',
   'assets/js/track.js',
   // الأنماط — كل الملفات
-  'assets/css/style.css','assets/css/manager.css','assets/css/reports.css',
+  'assets/css/style.css','assets/css/pos2.css','assets/css/pos_quick.css','assets/css/manager.css','assets/css/reports.css',
   'assets/css/costs.css','assets/css/cash_reports.css','assets/css/contracts.css',
   'assets/css/employees.css','assets/css/expenditures.css','assets/css/inventory.css',
   'assets/css/invoices.css','assets/css/menu_admin.css','assets/css/online.css',
