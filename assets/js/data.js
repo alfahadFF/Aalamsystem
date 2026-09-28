@@ -3423,45 +3423,57 @@ window.DEMO_DATA.price_settings = window.DEMO_DATA.price_settings || {
       .then(function (n) { return lanApplyFloor(today, n); });
   }
 
+  /* حجز رقم من السحابة — احتياط فقط حين تتعذّر الخدمة المحلية.
+     فشلها أو غيابها لا يوقف البيع: نرجع null فيكمل المسار. */
+  function cloudReserveNo(today) {
+    let ok = false;
+    try {
+      ok = navigator.onLine !== false && window.AlfaSB && AlfaSB.enabled && AlfaSB.enabled() && AlfaSB.rpc;
+    } catch (e) { ok = false; }
+    if (!ok) return Promise.resolve(null);
+
+    let cycle = ''; try { cycle = localStorage.getItem('alfaprosys_invoice_cycle_' + today) || ''; } catch (e) {}
+    const call = AlfaSB.rpc(cycle ? 'reserve_cycle_invoice_no' : 'reserve_invoice_no',
+                            cycle ? { p_cycle_id: cycle } : { p_business_day: today });
+    const deadline = new Promise(function (_, rej) {
+      setTimeout(function () { rej(new Error('reserve-timeout')); }, window.RESERVE_TIMEOUT_MS);
+    });
+    return Promise.race([call, deadline])
+      .then(function (n) {
+        n = Number(Array.isArray(n) ? n[0] : n);
+        if (!n) return null;
+        rememberReservation(today, n);
+        /* نرفع عدّاد الخدمة المحلية إلى هذا الرقم، فلو رجعت الخدمة
+           لا تُعيد أرقاماً أصدرتها السحابة. */
+        lanSyncToServer(today, n);
+        return n;
+      })
+      .catch(function () { return null; });
+  }
+
   window.reserveInvoiceNoDetailed = function () {
     const today = window.businessDay();
-    const online = navigator.onLine !== false && window.AlfaSB && AlfaSB.enabled && AlfaSB.enabled();
 
-    /* ١) السحابة — المصدر الأساس */
-    if (online && AlfaSB.rpc) {
-      let cycle = ''; try { cycle = localStorage.getItem('alfaprosys_invoice_cycle_' + today) || ''; } catch (e) {}
-      const call = AlfaSB.rpc(cycle ? 'reserve_cycle_invoice_no' : 'reserve_invoice_no',
-                              cycle ? { p_cycle_id: cycle } : { p_business_day: today });
-      const deadline = new Promise(function (_, rej) {
-        setTimeout(function () { rej(new Error('reserve-timeout')); }, window.RESERVE_TIMEOUT_MS);
-      });
-      return Promise.race([call, deadline])
-        .then(function (n) {
-          n = Number(Array.isArray(n) ? n[0] : n);
-          if (!n) throw new Error('invalid invoice number');
-          rememberReservation(today, n);
-          lanSyncToServer(today, n);
-          window.alfaLastInvoiceNoSource = 'server';
-          return { no: n, source: 'server' };
-        })
-        .catch(function () { return lanReserve(today).then(function (n) {
-          rememberReservation(today, n);
-          window.alfaLastInvoiceNoSource = 'lan';
-          return { no: n, source: 'lan' };
-        }).catch(function () {
-          window.alfaLastInvoiceNoSource = 'none';
-          return { no: null, source: 'none' };
-        }); });
-    }
+    /* ══════════════════════════════════════════════════════════
+       ١) خدمة الترقيم المحلية — المصدر الأساس (على جهاز واحد فقط).
+          تعداد واحد ⇒ لا قفزات ولا تكرار. وتردّ خلال ~١٠ مللي ثانية
+          فتجيب الرقم بلا انتظار، حتى والإنترنت مقطوع.
 
-    /* لا سحابة — جرّب الخدمة المحلية */
+          (كانت السحابة أولاً: فتنتظر ٥ ثوانٍ كل فاتورة بالميدان،
+           وكل رقم تُصدره السحابة يقفز بعدّاد الخدمة عبر /set
+           فيترك فجوة بحجم الفرق — وهذا سبب القفزات ~٦٠.)
+       ══════════════════════════════════════════════════════════ */
     return lanReserve(today).then(function (n) {
       rememberReservation(today, n);
       window.alfaLastInvoiceNoSource = 'lan';
       return { no: n, source: 'lan' };
     }).catch(function () {
-      window.alfaLastInvoiceNoSource = 'none';
-      return { no: null, source: 'none' };
+      /* ٢) تعذّرت الخدمة المحلية (مطفيّة أو غير مُعدّة) — السحابة */
+      return cloudReserveNo(today).then(function (n) {
+        if (n) { window.alfaLastInvoiceNoSource = 'server'; return { no: n, source: 'server' }; }
+        window.alfaLastInvoiceNoSource = 'none';
+        return { no: null, source: 'none' };
+      });
     });
   };
 

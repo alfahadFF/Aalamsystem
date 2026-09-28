@@ -752,8 +752,18 @@
   function fmtN(n) { return Number(n || 0).toLocaleString('en-US'); }
 
   /* تسمية نوع الطلب كما تُخزَّن في الفاتورة (dinein/takeaway/delivery/contract/أونلاين) */
+  /* أي فاتورة عليها «خدمة توصيل» = طلب توصيل — يظهر على الإيصال
+     حتى يعرف الموظف وعامل التوصيل أن الطلب توصيل لا سفري عادي. */
+  function hasDeliveryService(inv) {
+    if (!inv) return false;
+    if (Number(inv.service_delivery) > 0) return true;
+    return ((inv.items) || []).some(function (x) {
+      return x && x.is_service && /توصيل/.test(String(x.name || ''));
+    });
+  }
   function typeLabel(inv) {
     if (inv.is_online || inv.source_order_id) return 'طلب أونلاين';
+    if (hasDeliveryService(inv)) return 'طلب توصيل';
     return ({ dinein: 'طلب طاولة', table: 'طلب طاولة', takeaway: 'خارجي', delivery: 'توصيل', contract: 'عقد' })[inv.type] || 'طلب';
   }
   function payLabel(inv) {
@@ -807,7 +817,9 @@
       : '';
     /* نوع الطلب قبل الجدول: كلمة عارية بلا عنوان (طاولة/سفري/خارجي/أونلاين) */
     const TYPE_AR = { dinein: 'طاولة', table: 'طاولة', takeaway: 'خارجي', delivery: 'خارجي', online: 'أونلاين', contract: 'عقد' };
-    const typeAr = inv.source === 'online' ? 'أونلاين' : (inv.type === 'dinein' ? '' : (TYPE_AR[inv.type] || ''));
+    const typeAr = inv.source === 'online' ? 'أونلاين'
+      : (inv.type === 'dinein' ? ''
+      : (hasDeliveryService(inv) ? 'توصيل' : (TYPE_AR[inv.type] || '')));
 
     /* خلايا بحدود كاملة كالصورة + التفاف النص داخل الخلايا حتى لا تتمدد
        الأسماء والملاحظات الطويلة خارج الجدول */

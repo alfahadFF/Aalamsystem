@@ -8,11 +8,13 @@ const POS_MODES = [
   { id: 'buttons',  label: 'أزرر' },
   { id: 'direct',   label: 'مباشر' },
   { id: 'dropdown', label: 'منسدل' },
+  /* نمط الأزرار السريعة: مربع كتابة (تصفية + ملاحظات + اقتراحات) وأزرار بعمودين */
+  { id: 'quick',    label: 'أزرار سريعة' },
 ];
 let displayMode = 'direct';
 try {
   const savedMode = localStorage.getItem('alfaprosys_pos_mode');
-  if (savedMode === 'buttons' || savedMode === 'direct' || savedMode === 'dropdown') displayMode = savedMode;
+  if (savedMode === 'buttons' || savedMode === 'direct' || savedMode === 'dropdown' || savedMode === 'quick') displayMode = savedMode;
 } catch (e) {}
 let searchOpen = false;
 let searchTerm = '';
@@ -89,6 +91,13 @@ let deferredAddr  = '';
 let voiceActive   = false;
 let voiceRecog    = null;
 let pendingNoteItemId = null;
+/* pos: آخر صنف أُضيف للسلة = هدف «ملاحظات الصنف» السريعة */
+let lastAddedId = null;
+/* pos: تصفية الأصناف بحرف أو حرفين من مربع الكتابة السريعة */
+let quickFilter = '';
+/* pos: سجل الكتابات السابقة — خيارات سريعة تحت المربع */
+const NOTE_HIST_KEY = 'alfaprosys_note_hist';
+let noteHist = null;
 let qtyEditId = null;   // تعديل الكمية بالنقر على خانة العدد
 let qtyEditBuf = '';
 const NOTE_SUGGESTIONS = ['ملح خفيف','بدون ملح','حار زيادة','بدون حار','ثوم زيادة','بدون ثوم','بدون خس','خس زيادة','بدون مخلل','مخلل زيادة','بدون فطر','بطاطا زيادة','صوص زيادة','مايونيز زيادة','بدون مايونيز'];
@@ -528,6 +537,7 @@ function renderPOS() {
   const items = finalItems();
 
   if (displayMode === 'direct') return renderDirectPOS(total, count);
+  if (displayMode === 'quick') return renderQuickPOS(total, count);   /* نمط الأزرار السريعة */
 
   document.getElementById('posApp').innerHTML = `
     <div class="pos-shell">
@@ -754,6 +764,114 @@ function renderDirectOps() {
     ${B('toggle-currency', '💱', currencyNew ? 'قديم' : 'جديد', currencyNew ? 'dop-on' : '')}`;
 }
 
+function renderQuickPOS(total, count) {
+  const cats = sellableCategories();
+  const items = finalItems();
+  document.getElementById('posApp').innerHTML = `
+    <div class="pos-shell">
+      ${shiftBanner()}
+      <div class="direct-pos">
+
+        <header class="d-topbar">
+          <button class="d-burger" type="button" data-action="toggle-nav" title="قائمة الكاشير">☰</button>
+          <div class="d-brand"><strong>alfaprosys</strong></div>
+          <input id="barcodeInput" class="barcode-input" type="text" inputmode="numeric" autocomplete="off"
+                 placeholder="📷 باركود" title="امسح أو اكتب الكود ثم Enter" data-action="barcode-enter">
+          ${window.NetBadge ? NetBadge.html('netBadgePos') : ''}
+          ${currencyNew ? '<span class="cur-new-chip" title="العرض بالعملة الجديدة">ل.س جديدة</span>' : ''}
+          <div class="invoice-mini-badge">فاتورة ${nextInvoiceLabel()}</div>
+          <div class="invoice-mini-badge ot-chip" title="نوع الطلب الحالي — الافتراضي دائماً «سفري»">${currentOrderTypeChip()}</div>
+          <span class="build-chip" title="نسخة كود الكاشير">${POS_BUILD}</span>
+        </header>
+
+        <div class="d-body">
+          <section class="d-main" aria-label="الفاتورة والأصناف">
+            ${renderLastSaleBar()}
+            <div class="d-invwrap" id="menuInvoice">${renderDirectInvoice(total, count)}</div>
+            <div class="d-items" id="menuItems">${renderDirectItemsArea(items)}</div>
+            <div class="d-paybar" id="menuPaybar"><button class="d-print-btn" type="button" data-action="submit-order" ${cart.length===0?'disabled':''}>🖨️ طباعة</button><button class="d-calc-btn" type="button" data-action="open-calc" ${cart.length===0?'disabled':''}>🧮 حاسبة الباقي</button>${renderPaySection()}</div>
+          </section>
+
+          <aside class="d-mid" aria-label="نوع الطلب والتصنيفات">
+
+            <div class="d-otbar">
+              <button class="ot-btn online-ot-btn ot-big" type="button" data-action="online-orders">🛵 أونلاين${onlinePendingCount() ? ` <span class="online-pending-badge">${onlinePendingCount()}</span>` : ''}</button>
+              <button class="ot-btn ot-big ${orderType==='contract'?'active':''}" type="button" data-action="order-type" data-value="contract">📋 عقود</button>
+              ${orderType === 'dinein' ? `<button class="ot-btn ot-big hall-indicator${selectedTable?' picked':''}" type="button" data-action="hall" data-value="${escapeHtml(selectedHall||'')}" title="اضغط لتغيير الصالة أو الطاولة">${selectedHall ? '🏛️ ' + escapeHtml(selectedHall) : '🏛️ اختر الصالة'}${selectedTable ? ' · 🪑 ' + escapeHtml(selectedTable) : ''}</button>` : ''}
+              ${serviceSelected.delivery ? '<span class="ot-btn ot-big delivery-live-badge" title="أُضيفت خدمة التوصيل — هذا الطلب توصيل">🛵 توصيل</span>' : ''}
+            </div>
+            <div class="d-cats" aria-label="التصنيفات الرئيسية">
+              ${cats.map(c => `<button class="d-cat ${activeCategoryId===c.id?'active':''}" type="button" data-action="category" data-value="${escapeHtml(c.id)}"><span>${c.icon}</span>${escapeHtml(c.name)}</button>`).join('')}
+              <button class="d-cat svc-dcat" type="button" data-action="open-services"><span>🛎️</span>خدمات${svcBadgeHtml()}</button>
+            </div>
+            <div class="d-note-actions" style="display:flex;gap:6px;padding:8px 4px;flex-wrap:wrap;">
+              <button class="d-note-btn" type="button" data-action="quick-note-item" style="flex:1;min-width:120px;padding:10px;border:1px solid #cbd5e1;border-radius:8px;background:#fff;cursor:pointer;font-weight:700;">🍽️ ملاحظة آخر صنف</button>
+              <button class="d-note-btn" type="button" data-action="quick-note-order" style="flex:1;min-width:120px;padding:10px;border:1px solid #cbd5e1;border-radius:8px;background:#fff;cursor:pointer;font-weight:700;">📝 ملاحظات الطلب</button>
+              <button class="d-note-btn" type="button" data-action="emergency-price" style="flex:1;min-width:120px;padding:10px;border:1px solid #d97706;border-radius:8px;background:#fff7ed;color:#9a3412;cursor:pointer;font-weight:700;">💰 سعر طارئ</button>
+            </div>
+          </aside>
+
+          <aside class="d-ops" aria-label="العمليات">
+            ${renderQuickOps()}
+          </aside>
+        </div>
+
+        ${renderCardsModal()}
+      ${renderDirectAuxModal()}
+      ${renderPosEmbed()}
+
+      <div class="mobile-nav-scrim" id="mobileNavScrim" data-action="close-nav"></div>
+      <button class="mobile-fab" id="mobileNavFab" type="button" data-action="toggle-nav">☰</button>
+      <nav class="mobile-cashier-nav" id="mobileCashierNav"><div class="mobile-nav-head"><strong>قائمة الكاشير</strong><button type="button" data-action="close-nav">✕</button></div><div class="mobile-nav-grid">${renderMobileCashierLinks()}</div></nav>
+
+      </div>
+
+      ${renderQtyModal()}
+      ${renderNoteModal()}
+      ${renderServicesModal()}
+      ${renderCalcModal(grandWithServices(total, discountParts().total))}
+      ${renderLeaveModal()}
+    </div>`;
+
+  bindPOSActions();
+  saveDraft();
+  if (window.NetBadge) NetBadge.bind();
+  updateQuickFilterBadge();
+  focusQuickNote();
+}
+
+function renderQuickOps() {
+  const B = (a, ic, lb, extra = '') =>
+    `<button class="dop-btn ${extra}" type="button" data-action="${a}" title="${lb}"><span>${ic}</span><small>${lb}</small></button>`;
+  /* نمط سريع: الأزرار موزعة على عمودين + مربع الكتابة السريعة تحتها */
+  return `
+    <div class="dops-grid">
+      ${B('open-popular-modal', '⭐', 'الأكثر')}
+      ${B('open-offers-modal', '🎟️', 'العروض')}
+      ${B('open-direct-disc', '💸', 'الحسم')}
+      ${B('toggle-search', '🔍', 'بحث')}
+      ${B('hold-order', '📌', 'تعليق')}
+      ${B('d-del-row', '🗑️', 'حذف')}
+      ${B('clear-cart', '♻️', 'تفريغ')}
+      ${B('delivery-screen', '🛵', 'توصيل')}
+      ${B('invoices', '🧾', 'فواتير')}
+      ${B('kitchen', '🍳', 'مطبخ')}
+      ${B('tables', '🗺️', 'طاولات')}
+      ${B('toggle-mode', '🔁', 'النمط')}
+      ${B('toggle-currency', '💱', currencyNew ? 'قديم' : 'جديد', currencyNew ? 'dop-on' : '')}
+    </div>
+    <div class="quick-note-box">
+      <div class="qn-head"><span class="qn-target" id="qnTarget">${quickNoteTargetLabel()}</span><span class="qn-filter" id="qnFilter"></span></div>
+      <input id="quickNoteInput" class="quick-note-input" type="text" dir="rtl" lang="ar" autocomplete="off"
+             placeholder="اكتب الملاحظة… Enter = ملاحظات الصنف" data-action="quick-note-input">
+      <div class="qn-suggest" id="qnSuggest" hidden></div>
+      <div class="qn-actions">
+        <button class="qn-btn qn-item" type="button" data-action="quick-note-item" title="يثبّت النص على آخر صنف أُضيف">🍽️ ملاحظات الصنف</button>
+        <button class="qn-btn qn-order" type="button" data-action="quick-note-order" title="النص يصير ملاحظة عامة للطلب">📝 ملاحظات الطلب</button>
+      </div>
+    </div>`;
+}
+
 function renderDirectInvoice(total, count) {
   const dp0 = discountParts();
   const disc = dp0.total;
@@ -795,7 +913,19 @@ function renderDirectItemsArea(items) {
   if (orderType === 'contract' && !selectedContractId) {
     return '<div class="d-items-hint">اختر عقداً من زر «عقود» لتظهر الأصناف</div>';
   }
-  if (searchTerm.trim() || searchOpen) return renderSearchArea(items);
+  /* حرف/حرفين = تصفية فورية على كل الأصناف (كل التصنيفات) بنفس مكانها */
+  const filtering = (displayMode === 'quick') && quickFilter;
+  if (!filtering && (searchTerm.trim() || searchOpen)) return renderSearchArea(items);
+  if (filtering) {
+    /* نرسم كل الأصناف ونخفي غير المطابق بكلاس qn-off — الحرف التالي يخفي/يبيّن
+       بلا إعادة بناء DOM، فلا تومض الشاشة ولا يفرغ المربع */
+    const all = DATA.items.filter(i => i.is_available !== false).sort(bySort);
+    quickLoose = !all.some(quickStrict);        /* ما فيش صنف يبدأ بالحرف ⇒ نبحث بالاحتواء */
+    const n0 = all.filter(quickMatch).length;
+    const strip = `<div class="d-filter-strip"><span id="qnFilterText">🔍 «${escapeHtml(quickFilter)}» · ${n0} صنف ${quickModeWord()} «${escapeHtml(quickFilter)}»</span><button type="button" data-action="clear-quick-filter" title="إلغاء التصفية">✕</button></div>`;
+    const empty = `<div class="d-filter-empty" id="qnFilterEmpty"${n0 ? ' hidden' : ''}>🔍 لا صنف ${quickModeWord()} «${escapeHtml(quickFilter)}» — جرّب حرفاً آخر، أو تابع الكتابة (٣ حروف أو أكثر) فتصير ملاحظة</div>`;
+    return strip + empty + `<div class="d-menu-grid qn-filter-grid" id="qnFilterGrid"${n0 ? '' : ' hidden'}>${renderItemButtons(all, quickMatch, true)}</div>`;
+  }
   /* لا تصنيف مختار = لا أصناف إطلاقاً (طلب العميل: منع العرض العشوائي الكامل) */
   if (!activeCategoryId) return '<div class="d-items-hint">👆 اختر تصنيفاً لعرض الأصناف</div>';
   const list = catItems();
@@ -832,7 +962,9 @@ function directItemAdd(id) {
   const ex = cart.find(c => c.id === id && !c.locked);
   if (ex) ex.qty += 1; else cart.push({ id: item.id, name: item.name, price: item.price, qty: 1, note: '' });
   directSelectedId = id;
+  lastAddedId = id;                 /* هدف ملاحظات الصنف السريعة */
   if (!updateCartPanel([id])) renderPOS();
+  focusQuickNote();                 /* المؤشر لمربع الكتابة فوراً */
 }
 /* تحديث موضعي لشاشة اللوحة (بلا إعادة بناء) — false تعني تعذّر فيُستدعى renderPOS */
 function updateDPadDisplay() {
@@ -1037,7 +1169,7 @@ function toggleCardsDrawer() {
 
 function renderDeliveryFields() {
   const combined = [deliveryInfo.name, deliveryInfo.phone, deliveryInfo.address].filter(Boolean).join(' ');
-  return `<div class="delivery-card"><div class="delivery-card-title">🛵 بيانات التوصيل</div><div class="delivery-fields"><div class="delivery-field-row"><input type="text" list="deliveryCustomerSuggestions" data-action="delivery-combined" value="${escapeHtml(combined)}" placeholder="اكتب اسم العميل أو الهاتف ثم أكمل"><datalist id="deliveryCustomerSuggestions">${(DATA.customers||[]).slice(0,200).map(c=>`<option value="${escapeHtml([c.name,c.phone,c.address].filter(Boolean).join(' '))}"></option>`).join('')}</datalist><button type="button" class="delivery-smart-btn" data-action="smart-delivery-fill" title="إكمال من سجل الزبائن (اختياري)">✦</button></div></div></div>`;
+  return `<div class="delivery-card"><div class="delivery-card-title">🛵 بيانات التوصيل</div><div class="delivery-fields"><div class="delivery-field-row"><input type="text" list="deliveryCustomerSuggestions" data-action="delivery-combined" value="${escapeHtml(combined)}" placeholder="اكتب اسم العميل أو الهاتف ثم أكمل"><datalist id="deliveryCustomerSuggestions">${(DATA.customers||[]).slice(0,200).map(c=>`<option value="${escapeHtml([c.name,c.phone,c.address].filter(Boolean).join(' '))}"></option>`).join('')}${delivHistOptions('combined').map(v=>`<option value="${escapeHtml(v)}"></option>`).join('')}</datalist><button type="button" class="delivery-smart-btn" data-action="smart-delivery-fill" title="إكمال من سجل الزبائن (اختياري)">✦</button></div></div></div>`;
 }
 
 /* ================================================================
@@ -1454,21 +1586,22 @@ function renderPaySection() {
         <label class="pay-extra-label">بيانات العميل</label>
         <div class="pay-def-fields">
           <div class="delivery-field-row">
-            <input type="text" class="pay-extra-input" data-action="pay-def-name"
+            <input type="text" class="pay-extra-input" data-action="pay-def-name" list="payDefNameHist"
               value="${escapeHtml(deferredName)}" placeholder="اسم العميل">
             ${voiceMicBtn('def-name')}
           </div>
           <div class="delivery-field-row">
-            <input type="tel" inputmode="tel" class="pay-extra-input" data-action="pay-def-phone"
+            <input type="tel" inputmode="tel" class="pay-extra-input" data-action="pay-def-phone" list="payDefPhoneHist"
               value="${escapeHtml(deferredPhone)}" placeholder="رقم الهاتف">
             ${voiceMicBtn('def-phone')}
           </div>
           <div class="delivery-field-row">
-            <input type="text" class="pay-extra-input" data-action="pay-def-addr"
+            <input type="text" class="pay-extra-input" data-action="pay-def-addr" list="payDefAddrHist"
               value="${escapeHtml(deferredAddr)}" placeholder="العنوان (اختياري)">
             ${voiceMicBtn('def-addr')}
           </div>
         </div>
+        ${defHistDatalists()}
       </div>`;
     }
   }
@@ -1636,11 +1769,13 @@ function renderSearchResultsContent(items) {
     : `<div class="guide-box search-guide">اكتب اسم الصنف للبحث السريع</div>`;
 }
 function renderSearchResults(items) { return renderSearchArea(items); }
-function renderItemButtons(items) {
+function renderItemButtons(items, showFn, noPager) {   /* showFn: false = يُخفى بكلاس qn-off · noPager: بلا تقسيم صفحات */
   if (!items.length) return `<div class="empty-items">لا توجد أصناف ضمن هذا الاختيار</div>`;
-  const paged = (isSandwichCategory() || items.length > 16) ? items.slice(sandwichPage*16, sandwichPage*16+16) : items;
-  const pager = (isSandwichCategory() || items.length > 16) && items.length > 16 ? `<div class="items-pager"><button type="button" data-action="sandwich-prev" ${sandwichPage===0?'disabled':''}>→ السابق</button><span>صفحة ${sandwichPage+1} من ${Math.ceil(items.length/16)}</span><button type="button" data-action="sandwich-next" ${sandwichPage>=Math.ceil(items.length/16)-1?'disabled':''}>التالي ←</button></div>` : '';
+  const _paged = !noPager && (isSandwichCategory() || items.length > 16);
+  const paged = _paged ? items.slice(sandwichPage*16, sandwichPage*16+16) : items;
+  const pager = _paged && items.length > 16 ? `<div class="items-pager"><button type="button" data-action="sandwich-prev" ${sandwichPage===0?'disabled':''}>→ السابق</button><span>صفحة ${sandwichPage+1} من ${Math.ceil(items.length/16)}</span><button type="button" data-action="sandwich-next" ${sandwichPage>=Math.ceil(items.length/16)-1?'disabled':''}>التالي ←</button></div>` : '';
   return paged.map(item => {
+    const _off = showFn ? !showFn(item) : false;
     const inCart = cart.find(c => c.id === item.id);
     const drule = itemDiscRule(item.id);
     const priceHtml = drule ? `<div class="item-price"><s>${fmtCur(item.price)}</s> <b>${fmtCur(itemNet(item))}</b></div>` : `<div class="item-price">${fmtCur(item.price)}</div>`;
@@ -1649,7 +1784,7 @@ function renderItemButtons(items) {
       ? `<span class="item-name-main">${escapeHtml(parts.head)}</span><span class="item-name-sub">${escapeHtml(parts.sub)}</span>`
       : `<span class="item-name-main">${escapeHtml(parts.head)}</span>`;
     const westIt = isWesternItem(item);
-    return `<button class="item-btn" type="button" data-action="open-qty" data-id="${item.id}"${westIt ? ` style="${famItemStyle(item)}"` : ''}>${inCart ? `<span class="item-qty-badge">${inCart.qty}</span>` : ''}${drule ? `<span class="item-disc-badge" title="خصم ${fmtNum(drule.pct)}%">−${fmtNum(drule.pct)}%</span>` : ''}<div class="item-name">${nameHtml}</div>${priceHtml}</button>`;
+    return `<button class="item-btn${_off ? ' qn-off' : ''}" type="button" data-action="open-qty" data-id="${item.id}"${westIt ? ` style="${famItemStyle(item)}"` : ''}>${inCart ? `<span class="item-qty-badge">${inCart.qty}</span>` : ''}${drule ? `<span class="item-disc-badge" title="خصم ${fmtNum(drule.pct)}%">−${fmtNum(drule.pct)}%</span>` : ''}<div class="item-name">${nameHtml}</div>${priceHtml}</button>`;
   }).join('') + pager;
 }
 
@@ -1764,7 +1899,10 @@ function toggleNoteSuggestion(note) {
 }
 function saveNoteModal() {
   const row = cart.find(c => c.id === pendingNoteItemId);
-  if (row) row.note = document.getElementById('noteModalText')?.value.trim() || '';
+  if (row) {
+    row.note = document.getElementById('noteModalText')?.value.trim() || '';
+    noteHistAdd(row.note);
+  }
   pendingNoteItemId = null;
   if (!updateCartPanel(row ? [row.id] : [])) renderPOS();
   dropModalNodes();
@@ -1878,6 +2016,11 @@ function bindPOSActions() {
     });
   });
   document.getElementById('posSearchInput')?.addEventListener('input', e => { searchTerm = e.target.value; updateSearchResultsOnly(); });
+  /* Enter بمربع الكتابة السريعة = تثبيت ملاحظات الصنف */
+  const _qn = document.getElementById('quickNoteInput');
+  if (_qn) _qn.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter') { e.preventDefault(); handleAction('quick-note-item', _qn.value, _qn); }
+  });
   document.getElementById('conSearchInput')?.addEventListener('input', e => { contractSearchTerm = e.target.value; updateContractList(); });
   document.getElementById('calcPaidInput')?.addEventListener('input', e => { calcPaid = e.target.value; updateCalcResult(); });
 }
@@ -1951,10 +2094,55 @@ function handleAction(action, value, el, ev) {
       directAuxModal = null;
       return renderPOS();
     case 'open-services': return openServices();
-    case 'order-note': directAuxModal = 'order-note'; return renderPOS();
-    case 'order-note-save': { const x=document.getElementById('orderNoteInput'); orderNotes=(x&&x.value||'').trim(); directAuxModal=null; return renderPOS(); }
+    case 'order-note': case 'quick-note-order': {
+      /* نص بمربع الكتابة ⇒ ملاحظات الطلب فوراً. فارغ ⇒ النافذة القديمة */
+      const _t = quickNoteText();
+      if (_t) { orderNotes = _t; noteHistAdd(_t); clearQuickNote(); showToast('📝 تم تثبيت ملاحظات الطلب', '✅'); return renderPOS(); }
+      directAuxModal = 'order-note'; return renderPOS();
+    }
+    case 'order-note-save': { const x=document.getElementById('orderNoteInput'); orderNotes=(x&&x.value||'').trim(); noteHistAdd(orderNotes); directAuxModal=null; return renderPOS(); }
     case 'order-note-pick': { const x=document.getElementById('orderNoteInput'); if(x) x.value=value; return; }
-    case 'selected-note': { if (!directSelectedId) return showToast('حدد صنفًا أولًا','⚠️'); return openNoteModal(directSelectedId); }
+    case 'selected-note': case 'quick-note-item': {
+      /* نص بمربع الكتابة ⇒ يُثبَّت على آخر صنف أُضيف. فارغ ⇒ النافذة */
+      const _t = quickNoteText();
+      if (_t) return quickAttachItemNote(_t);
+      if (!directSelectedId) return showToast('حدد صنفًا أولًا','⚠️');
+      return openNoteModal(directSelectedId);
+    }
+    case 'quick-note-input': {
+      /* حرف أو حرفين ⇒ تصفية الأصناف فوراً بنفس مكانها · أكثر ⇒ ملاحظة */
+      if (displayMode !== 'quick') return;
+      const _v = quickNoteText();
+      const _nf = _v.length <= 2 ? _v : '';
+      if (_nf !== quickFilter) {
+        const _ended = !!quickFilter && !_nf;      /* انتهت التصفية ⇒ نرجّع العرض الطبيعي */
+        quickFilter = _nf;
+        if (_nf && (searchOpen || searchTerm.trim())) { searchOpen = false; searchTerm = ''; }
+        /* حيّة أولاً، وإلا إعادة بناء منطقة الأصناف فقط — الشاشة كلها ما بتنمسح
+           أبداً أثناء الكتابة (المربع يبقى ونصّه والمؤشر فيه) */
+        if (_ended || !applyQuickFilterLive()) updateItemsAreaOnly();
+      }
+      updateQuickFilterBadge();
+      updateQuickSuggest();
+      return;
+    }
+    case 'quick-note-suggest': {
+      /* نقرة اقتراح من الكتابات السابقة ⇒ يُكتب بالمربع ويبقى المؤشر فيه */
+      const _el = quickNoteEl();
+      if (_el) _el.value = value || '';
+      updateQuickSuggest();
+      focusQuickNote();
+      return;
+    }
+    case 'clear-quick-filter': {
+      quickFilter = '';
+      const _el = quickNoteEl(); if (_el) _el.value = '';
+      updateQuickFilterBadge();
+      updateQuickSuggest();
+      if (!updateItemsAreaOnly()) renderPOS();
+      focusQuickNote();
+      return;
+    }
     case 'weight-edit': { const r=cart.find(x=>x.id===directSelectedId); if(!r||!isWeightItem(r)) return showToast('حدد صنفًا يباع بالكيلو','⚠️'); directAuxModal='weight-edit'; return renderPOS(); }
     case 'weight-save': { const r=cart.find(x=>x.id===directSelectedId); const g=Number(document.getElementById('weightGrams')?.value); if(!r||!isWeightItem(r)||!Number.isFinite(g)||g<=0) return showToast('أدخل وزنًا صحيحًا','⚠️'); r.weight_grams=Math.round(g); r.qty=r.weight_grams/1000; r.weight_label=r.weight_grams+' غرام'; directAuxModal=null; return renderPOS(); }
     case 'emergency-price': {
@@ -2294,9 +2482,10 @@ function toggleDisplayMode(){
   try { localStorage.setItem('alfaprosys_pos_mode', displayMode); } catch (e) {}
   closeCashierNav(); renderPOS();
 }
-function toggleSearch(){ searchOpen = !searchOpen; if(!searchOpen) searchTerm=''; renderPOS(); }
-function clearSearch(){ searchTerm=''; searchOpen=false; activeCategoryId=null; activeFamily=null; if (!updateMenuArea()) renderPOS(); }
+function toggleSearch(){ quickFilter=''; searchOpen = !searchOpen; if(!searchOpen) searchTerm=''; renderPOS(); }
+function clearSearch(){ quickFilter=''; searchTerm=''; searchOpen=false; activeCategoryId=null; activeFamily=null; if (!updateMenuArea()) renderPOS(); }
 function selectMainCategory(id){
+  quickFilter='';
   activeCategoryId=id||null;
   activeFamily=null;
   searchTerm='';
@@ -2317,7 +2506,225 @@ function goLevel(level){
   if (level === 'category') activeFamily=null;
   if (!updateMenuArea()) renderPOS();
 }
-function addToCart(id, qty=1){ const item=DATA.items.find(i=>i.id===id); if(!item) return; const ex=cart.find(c=>c.id===id && !c.locked); if(ex) ex.qty += qty; else cart.push({id:item.id,name:item.name,price:item.price,qty,note:''}); if (!updateCartPanel([id])) renderPOS(); }
+function addToCart(id, qty=1){ const item=DATA.items.find(i=>i.id===id); if(!item) return; const ex=cart.find(c=>c.id===id && !c.locked); if(ex) ex.qty += qty; else cart.push({id:item.id,name:item.name,price:item.price,qty,note:''}); lastAddedId = id; if (!updateCartPanel([id])) renderPOS(); focusQuickNote(); }
+/* ══════════════════════════════════════════════════════════════════
+   نمط الأزرار السريعة — دوال مساعدة
+   ══════════════════════════════════════════════════════════════════ */
+function quickNoteEl() { return document.getElementById('quickNoteInput'); }
+function quickNoteText() { const el = quickNoteEl(); return el ? String(el.value || '').trim() : ''; }
+function clearQuickNote() {
+  const el = quickNoteEl(); if (el) el.value = '';
+  if (quickFilter) { quickFilter = ''; updateQuickFilterBadge(); updateItemsAreaOnly(); }
+  updateQuickSuggest();
+}
+function focusQuickNote() {
+  if (displayMode !== 'quick') return;            /* نمط سريع: يشتغل بالنمط السريع فقط */
+  if (pendingItemId || pendingNoteItemId || calcOpen || searchOpen || directAuxModal || posEmbed) return;
+  setTimeout(function () {
+    const el = quickNoteEl();
+    if (el && document.activeElement !== el) { try { el.focus(); } catch (e) {} }
+  }, 0);
+}
+function quickNoteTargetId() {
+  if (lastAddedId && cart.some(c => c.id === lastAddedId)) return lastAddedId;
+  if (directSelectedId && cart.some(c => c.id === directSelectedId)) return directSelectedId;
+  return cart.length ? cart[cart.length - 1].id : null;
+}
+function quickNoteTargetLabel() {
+  const id = quickNoteTargetId();
+  const row = id ? cart.find(c => c.id === id) : null;
+  return row ? 'الهدف: ' + escapeHtml(row.name) : '— لا صنف بعد';
+}
+function quickAttachItemNote(txt) {
+  const id = quickNoteTargetId();
+  if (!id) return showToast('أضف صنفاً أولاً', '⚠️');
+  const row = cart.find(c => c.id === id);
+  if (!row) return showToast('الصنف غير موجود', '⚠️');
+  if (row.locked) return showToast('🔒 هذا الصنف جزء من عرض ثابت', '⚠️');
+  row.note = txt;
+  noteHistAdd(txt);                         /* نمط سريع: تتذكّر للمرات القادمة */
+  clearQuickNote();
+  showToast('🍽️ «' + txt + '» ⇒ ' + row.name, '✅');
+  if (!updateCartPanel([id])) renderPOS();
+  focusQuickNote();
+  return true;
+}
+/* ── تصفية الأصناف من مربع الكتابة (حرف/حرفين) ── */
+function normArQ(s) {
+  return String(s == null ? '' : s)
+    .replace(/[\u064B-\u0652\u0670\u0640]/g, '')      /* تشكيل + تطويل */
+    .replace(/[أإآٱ]/g, 'ا').replace(/[ىئ]/g, 'ي')
+    .replace(/ؤ/g, 'و').replace(/ة/g, 'ه')
+    .replace(/\s+/g, ' ').trim().toLowerCase();   /* والحروف اللاتينية أيضاً */
+}
+/* ── سجل بيانات العملاء/التوصيل السابقة: اقتراحات جاهزة ── */
+const DELIV_HIST_KEY = 'alfaprosys_delivery_hist';
+let delivHist = null;
+function delivHistLoad() {
+  if (delivHist) return delivHist;
+  try {
+    const a = JSON.parse(localStorage.getItem(DELIV_HIST_KEY) || '[]');
+    delivHist = Array.isArray(a) ? a.filter(x => x && typeof x === 'object') : [];
+  } catch (e) { delivHist = []; }
+  return delivHist;
+}
+function delivHistSave() {
+  try { localStorage.setItem(DELIV_HIST_KEY, JSON.stringify(delivHist.slice(0, 40))); } catch (e) {}
+}
+function delivHistAdd(name, phone, address) {
+  const n = String(name || '').trim();
+  if (!n) return;
+  const p = String(phone || '').trim(), a = String(address || '').trim();
+  const h = delivHistLoad();
+  const i = h.findIndex(x => x.name === n && x.phone === p);
+  if (i > -1) h.splice(i, 1);
+  h.unshift({ name: n, phone: p, address: a });
+  delivHistSave();
+}
+/* kind: 'combined' | 'name' | 'phone' | 'addr' */
+function delivHistOptions(kind) {
+  const seen = {}, out = [];
+  for (const x of delivHistLoad()) {
+    const v = kind === 'combined' ? [x.name, x.phone, x.address].filter(Boolean).join(' ')
+      : kind === 'name' ? x.name : kind === 'phone' ? x.phone : x.address;
+    if (!v || seen[v]) continue;
+    seen[v] = 1; out.push(v);
+    if (out.length >= 20) break;
+  }
+  return out;
+}
+function defHistDatalists() {
+  return `<datalist id="payDefNameHist">${delivHistOptions('name').map(v => `<option value="${escapeHtml(v)}"></option>`).join('')}</datalist>`
+       + `<datalist id="payDefPhoneHist">${delivHistOptions('phone').map(v => `<option value="${escapeHtml(v)}"></option>`).join('')}</datalist>`
+       + `<datalist id="payDefAddrHist">${delivHistOptions('addr').map(v => `<option value="${escapeHtml(v)}"></option>`).join('')}</datalist>`;
+}
+
+/* ── سجل الكتابات السابقة: خيارات جاهزة تحت المربع ── */
+function noteHistLoad() {
+  if (noteHist) return noteHist;
+  try {
+    const a = JSON.parse(localStorage.getItem(NOTE_HIST_KEY) || '[]');
+    noteHist = Array.isArray(a) ? a.filter(x => typeof x === 'string') : [];
+  } catch (e) { noteHist = []; }
+  return noteHist;
+}
+function noteHistSave() {
+  try { localStorage.setItem(NOTE_HIST_KEY, JSON.stringify(noteHist.slice(0, 80))); } catch (e) {}
+}
+function noteHistAdd(txt) {
+  const t = String(txt || '').trim();
+  if (t.length < 2) return;
+  const h = noteHistLoad();
+  const i = h.indexOf(t);
+  if (i > -1) h.splice(i, 1);
+  h.unshift(t);
+  noteHistSave();
+}
+function noteHistSuggest(q) {
+  const t = normArQ(q);
+  if (t.length < 3) return [];               /* حرف/حرفين = تصفية أصناف، لا اقتراحات */
+  const starts = [], has = [];
+  for (const n of noteHistLoad()) {
+    const nn = normArQ(n);
+    if (nn.startsWith(t)) starts.push(n);
+    else if (nn.includes(t)) has.push(n);
+    if (starts.length >= 6) break;
+  }
+  return starts.concat(has).slice(0, 6);
+}
+function updateQuickSuggest() {
+  const box = document.getElementById('qnSuggest');
+  if (!box) return;
+  const list = (displayMode === 'quick') ? noteHistSuggest(quickNoteText()) : [];
+  if (!list.length) { box.hidden = true; box.innerHTML = ''; return; }
+  box.hidden = false;
+  box.innerHTML = '<div class="qn-sug-head">📜 من كتاباتك السابقة</div>' +
+    list.map(n => `<button type="button" class="qn-sug" data-action="quick-note-suggest" data-value="${escapeHtml(n)}">${escapeHtml(n)}</button>`).join('');
+  bindPanelActions(box);
+}
+/* أسماء الصنف بأشكالها المختلفة — نطابق على أيها */
+function quickNames(item) {
+  return [itemButtonParts(item).head, itemButtonParts(item).sub, itemButtonParts(item).title,
+          item.name, item.base_name, item.family, item.option_name, item.category_name]
+         .map(normArQ).filter(Boolean);
+}
+/* «يبدأ بـ» هو الأصل */
+function quickStrict(item) {
+  const f = normArQ(quickFilter);
+  if (!f) return true;
+  return quickNames(item).some(x => x.startsWith(f));
+}
+/* ولا صنف يبدأ بالحرف ⇒ «يحتوي» (مثلاً «مشروب سودة» مع حرف «س») */
+let quickLoose = false;
+function quickMatch(item) {
+  if (!quickLoose) return quickStrict(item);
+  const f = normArQ(quickFilter);
+  if (!f) return true;
+  return quickNames(item).some(x => x.includes(f));
+}
+/* كلمة الوضع для الشريط: «تبدأ بـ» أو «تحتوي» */
+function quickModeWord() { return quickLoose ? 'تحتوي' : 'تبدأ بـ'; }
+function updateItemsAreaOnly() {
+  try {
+    const area = document.getElementById('menuItems');
+    if (!area) return false;
+    const _sc = area.scrollTop || 0;      /* نحافظ على موضع التمرير — لا قفزة */
+    area.innerHTML = renderDirectItemsArea(finalItems());
+    bindPanelActions(area);
+    area.scrollTop = _sc;
+    return true;
+  } catch (e) { return false; }
+}
+/* تصفية حيّة: تخفي/تبيّن الأزرار القائمة بلا إعادة بناء — لا وميض */
+function applyQuickFilterLive() {
+  try {
+    const grid = document.getElementById('qnFilterGrid');
+    if (!grid) return false;
+    const btns = grid.querySelectorAll('.item-btn[data-id]');
+    if (!btns.length) return false;
+    const byId = {};
+    for (const it of DATA.items) byId[it.id] = it;
+    /* نفس منطق الرسم: «يبدأ بـ» ثم «يحتوي» */
+    let strictCnt = 0;
+    btns.forEach(function (b) { const it = byId[b.dataset.id]; if (it && quickStrict(it)) strictCnt++; });
+    quickLoose = (strictCnt === 0);
+    let cnt = 0;
+    btns.forEach(function (b) {
+      const it = byId[b.dataset.id];
+      const ok = !quickFilter || !!(it && quickMatch(it));
+      b.classList.toggle('qn-off', !ok);
+      if (ok) cnt++;
+    });
+    const t = document.getElementById('qnFilterText');
+    if (t) t.textContent = '🔍 «' + quickFilter + '» · ' + cnt + ' صنف ' + quickModeWord() + ' «' + quickFilter + '»';
+    grid.hidden = (cnt === 0);
+    let empty = document.getElementById('qnFilterEmpty');
+    if (cnt === 0 && !empty) {
+      empty = document.createElement('div');
+      empty.id = 'qnFilterEmpty'; empty.className = 'd-filter-empty';
+      grid.parentNode.appendChild(empty);
+    }
+    if (empty) {
+      empty.hidden = cnt > 0;
+      if (cnt === 0) empty.textContent = '🔍 لا صنف ' + quickModeWord() + ' «' + quickFilter + '» — جرّب حرفاً آخر، أو تابع الكتابة (٣ حروف أو أكثر) فتصير ملاحظة';
+    }
+    return true;
+  } catch (e) { return false; }
+}
+function updateQuickFilterBadge() {
+  const b = document.getElementById('qnFilter');
+  if (b) b.textContent = quickFilter ? '\u200F' + quickFilter : '';
+}
+function currentOrderTypeChip() {
+  if (orderType === 'dinein') return selectedTable ? '🍽️ ' + selectedTable : '🍽️ طاولة';
+  if (orderType === 'contract') {
+    const c = selectedContractId ? (DATA.contracts || []).find(x => x.id === selectedContractId) : null;
+    return c ? '📋 ' + (c.client_name || 'عقد') : '📋 عقد';
+  }
+  if (serviceSelected.delivery) return '🛵 توصيل';
+  return '🥡 سفري';
+}
+
 function removeFromCart(id){
   const row = cart.find(c=>c.id===id);
   if (row && row.locked) { const ids = cart.filter(c => c.offer_id === row.offer_id).map(c => c.id); cart = cart.filter(c => c.offer_id !== row.offer_id); showToast('أُلغي العرض كاملاً','🚫'); if (!updateCartPanel(ids)) renderPOS(); return; }
@@ -2543,9 +2950,21 @@ async function submitOrder(){
      الزبائن — وتبقى الطاولة مختارة بعد أن صارت فاتورتها مغلقة. */
   cart=[];
   orderServices = { table: 0, delivery: 0 };
+  /* نتذكّر بيانات هذا العميل لاقتراحها في الفواتير القادمة */
+  delivHistAdd(deliveryInfo.name, deliveryInfo.phone, deliveryInfo.address);
+  delivHistAdd(deferredName, deferredPhone, deferredAddr);
   deliveryInfo  = { name: '', phone: '', address: '' };
   orderNotes    = '';
   selectedTable = '';
+  if (displayMode === 'quick') {
+    /* النمط السريع: كل فاتورة تبدأ «سفري» وبلا خدمات مورّثة */
+    serviceSelected = { table: false, delivery: false };
+    orderType = 'takeaway';
+    selectedHall = 'صالة داخلية';
+    lastAddedId = null;
+    quickFilter = '';
+    directSelectedId = null;
+  }
   renderPOS();
   // طباعة حرارية تلقائية (كاشير + مطبخ) — قابلة للإطفاء من config.js
   try {

@@ -306,6 +306,7 @@ try {
   // الصفحات المسموحة للكاشير
   const cashierAllowed = [
     'pos.html',
+    'pos2.html',   /* نسخة التعديل من شاشة البيع */
     'invoices.html',
     'cashier_session.html',
     'kitchen.html',
