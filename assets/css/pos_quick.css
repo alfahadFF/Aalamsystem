@@ -1,0 +1,278 @@
+/* ============================================================
+   pos_quick.css — أنماط «نمط الأزرار السريعة» في شاشة البيع
+   ────────────────────────────────────────────────────────────
+   تُحمَّل بعد style.css في pos.html و pos2.html معاً.
+   كل قاعدة هنا خاصة بالنمط الجديد فقط (صنفه .dops-grid /
+   .quick-note-box / .d-filter-strip / .qn-* / .ot-chip …) فلا
+   تؤثر على الأنماط الأخرى (أزرر / مباشر / منسدل).
+   ============================================================ */
+
+/* ============================================================
+   pos2.css — أنماط نسخة التعديل من شاشة البيع (pos2.html)
+   ────────────────────────────────────────────────────────────
+   عدّل هنا بحرية — لن يتأثر pos.html الأصلي (شاشة البيع العاملة)
+   بأي تغيير، لأن كل قاعدة هنا محمّلة بعد style.css فتتغلّب عليه.
+   ============================================================ */
+
+
+/* ══════════════════════════════════════════════════════════════
+   ١) شريط أنواع الطلب: «أونلاين» و«عقود» فقط — بزرّين كبيرين
+      (السفري هو الافتراضي الضمني، ما بيحتاج زر)
+   ══════════════════════════════════════════════════════════════ */
+.d-otbar { gap: 6px; }
+.d-mid .ot-btn.ot-big {
+  flex: 1 1 0;
+  min-height: 44px;
+  font-size: 14px;
+  font-weight: 800;
+  border-width: 2px;
+}
+.d-mid .ot-btn.online-ot-btn {
+  background: #ecfdf5;
+  border-color: #10b981;
+  color: #065f46;
+}
+.d-mid .ot-btn.online-ot-btn.active,
+.d-mid .ot-btn.online-ot-btn:hover { background: #10b981; color: #fff; }
+
+/* شارة «توصيل» — تظهر بمجرد إضافة خدمة التوصيل للفاتورة */
+.d-mid .delivery-live-badge {
+  background: #D97706;
+  border-color: #b45309;
+  color: #fff;
+  cursor: default;
+  animation: dlvPulse 1.6s ease-in-out infinite;
+}
+@keyframes dlvPulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(217,119,6,.55); }
+  50%      { box-shadow: 0 0 0 6px rgba(217,119,6,0); }
+}
+
+/* شارة نوع الطلب الحالي في الشريط العلوي */
+.ot-chip {
+  background: #102A43;
+  color: #fff;
+  border-color: #102A43;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+/* ══════════════════════════════════════════════════════════════
+   ٢) عمود العمليات: أزرار ب عمودين + مربع الكتابة السريعة تحتها
+   ══════════════════════════════════════════════════════════════ */
+.d-ops { min-width: 224px; flex: 17 1 0%; }
+
+.dops-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px;
+}
+.dops-grid .dop-btn {
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  min-height: 46px;
+  padding: 5px 3px;
+  text-align: center;
+}
+.dops-grid .dop-btn span { font-size: 17px; }
+.dops-grid .dop-btn small { font-size: 10.5px; text-align: center; flex: none; }
+
+/* ── مربع الكتابة السريعة ── */
+.quick-note-box {
+  direction: rtl;
+  margin-top: 6px;
+  background: #fff;
+  border: 2px solid #102A43;
+  border-radius: 6px;
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+/* رأس المربع: بلا عنوان — «الهدف: الصنف» وشارة الحرف فقط */
+.qn-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  min-height: 20px;
+}
+.qn-target {
+  font-weight: 800;
+  font-size: 11px;
+  color: #334155;
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  border-radius: 99px;
+  padding: 3px 8px;
+  max-width: 74%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.quick-note-input {
+  width: 100%;
+  box-sizing: border-box;
+  border: 1.5px solid #94a3b8;
+  border-radius: 5px;
+  padding: 9px 8px;
+  font: 800 14px Tahoma, Arial, sans-serif;
+  background: #fffbeb;
+  color: #0f172a;
+  outline: none;
+}
+.quick-note-input:focus {
+  border-color: #D97706;
+  background: #fff;
+  box-shadow: 0 0 0 3px rgba(217,119,6,.18);
+}
+.qn-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; }
+.qn-btn {
+  border: none;
+  border-radius: 5px;
+  padding: 9px 4px;
+  font: 800 12px Tahoma, Arial, sans-serif;
+  cursor: pointer;
+  color: #fff;
+}
+.qn-item  { background: #0f766e; }
+.qn-item:hover  { background: #115e59; }
+.qn-order { background: #1d4ed8; }
+.qn-order:hover { background: #1e40af; }
+
+/* ── اكتب تعديلاتك تحت هذا السطر ── */
+
+/* ══════════════════════════════════════════════════════════════
+   ٣) المربع = تصفية فورية (حرف/حرفين) + كتابة ملاحظة
+   ══════════════════════════════════════════════════════════════ */
+
+/* شارة الحرف المكتوب داخل رأس المربع */
+.qn-filter {
+  min-width: 20px;
+  height: 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 6px;
+  border-radius: 99px;
+  background: #D97706;
+  color: #fff;
+  font: 800 12px Tahoma, Arial, sans-serif;
+}
+.qn-filter:empty { display: none; }
+
+/* شريط التصفية فوق شبكة الأصناف — الأصناف تبقى بنفس مكانها */
+.d-filter-strip {
+  direction: rtl;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin: 0 0 6px;
+  padding: 5px 8px;
+  background: #ecfdf5;
+  border: 1.5px solid #10b981;
+  border-radius: 6px;
+  color: #065f46;
+  font: 800 12px Tahoma, Arial, sans-serif;
+}
+.d-filter-strip button {
+  border: none;
+  background: #10b981;
+  color: #fff;
+  border-radius: 99px;
+  width: 22px;
+  height: 22px;
+  line-height: 1;
+  cursor: pointer;
+  font-size: 12px;
+}
+.d-filter-strip button:hover { background: #047857; }
+.d-items-hint { direction: rtl; }
+
+/* ══════════════════════════════════════════════════════════════
+   ٤) الجوال: المربع أعلى كتلة العمليات ويلاصق الشاشة (sticky)
+      والشريط يمتلئ بعرض الشاشة مهما كان عدد الأزرار
+   ══════════════════════════════════════════════════════════════ */
+@media (max-width: 899px) {
+  .d-mid .d-otbar { grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); }
+  .d-ops { flex-direction: column; flex-wrap: nowrap; overflow: visible; }
+  .dops-grid { width: 100%; }
+  .dops-grid .dop-btn { min-height: 42px; }
+  .quick-note-box {
+    width: 100%;
+    order: -1;
+    position: sticky;
+    top: 0;
+    z-index: 30;
+    box-shadow: 0 3px 10px rgba(15, 23, 42, .2);
+  }
+  .quick-note-input { min-height: 46px; font-size: 16px; } /* 16px يمنع تكبير Safari */
+  .qn-btn { min-height: 44px; font-size: 13px; }
+  .d-filter-strip { margin: 0 0 6px; }
+}
+
+/* ══════════════════════════════════════════════════════════════
+   ٥) اقتراحات من الكتابات السابقة (تظهر تحت المربع عند كتابة
+      ٣ حروف أو أكثر — مثلاً «بدو» ⇒ «بدون ثوم» من مرة سابقة)
+   ══════════════════════════════════════════════════════════════ */
+.quick-note-box { position: relative; }
+.qn-suggest {
+  position: absolute;
+  top: 100%;
+  left: -2px;
+  right: -2px;
+  z-index: 60;
+  background: #fff;
+  border: 2px solid #102A43;
+  border-top: 0;
+  border-radius: 0 0 6px 6px;
+  max-height: 172px;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  box-shadow: 0 8px 18px rgba(15, 23, 42, .25);
+}
+.qn-suggest[hidden] { display: none; }
+.qn-sug-head {
+  direction: rtl;
+  font: 800 10px Tahoma, Arial, sans-serif;
+  color: #64748b;
+  padding: 4px 8px;
+  background: #f1f5f9;
+}
+.qn-sug {
+  display: block;
+  width: 100%;
+  direction: rtl;
+  text-align: right;
+  border: 0;
+  border-bottom: 1px solid #e2e8f0;
+  background: #fff;
+  color: #0f172a;
+  padding: 10px 8px;
+  font: 700 13px Tahoma, Arial, sans-serif;
+  cursor: pointer;
+}
+.qn-sug:last-child { border-bottom: 0; }
+.qn-sug:hover, .qn-sug:active { background: #ecfdf5; color: #065f46; }
+
+/* ══════════════════════════════════════════════════════════════
+   ٦) تصفية حيّة: إخفاء غير المطابق بكلاس (بلا إعادة بناء DOM)
+      ⇒ لا وميض للشاشة ولا فقدان نص المؤشر أثناء الكتابة
+   ══════════════════════════════════════════════════════════════ */
+.d-menu-grid .item-btn.qn-off { display: none !important; }
+.d-filter-empty {
+  direction: rtl;
+  padding: 14px 10px;
+  text-align: center;
+  color: #64748b;
+  font: 800 13px Tahoma, Arial, sans-serif;
+}
+.d-filter-empty[hidden] { display: none; }
+.d-filter-strip span { white-space: nowrap; }
+
+/* شبكة التصفية: [hidden] لازم يغلّها فعلاً (قاعدة display:grid تتغلّب على
+   قاعدة المتصفح الافتراضية فتبقى الشبكة ظاهرة فارغة) */
+.qn-filter-grid[hidden] { display: none !important; }
